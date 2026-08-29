@@ -26,8 +26,10 @@ Everyone should be on the same Node version. Mismatched versions cause "works on
 git clone https://github.com/Alleyz15/Alpha.git
 cd Alpha
 
-# 2. Install dependencies
+# 2. Install backend dependencies
+cd backend
 npm install
+cd ..
 
 # 3. Configure secrets
 cp .env.example .env
@@ -35,10 +37,11 @@ cp .env.example .env
 # Ask for them in a DM - never post keys in the group chat.
 
 # 4. Verify the connection to Thetanuts (read-only, no wallet needed)
-node test.js
+cd backend
+npm run inspect:orders
 ```
 
-> There is no `npm run dev` yet — the frontend has not been set up. `node test.js` is currently the only entry point.
+> There is no `npm run dev` yet — the frontend has not been set up. The backend currently contains read-only inspection scripts.
 
 ---
 
@@ -55,6 +58,7 @@ node test.js
 ### Thetanuts SDK — DONE
 
 ```bash
+cd backend
 npm i @thetanuts-finance/thetanuts-client ethers dotenv
 npm i -g @thetanuts-finance/cli     # optional, quote and fill from the terminal
 npx -y @thetanuts-finance/mcp       # optional, feeds SDK context to Claude / Codex
