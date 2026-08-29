@@ -75,6 +75,7 @@ Requires Node 24+, a Base mainnet RPC endpoint, and a Supabase project.
 ```bash
 git clone https://github.com/Alleyz15/Alpha.git
 cd Alpha
+cp .env.example .env      # one file for the whole project — fill in the values
 ```
 
 **Backend**
@@ -82,8 +83,7 @@ cd Alpha
 ```bash
 cd backend
 npm install
-cp .env.example .env      # add your RPC endpoint and Supabase credentials
-npm run dev               # http://localhost:3000
+npm run inspect:orders    # read-only check against the live order book
 ```
 
 **Frontend** — in a second terminal:
@@ -91,9 +91,10 @@ npm run dev               # http://localhost:3000
 ```bash
 cd frontend
 npm install
-cp .env.example .env
 npm run dev               # http://localhost:5173
 ```
+
+The frontend reads the same root `.env` through `envDir` in `vite.config.js`.
 
 Environment details and troubleshooting: [`docs/SETUP.md`](docs/SETUP.md)
 
