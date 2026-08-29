@@ -32,3 +32,7 @@ coverage/
 
 # --- Exception: this one IS committed (names only, no values) ---
 !.env.example
+
+# AI agent instructions (shared via Discord)
+CLAUDE.md
+codex.md
