@@ -4,6 +4,22 @@ Environment setup for the MUBA Hacks 2026 project (Thetanuts Track 01).
 
 **Keep this file updated.** Every time you install something or hit a bug, add a line. Doing it as you go takes seconds; reconstructing it later takes an hour.
 
+> ## ⚠️ If you set up before 30 Aug, read this first
+>
+> The repository was restructured. If you cloned or configured anything under the old flat layout, three things changed:
+>
+> | Then | Now |
+> |---|---|
+> | Scripts at `backend/*.js` | Scripts at `backend/scripts/*.js` |
+> | `node test.js` | `npm run inspect:orders` (see the script table below) |
+> | Each script built its own SDK client | All scripts import `backend/src/thetanuts/client.js` |
+>
+> **What to do:** `git pull`, then `cd backend && npm install`. Nothing else.
+>
+> **Your `.env` does not move.** It stays at the repository root and still works — the npm scripts load it with `--env-file-if-exists=../.env`. Do not copy it into `backend/` or `frontend/`; one file serves the whole project, and duplicates drift apart silently.
+>
+> If you had local edits to any of the moved scripts, they were carried through the move, but check `git status` before pulling.
+
 ---
 
 ## Versions
@@ -19,6 +35,30 @@ Everyone should be on the same Node version. Mismatched versions cause "works on
 
 ---
 
+## Repository layout
+
+```
+Alpha/
+├── backend/            Node. Owned by the backend developer.
+│   ├── scripts/        One-off diagnostic tools, run by hand
+│   ├── src/
+│   │   ├── thetanuts/  SDK integration — client.js is shared by every script
+│   │   ├── db/         Supabase client and queries (Phase 2)
+│   │   ├── api/        HTTP endpoints (Phase 5)
+│   │   └── scheduler/  Settlement polling (Phase 4)
+│   └── package.json
+├── frontend/           Vite + React. Owned by the frontend developer.
+├── supabase/migrations/  Versioned schema. Never edit an applied file.
+├── docs/               These documents
+├── .env.example        One template for the whole project. Committed.
+├── .env                Root. Not committed. Used by backend AND frontend.
+└── README.md
+```
+
+`backend/` and `frontend/` have separate `package.json` files on purpose: a shared one means two people editing the same `package-lock.json`, and those conflicts are thousands of lines of generated content.
+
+---
+
 ## Quick start
 
 ```bash
@@ -31,18 +71,44 @@ cd Alpha
 ```bash
 cd backend
 npm install                 # NOT npm init - that would overwrite package.json
-cp .env.example .env        # fill in the values, ask in a DM
-node scripts/test.js        # read-only connectivity check, no wallet needed
+npm run inspect:orders      # read-only connectivity check, no wallet needed
 ```
 
-**Frontend** (once it exists) — in a second terminal:
+Expected: a live order count of roughly 300, then one order printed as JSON.
+
+Ask a teammate for `.env` values in a DM.
+
+**There is one `.env` for the whole project, at the repository root.** Not one per folder. Copy it from the template:
+
+```bash
+cp .env.example .env
+```
+
+The backend loads it with `--env-file-if-exists=../.env`. The frontend loads the `VITE_`-prefixed lines through `envDir: '../'` in `vite.config.js`.
+
+> **Vite does not read a parent directory by default.** If `frontend/vite.config.js` is missing `envDir: '../'`, every `VITE_` variable comes back `undefined` and nothing says why. That one line is the fix.
+
+**Frontend** — in a second terminal:
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env
 npm run dev                 # http://localhost:5173
 ```
+
+No separate `.env` here — it reads the root one.
+
+### Backend scripts
+
+| Command | What it does |
+|---|---|
+| `npm run inspect:orders` | Live order count and one order's full structure |
+| `npm run inspect:expiries` | Every expiry on the book, with days out and order counts |
+| `npm run inspect:sdk` | Every module and method on the SDK client |
+| `node --env-file-if-exists=../.env scripts/test.js` | Connectivity check: order count and spot prices |
+| `node --env-file-if-exists=../.env scripts/check_collar.js` | Whether the loan/collar modules are live on Base |
+
+The last two have no npm entry, so they need the env flag spelled out. Run all of them from inside `backend/`.
 
 > **Never run `npm init` in a folder that already has a `package.json`.** It silently overwrites the file, dropping `"type": "module"` and the dependency list, and you won't find out until `import` stops working.
 
@@ -61,6 +127,8 @@ npm run dev                 # http://localhost:5173
 > Do not use the public Base endpoint. It times out randomly and the failures look like bugs in your own code.
 
 ### Thetanuts SDK — DONE
+
+Already installed and wired into the shared client. Recorded for reference, not a step to repeat — `npm install` in `backend/` gets you the same thing.
 
 ```bash
 npm i @thetanuts-finance/thetanuts-client ethers dotenv
@@ -123,7 +191,9 @@ console.log((await client.api.fetchOrders()).length, 'live orders');
 console.log(await client.api.getMarketData());
 ```
 
-**Status: working as of 29 Aug 2026.**
+**Status: working as of 30 Aug 2026.**
+
+This code now lives in `backend/src/thetanuts/client.js` and is imported by every script rather than repeated in each one. If you need a client in new code, import it — do not construct another.
 
 ---
 
@@ -184,6 +254,8 @@ Format: symptom → cause → fix
 - **`LF will be replaced by CRLF` warning on git add** → Windows vs Unix line endings → harmless warning, ignore. A `.gitattributes` containing `* text=auto eol=lf` silences it.
 - **`pathspec '.env.example' did not match any files`** → the file does not exist in the current folder, or Windows Explorer refused to create a dotfile → create it from inside VS Code, which allows leading dots
 - **RPC timeouts / "unstable API"** → using the public Base endpoint → use your own Alchemy key
+- **Every `VITE_` variable is `undefined` in the frontend** → Vite only reads `.env` from its own directory by default → add `envDir: '../'` to `frontend/vite.config.js`
+- **Script can't find `.env` after the restructure** → run it from inside `backend/`, and use the npm script where one exists → the npm entries carry `--env-file-if-exists=../.env`
 - **`npm init` in a folder that already has `package.json`** → silently overwrites it, dropping `"type": "module"` and the dependency list → run `npm install` instead; you only find out when `import` breaks
 
 ---
