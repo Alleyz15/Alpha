@@ -262,6 +262,54 @@ As a risk-averse user, I want to see clearly that the premium is the most I can 
 | **BR-6** | Because the book only offers discrete strikes and expiries, the system selects the **closest available** and **must disclose the difference** when the gap is material. Expiry must be **on or after** the user's target date — never earlier. |
 | **BR-7** | `strikePrice` and `price` from the SDK use **8 decimals** (divide by 1e8). USDC uses 6. Getting this wrong makes premiums appear 100× off. |
 
+#### Derived figures — the formulas
+
+These are computed from the order actually filled, then stored (BR-40). Never configured, never recomputed on read.
+
+**Credit limit (Phase 7, BR-39)**
+
+```
+credit_limit = strike × num_contracts
+```
+
+Taken directly from the put that was bought. No haircut, no buffer — that is the entire point. A conventional lender discounts because it has no floor and relies on liquidation. We have a floor, so the limit is the floor.
+
+Worked example:
+
+```
+Collateral       1 ETH, spot 1000
+Put filled       strike 790, 1 contract
+credit_limit     790 × 1 = 790 USDC
+```
+
+**Participation rate (Phase 8, BR-38)**
+
+```
+1.  yield_portion  = principal ÷ (1 + annual_rate × days / 365)
+    option_portion = principal − yield_portion
+
+2.  exposure = option_portion ÷ premium_per_contract × contract_size
+
+3.  participation_rate = exposure ÷ principal
+```
+
+Step 1 works backwards from the guarantee: not "95 grows into 100", but "to reach exactly 100, how much must be set aside today". This makes the principal protection exact rather than approximate.
+
+Worked example:
+
+```
+Deposit          100 USDC, 62 days, simulated 5% annual
+yield_portion    100 ÷ (1 + 0.05 × 62/365) = 99.16
+option_portion   100 − 99.16 = 0.84
+
+Book quote       62-day ATM ETH call, 0.07 USDC per contract, 1 USDC exposure each
+exposure         0.84 ÷ 0.07 × 1 = 12 USDC
+
+participation    12 ÷ 100 = 12%
+```
+
+The premium comes from the live book, so the rate moves with the market. It is fixed for a given deposit at the moment of purchase and never changes afterwards.
+
 ### Execution safety
 
 | ID | Rule |
@@ -285,6 +333,7 @@ As a risk-averse user, I want to see clearly that the premium is the most I can 
 | **BR-37** | Any simulated component must be labelled as simulated in the interface, at the point where the user sees the number. Demo simplifications are acceptable; presenting them as real is not. |
 | **BR-38** | A principal-protected product's participation rate is calculated from the actual premium paid and the exposure obtained, never hardcoded, and is displayed before the user commits. |
 | **BR-39** | A loan's credit limit is derived from the backing option's strike. It is never a fixed loan-to-value ratio — the derivation is the product's entire claim, and a hardcoded ratio would make that claim false. |
+| **BR-40** | Derived figures are computed once, at the moment of purchase, from the order actually filled — then stored on the row. They are never recomputed on read. A number shown to a user must always be traceable to the row that produced it. |
 | **BR-14** | Every write to the chain must be recorded in the database **before** submission, so an interrupted transaction leaves a traceable record rather than a silent gap. |
 | **BR-15** | Trade sizes stay minimal (1–3 USDC per fill). Thetanuts stated a 1 USDC fill scores identically to a 100 USDC fill. |
 

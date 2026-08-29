@@ -183,7 +183,15 @@ A USDC loan against protected collateral. The credit limit comes from the put's 
 | `created_at` | `TIMESTAMPTZ` NOT NULL | |
 | `updated_at` | `TIMESTAMPTZ` NOT NULL | |
 
-> **`credit_limit` must be computed, not configured.** The product's entire claim is that the limit comes from the option's strike. If it is a hardcoded loan-to-value ratio, the claim is false and the answer we give judges is a lie.
+> **`credit_limit` must be computed, not configured:**
+>
+> ```
+> credit_limit = strike × num_contracts
+> ```
+>
+> Read straight from the put that was filled. No haircut, no loan-to-value ratio. The product's entire claim is that the limit comes from the option's strike — a hardcoded ratio would make that claim false, and the answer we give judges a lie.
+>
+> It is computed once at disbursement and stored. It never changes, because the strike never changes.
 
 ---
 
@@ -206,7 +214,18 @@ A principal-protected deposit. The yield portion is simulated; the option portio
 | `payout` | `NUMERIC` NULL | Filled at maturity |
 | `created_at` | `TIMESTAMPTZ` NOT NULL | |
 
-> `yield_rate_annual` and `participation_rate` are **stored rather than recomputed on read**, so that if anyone asks how a displayed number was produced, the row answers.
+> **How the split and the rate are computed:**
+>
+> ```
+> yield_portion       = principal ÷ (1 + yield_rate_annual × days / 365)
+> option_portion      = principal − yield_portion
+> exposure            = option_portion ÷ premium_per_contract × contract_size
+> participation_rate  = exposure ÷ principal
+> ```
+>
+> The first line is solved backwards — not "95 grows into 100" but "to reach exactly 100, set aside this much today". That makes the protection exact rather than approximate.
+>
+> `participation_rate` depends on the live premium, so it differs between deposits made on different days. **It is fixed for a given vault at deposit time and stored**, so a number shown to a user always traces back to the row that produced it.
 
 ---
 

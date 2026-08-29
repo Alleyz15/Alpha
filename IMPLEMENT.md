@@ -247,7 +247,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | # | Task | Status | Acceptance |
 |---|---|---|---|
 | 7.1 | `loans` table + migration | ⬜ | Per DATABASE.md conventions |
-| 7.2 | Credit limit derived from strike | ⬜ | `limit = strike × contracts`. Never a hardcoded ratio — this is the whole point |
+| 7.2 | Credit limit derived from strike | ⬜ | `credit_limit = strike × num_contracts`, read from the filled put. No haircut, no ratio (BR-39) |
 | 7.3 | Disburse USDC on-chain | ⬜ | Real transfer to the user's address, tx hash recorded |
 | 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
 | 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
@@ -270,10 +270,10 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | # | Task | Status | Acceptance |
 |---|---|---|---|
 | 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
-| 8.2 | Deposit split logic | ⬜ | Principal split into yield and option portions |
+| 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
 | 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable, 62-day expiry |
 | 8.4 | Simulated yield accrual | ⬜ | Labelled as simulated in the UI, not hidden (BR-37) |
-| 8.5 | Participation rate displayed | ⬜ | Calculated from real premium and exposure, never hardcoded (BR-38) |
+| 8.5 | Participation rate displayed | ⬜ | `exposure ÷ principal`, from the real premium paid (BR-38). See requirements.md for the full formula |
 | 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
 
 **Definition of done:** a BaseScan link to a real call purchase, with the interface stating the participation rate and labelling the simulated yield.
