@@ -1,7 +1,7 @@
 # Requirements — User Stories, Use Cases & Business Rules
 
-> **Draft for team review.** Written for the lead product direction (Idea 2 + Idea 4 as one product).
-> Anything marked ⚠️ is a decision the team still has to make — don't build past those without agreeing first.
+> **Agreed baseline.** The scope decisions in §0 are settled; changing one means revisiting everything below.
+> The SDK appendix is verified against code, not documentation.
 
 ---
 
@@ -27,9 +27,9 @@ Both resolve to the same underlying action: **buy a put on the user's behalf, ho
 
 **Rationale:** judging criterion #1 is "does it work". Model A is far more likely to be running on demo day, and it lets a judge try the product on stage without installing a wallet — which reinforces our own pitch about removing barriers. Thetanuts' own workshop guidance (burner wallet, trade small) assumes this shape too.
 
-**Wallet operator: Alvin.** The burner wallet and its private key are his responsibility. This means:
+**Wallet operator: the backend developer.** The burner wallet and its private key are their responsibility. This means:
 
-- The key lives only in Alvin's local `.env` and, once deployed, in the hosting platform's environment variable panel. It is never shared in chat, never committed, never screenshotted.
+- The key lives only in the local `.env`. Nothing is hosted, so there is no platform panel. It is never shared in chat, never committed, never screenshotted.
 - Only the backend signs. No other component of the system ever touches the key.
 - The wallet holds only what a demo needs — a few USDC plus cents of ETH for gas. It is not a treasury.
 - If the key is ever exposed, the response is to move the funds and generate a new wallet, not to hope nobody noticed.
@@ -58,8 +58,8 @@ RFQ belongs on the "what's next" slide, as the thing that would let users name a
 |---|---|
 | **User** | Someone holding crypto who wants downside protection. Assumed to know nothing about options. |
 | **System** | Our app — frontend, backend, database |
-| **Scheduler** | Backend cron job that checks for expiring positions and settles them |
-| **Thetanuts** | External on-chain options protocol on Base mainnet (OptionBook + RFQ) |
+| **Scheduler** | Backend job that reads settlement results for expired positions and records them |
+| **Thetanuts** | External on-chain options protocol on Base mainnet (OptionBook; RFQ is out of scope) |
 | **Base** | The blockchain the protocol runs on |
 
 ---
@@ -130,7 +130,7 @@ As a risk-averse user, I want to see clearly that the premium is the most I can 
 
 **Main flow**
 
-1. User selects asset (ETH, BTC, SOL, XRP, BNB, AVAX)
+1. User selects asset. The book carries ETH, BTC, SOL, XRP, BNB and AVAX; **the MVP UI exposes ETH only** because long-dated liquidity is thin once split across six underlyings. The code must not hardcode ETH.
 2. User enters amount held
 3. User specifies protection, either:
    - **3a.** protection level as a percentage (e.g. "no more than 20% down"), or
@@ -270,28 +270,30 @@ As a risk-averse user, I want to see clearly that the premium is the most I can 
 | **BR-9** | If the fill price moved more than a set tolerance (suggest 5%) from the quote, abort and require re-confirmation. |
 | **BR-10** | Every purchase is preceded by a balance check for both USDC and gas. |
 | **BR-11** | Scheduler interval must be materially shorter than the shortest supported expiry. Given 1-day expiries exist, hourly at minimum. |
-
-| **BR-12** | Token approvals must be for the **exact amount required**, never `MaxUint256`. |
-| **BR-13** | All trading uses a dedicated **burner wallet** holding only what's needed: a few USDC plus cents of ETH for gas. |
-
-| **BR-14** | Every write to the chain must be recorded in the database **before** submission, so an interrupted transaction leaves a traceable record rather than a silent gap. |
-| **BR-15** | Trade sizes stay minimal (1–3 USDC per fill). Thetanuts stated a 1 USDC fill scores identically to a 100 USDC fill. |
 | **BR-27** | Automatic settlement is not guaranteed — the protocol emits `OptionSettlementFailed` events. Any position still unsettled beyond a threshold after expiry must be flagged for manual review, never silently dropped. |
 | **BR-28** | Every state-changing call must be dry-run first with the SDK's `callStatic*` variant (`callStaticFillOrder`, `callStaticApprove`). Broadcasting a transaction that was never simulated wastes gas on guaranteed reverts. |
 | **BR-29** | Use the SDK's own validation helpers rather than hand-rolling equivalents: `validateBuySlippage`, `validateOrderExpiry`, `validateFillSize`. They encode the protocol's actual rules; ours would only approximate them. |
-| **BR-30** | The burner wallet key exists in exactly two places: Alvin's local `.env` and the hosting platform's environment variable panel. Nowhere else — not in chat, not in the repo, not in a screenshot. |
+| **BR-12** | Token approvals must be for the **exact amount required**, never `MaxUint256`. |
+| **BR-13** | All trading uses a dedicated **burner wallet** holding only what's needed: a few USDC plus cents of ETH for gas. |
+| **BR-30** | The burner wallet key exists in exactly one place: the local `.env`. Nowhere else — not in chat, not in the repo, not in a screenshot. |
 | **BR-31** | Because the system is custodial, every position row must record which user it belongs to. On-chain the wallet owns everything; only our database knows whose protection is whose. This mapping is the product's core record and must never be lost or ambiguous. |
 | **BR-32** | The custodial arrangement must be disclosed in the UI and in the pitch, not buried. Users are trusting us with funds; saying so is the minimum. |
-| **BR-33** | A hard per-fill premium cap is enforced in code (suggest 5 USDC). A misplaced decimal must be impossible to broadcast, not merely unlikely. |
+| **BR-33** | A hard per-fill premium cap is enforced in code. A misplaced decimal must be impossible to broadcast, not merely unlikely. |
 | **BR-34** | A hard daily fill count cap is enforced in code. A retry loop must not be able to drain the wallet. |
-| **BR-35** | On-chain data is a rebuildable cache; `positions.user_id` is not. Verify Supabase backups are actually running — it is the only data in the system with no external source of truth. |
-| **BR-36** | A reconciliation script must be able to rebuild every position fact from chain state and diff it against the database. Run it whenever the data is in doubt. |
+| **BR-35** | On-chain data is a rebuildable cache; `positions.user_id` is not. Verify Supabase backups are actually running. |
+| **BR-36** | A reconciliation script must be able to rebuild every position fact from chain state and diff it against the database. |
+| **BR-37** | Any simulated component must be labelled as simulated in the interface, at the point where the user sees the number. Demo simplifications are acceptable; presenting them as real is not. |
+| **BR-38** | A principal-protected product's participation rate is calculated from the actual premium paid and the exposure obtained, never hardcoded, and is displayed before the user commits. |
+| **BR-39** | A loan's credit limit is derived from the backing option's strike. It is never a fixed loan-to-value ratio — the derivation is the product's entire claim, and a hardcoded ratio would make that claim false. |
+| **BR-14** | Every write to the chain must be recorded in the database **before** submission, so an interrupted transaction leaves a traceable record rather than a silent gap. |
+| **BR-15** | Trade sizes stay minimal (1–3 USDC per fill). Thetanuts stated a 1 USDC fill scores identically to a 100 USDC fill. |
+
 ### Data & security
 
 | ID | Rule |
 |---|---|
-| **BR-16** | Row Level Security must be enabled on every Supabase table. The anon key is public; without RLS the entire database is world-readable and world-writable. |
-| **BR-17** | The `service_role` key and the wallet private key are **server-side only** and must never be prefixed `VITE_` — that prefix bundles a variable into the browser. |
+| **BR-16** | Row Level Security must be enabled on every Supabase table. Our backend uses the secret key, which bypasses RLS by design — but RLS must still be on, so that a future change (or a mistake) that exposes a publishable key doesn't leave the database world-readable. |
+| **BR-17** | The Supabase **secret key** (`sb_secret_...`) and the wallet private key are **server-side only** and must never be prefixed `VITE_` — that prefix bundles a variable into the browser. Supabase's new key format also rejects secret keys sent from something that looks like a browser, but do not rely on that as the only defence. |
 | **BR-18** | No secret is ever committed. `.env` stays gitignored; the repo is public and git history is permanent. |
 | **BR-19** | Position records are immutable once settled — corrections are new rows, not edits. |
 
@@ -333,11 +335,15 @@ Judging is **"does it work"** and **"would anyone use it"** — not complexity. 
 - US-9 max loss stated on screen
 
 **Should have**
-- UC-3 settlement, even if demonstrated with a manually triggered run
+- UC-3 settlement, even if the scheduler is run by hand for the demo
 - Second entry point (goal-based input) — it's the same backend, mostly UI
 
+**Also being built** (each depends on the buy-and-settle engine above)
+- Options-powered lending: credit limit derived from a put's strike (BR-39)
+- Principal-protected vault: simulated yield funds a real on-chain call (BR-37, BR-38)
+
 **Won't have**
-- Rolling, cancelling, notifications, multi-asset portfolios, non-custodial wallets
+- Rolling, cancelling, notifications, multi-asset portfolios, non-custodial wallets, our own smart contracts, a live yield source
 
 ---
 
@@ -347,7 +353,7 @@ Judging is **"does it work"** and **"would anyone use it"** — not complexity. 
 2. ✅ **Resolved:** OptionBook only. RFQ is out of scope for the MVP — too much demo risk. See §0.
 3. ✅ **Resolved:** settlement is fully automatic via the factory callback. `payout()` is deprecated and throws. UC-3 is read-only — no transaction, no gas.
 4. What's the minimum fillable size? Constrains BR-15 and the demo script.
-5. Do we need user accounts at all, or is a single-user demo enough? A demo with no login is one less thing to break on stage.
+5. How many demo users to seed — see `DATABASE.md` open questions. There is no login either way.
 
 ---
 
@@ -398,4 +404,6 @@ Verified by introspecting `client` at runtime and reading `node_modules/@thetanu
 
 ### Relevant to the deprioritised Idea 1
 
-`client.loan` and `client.collar` already implement option-backed lending — `requestLoan`, `acceptOffer`, `lend`, `isOptionITM`, `estimateCollar`, `walkAwayCollar`. This confirms that "liquidation-proof lending" is an existing SDK feature rather than something we would be inventing, which is a second reason (alongside odette.fi) not to lead with it.
+`client.loan` and `client.collar` expose option-backed lending methods — `requestLoan`, `acceptOffer`, `lend`, `isOptionITM`, `estimateCollar`, `walkAwayCollar`.
+
+**Verified 29 Aug 2026: neither is live on Base.** `client.collar.isDeployed()` returns `false` and `client.loan.getLendingOpportunities()` returns an empty array. The interfaces exist; the backend does not. So option-collateralised lending is **not** a ready-made SDK feature — it would have to be built. See `IDEA.md` Idea 1 for the custodial approach that avoids writing contracts.

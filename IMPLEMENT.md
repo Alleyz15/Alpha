@@ -15,9 +15,10 @@ Before implementing anything, the assistant must:
 1. **State the approach first.** What files will be created or changed, what the shape of the solution is, what trade-offs it involves, and anything that will be assumed.
 2. **Stop and wait for approval.** Do not write code in the same turn as the proposal.
 3. **On approval** — implement as proposed. If reality forces a deviation, say so before deviating.
-4. **On rejection** — Alvin supplies his own approach. Regenerate the proposal around *his* idea, not the original one. Do not re-argue the rejected version unless it has a correctness or security problem, in which case say so plainly once and then follow his direction.
+4. **On rejection** — the developer supplies their own approach. Rebuild the proposal around *their* idea, not the original one. Do not re-argue the rejected version unless it has a correctness or security problem, in which case say so plainly once and then follow their direction.
+5. **Report when done, then stop again.** List every file created, changed or deleted and what changed in each. Say whether you deviated from the proposal. Wait for confirmation before starting anything else.
 
-**Why:** Alvin is new to backend work and is learning the codebase as it's built. Code that appears without a stated plan can't be reviewed properly, and unreviewed code in a public repo with a funded wallet is a real risk.
+**Why:** this is a small team on a one-week deadline, several members are working outside their usual area, and everyone has to be able to review what lands in the repo. Code that appears without a stated plan can't be reviewed properly, and unreviewed code in a public repo with a funded wallet is a real risk.
 
 **Also:** after finishing a task, update the status table in this file. A plan that doesn't reflect reality is worse than no plan.
 
@@ -45,6 +46,8 @@ Not started: database, quote engine, any transaction, any frontend.
 
 **Nothing is blocked.** All open questions from requirements.md §7 are resolved.
 
+**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `IDEA.md`.
+
 ---
 
 ## Phase 0 — Foundation ✅
@@ -61,7 +64,12 @@ Not started: database, quote engine, any transaction, any frontend.
 | Expiries mapped | ✅ | +1 to +62 days; +27 has 49 orders |
 | SDK method surface mapped | ✅ | See requirements.md appendix |
 | Requirements written | ✅ | requirements.md |
-| Custodial vs non-custodial decided | ✅ | Custodial, Alvin operates the wallet |
+| Custodial vs non-custodial decided | ✅ | Custodial; the backend developer operates the wallet |
+| Frontend stack decided | ✅ | Vite + React + anime.js, nothing else |
+| Deployment decided | ✅ | **Local only** — no hosting platform |
+| Supabase key format decided | ✅ | New `sb_secret_`, not legacy service_role |
+| loan / collar modules checked | ✅ | **Not deployed on Base** — `isDeployed: false`, 0 opportunities |
+| Repo restructured into backend/frontend | ✅ | |
 | RFQ scope decided | ✅ | Out of scope — OptionBook only |
 
 ---
@@ -100,8 +108,8 @@ Not started: database, quote engine, any transaction, any frontend.
 | 2.1 | Supabase project created | ⬜ | Region: Singapore. Keys in `.env` |
 | 2.2 | Migration tooling set up | ⬜ | `supabase/migrations/` exists, first migration applies cleanly |
 | 2.3 | Core tables created | ⬜ | Per DATABASE.md |
-| 2.4 | RLS enabled on every table | ⬜ | BR-16 — verify with the anon key that nothing leaks |
-| 2.5 | DB access layer | ⬜ | Insert/update/query helpers, service_role key server-side only |
+| 2.4 | RLS enabled on every table | ⬜ | BR-16 — verify with a publishable key that nothing leaks |
+| 2.5 | DB access layer | ⬜ | Insert/update/query helpers, secret key server-side only |
 | 2.6 | Seed a demo user | ⬜ | Demo works without a login flow |
 
 **Definition of done:** a fresh machine can run the migrations and get an identical database.
@@ -154,6 +162,8 @@ Treat chain data as a cache we can always rebuild. Treat `positions.user_id` as 
 ### Pre-flight checklist (task 3.5b)
 
 Implement as one function. Every item must pass; any failure aborts before broadcast.
+
+```
 [ ] USDC balance covers the premium
 [ ] ETH balance covers gas
 [ ] Quote is still within its validity window        (BR-8)
@@ -164,6 +174,9 @@ Implement as one function. Every item must pass; any failure aborts before broad
 [ ] Allowance is the exact amount, not MaxUint256     (BR-12)
 [ ] callStaticFillOrder succeeded                     (BR-28)
 [ ] Pending row written to the database               (BR-14)
+```
+
+**Simulate the whole flow with `callStatic` before the first real fill.** Task 3.5 precedes 3.7 for exactly this reason.
 
 ---
 
@@ -191,11 +204,17 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 5.1 | API contract agreed | ⬜ | Endpoint shapes written down before either side builds |
-| 5.2 | Quote screen | ⬜ | No options jargon anywhere (BR-3) |
-| 5.3 | Confirmation screen | ⬜ | Shows max loss explicitly (BR-2, US-9) |
-| 5.4 | Position dashboard | ⬜ | Status, floor, expiry, BaseScan link |
-| 5.5 | Custody disclosure | ⬜ | Visible in the UI, not buried (BR-32) |
+| 5.1 | API contract agreed | ⬜ | Endpoint shapes written down **before either side builds** |
+| 5.2 | CORS configured | ⬜ | 5173 → 3000. Requests are blocked without it and the error doesn't say so |
+| 5.3 | Quote screen | ⬜ | No options jargon anywhere (BR-3) |
+| 5.4 | Confirmation screen | ⬜ | Shows max loss explicitly (BR-2, US-9) |
+| 5.5 | Position dashboard | ⬜ | Status, floor, expiry, BaseScan link |
+| 5.6 | Custody disclosure | ⬜ | Visible in the UI, not buried (BR-32) |
+| 5.7 | Front-to-back integration verified | ⬜ | Both running together on one machine, full flow works |
+
+**Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.
+
+**Animation comes last.** The one animation worth having is the moment the price crosses the protected floor. Decoration built before the flow works is wasted.
 
 ---
 
@@ -205,6 +224,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
+| 6.0 | **Demo machine decided and verified** | ⬜ | Frontend + backend + `.env` all on the one laptop going on stage |
 | 6.1 | **Feature freeze** | ⬜ | **4 Sep.** After this, only bug fixes |
 | 6.2 | Demo script rehearsed | ⬜ | Fits in 5 minutes, run end to end at least 3 times |
 | 6.3 | Demo can be re-run live | ⬜ | Judges may ask to see it twice |
@@ -212,7 +232,51 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 6.5 | Public repo README | ⬜ | Description, problem, chain, contract addresses, setup, team |
 | 6.6 | AI tool declaration | ⬜ | Every tool used, as required by the rules |
 | 6.7 | Devfolio submission | ⬜ | **Submit 4 Sep, not 5 Sep.** Leave a day of margin |
-| 6.8 | Q&A prep | ⬜ | Stop-loss comparison, odette.fi difference, custody, seller side |
+| 6.8 | Q&A prep | ⬜ | Stop-loss vs put, odette.fi / collar difference, custody, seller side, why ETH only |
+
+---
+
+## Phase 7 — Options-powered lending ⬜
+
+**Depends on Phases 1–4.** The put that acts as a collateral floor is bought and settled by the same code the core product uses, so that code must work first. This is a dependency, not a priority ranking.
+
+**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `IDEA.md` Idea 1.
+
+**Why it's cheap once the core works:** it reuses ~90% of the existing code. Buying, settlement, database and scheduler are unchanged — what's new is a `loans` table and two flows.
+
+| # | Task | Status | Acceptance |
+|---|---|---|---|
+| 7.1 | `loans` table + migration | ⬜ | Per DATABASE.md conventions |
+| 7.2 | Credit limit derived from strike | ⬜ | `limit = strike × contracts`. Never a hardcoded ratio — this is the whole point |
+| 7.3 | Disburse USDC on-chain | ⬜ | Real transfer to the user's address, tx hash recorded |
+| 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
+| 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
+
+**Definition of done:** a BaseScan link to a USDC disbursement whose size is provably derived from an on-chain put's strike.
+
+**The question judges will ask:** "You're the lender — you're not liquidating because of the put, or because you chose not to?" The answer must be: *the credit limit is the strike. Remove the put and we'd lend 500, not 800, and keep the right to liquidate.* Make sure the code actually works that way, or the answer is a lie.
+
+---
+
+## Phase 8 — Principal-protected vault ⬜
+
+**Depends on Phases 1–4**, for the same reason as Phase 7: it buys and settles an option, only a call instead of a put.
+
+**The constraint that shapes it:** the longest expiry on the book is 62 days, not a year. Over 62 days, 95 USDC at 5% generates ~0.81 USDC, which buys 10–16 USDC of exposure. **Participation rate is 10–16%, not 40–50%.** That number goes on screen.
+
+**What's real:** the call, on Base mainnet, BaseScan verifiable.
+**What's simulated:** yield accrual, labelled as such in the UI.
+
+| # | Task | Status | Acceptance |
+|---|---|---|---|
+| 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
+| 8.2 | Deposit split logic | ⬜ | Principal split into yield and option portions |
+| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable, 62-day expiry |
+| 8.4 | Simulated yield accrual | ⬜ | Labelled as simulated in the UI, not hidden (BR-37) |
+| 8.5 | Participation rate displayed | ⬜ | Calculated from real premium and exposure, never hardcoded (BR-38) |
+| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+
+**Definition of done:** a BaseScan link to a real call purchase, with the interface stating the participation rate and labelling the simulated yield.
 
 ---
 
@@ -223,10 +287,12 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 29–30 Aug | Phase 1 quote engine + Phase 2 database |
 | 31 Aug – 1 Sep | Phase 3 — **first real fill** |
 | 2 Sep | Phase 4 settlement + buy a short-dated position for the demo |
-| 2–3 Sep | Phase 5 frontend integration |
+| 2–3 Sep | Phase 5 frontend, Phase 7 lending, Phase 8 vault |
 | 4 Sep | **Freeze.** Video, README, submit |
 | 5 Sep | Buffer. Rehearse |
 | 6 Sep | Pitch |
+
+**Build in dependency order.** Phases 7 and 8 both rest on the buy-and-settle code from Phases 1–4. Starting them before that code works means debugging three products at once.
 
 ---
 
@@ -242,6 +308,10 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | Team over-builds and finishes nothing | Fails criterion #1 | Freeze on 4 Sep regardless of state |
 | Wrong parameters filled on-chain the day before the pitch | Unfixable in time | Pre-flight checklist (3.5b) + `callStatic` dry run on every fill |
 | `user_id` mapping lost | Product broken, unrecoverable | Verify backups (BR-35); reconciliation script (BR-36) |
+| Three products each half-finished | Fails criterion #1 for all three | Build in dependency order; each phase's definition of done must be met before the next starts |
+| Vault participation rate looks unattractive | Weakens criterion #2 | Frame it as short-dated and state the constraint openly — the guarantee is the product, not the upside |
+| Frontend and backend on different laptops on demo day | Nothing runs | Task 6.0 — decide the machine early and rehearse on it |
+| Venue wifi fails | Local demo survives; RPC calls do not | Cache a recent quote; dashboard must be readable from the database alone |
 
 ---
 
@@ -251,8 +321,10 @@ Recorded so nobody quietly starts one of these:
 
 - RFQ flow (§0 decision)
 - Non-custodial wallet integration
+- Hosted deployment — the demo runs locally
+- Principal-protected vault (Idea 3) — needs an RWA yield source, and its value only shows after a year
+- **Writing our own smart contracts** — mainnet deployment costs real gas and Thetanuts has no testnet, so there is nowhere to deploy them
 - Rolling or cancelling protection before expiry
 - Notifications
 - Multi-asset portfolios
-- Liquidation-proof lending — `client.loan` / `client.collar` already implement it, and odette.fi ships it
 - User authentication beyond what the demo needs

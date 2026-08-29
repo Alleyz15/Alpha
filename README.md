@@ -82,18 +82,20 @@ cd Alpha
 ```bash
 cd backend
 npm install
-cp ../.env.example ../.env # add your RPC endpoint and Supabase credentials
-npm run inspect:orders     # verify the read-only Thetanuts connection
+cp .env.example .env      # add your RPC endpoint and Supabase credentials
+npm run dev               # http://localhost:3000
 ```
 
-The backend API and its `npm run dev` command have not been implemented yet.
+**Frontend** — in a second terminal:
 
-**Frontend**
+```bash
+cd frontend
+npm install
+cp .env.example .env
+npm run dev               # http://localhost:5173
+```
 
-The `frontend/` directory is reserved for the frontend application, which has
-not been initialized yet.
-
-Environment details and troubleshooting: [`SETUP.md`](SETUP.md)
+Environment details and troubleshooting: [`docs/SETUP.md`](docs/SETUP.md)
 
 ---
 
@@ -136,7 +138,16 @@ Stated plainly, because they're real:
 
 **OptionBook only.** We fill orders already resting on the book, so the protection level is the closest available rather than the exact number requested. The interface always shows the real figure, never the requested one. Supporting request-for-quote would remove this constraint.
 
+**Runs locally.** There is no hosted deployment; the demo runs on a laptop.
+
 **Settlement can fail.** The protocol emits settlement-failure events, so positions that don't settle are flagged rather than assumed successful.
+
+## What's next
+
+- Non-custodial signing
+- Request-for-quote, for arbitrary strikes and expiries
+- Rolling protection forward before it expires
+- Recurring protection for people paid in crypto on a schedule
 
 ---
 
@@ -144,6 +155,16 @@ Stated plainly, because they're real:
 
 | Name | Role | LinkedIn |
 |---|---|---|
-| [Alvin Wong] | Backend — SDK integration, database, settlement | [url] |
+| [name] | Backend — SDK integration, database, settlement | [url] |
 | [name] | Frontend | [url] |
 | [name] | [role] | [url] |
+
+## AI tools used
+
+| Tool | Purpose |
+|---|---|
+| [tool] | [purpose] |
+
+## Documentation
+
+Design decisions, business rules and schema are documented in [`docs/`](docs/).
