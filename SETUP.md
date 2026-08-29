@@ -94,7 +94,6 @@ anime.js v4 notes:
 1. Sign up at supabase.com → New Project
 2. Region: **Southeast Asia (Singapore)** — closest to Malaysia
 3. Set a database password and **save it in a password manager**. Losing it is painful.
-4. Settings → API, copy three values:
 4. Settings → API Keys → **Publishable and secret API keys** tab. Use the new format:
    - Project URL → `SUPABASE_URL`
    - Secret key (`sb_secret_...`) → `SUPABASE_SECRET_KEY` (**server-side only**)
@@ -186,6 +185,48 @@ Format: symptom → cause → fix
 - **`pathspec '.env.example' did not match any files`** → the file does not exist in the current folder, or Windows Explorer refused to create a dotfile → create it from inside VS Code, which allows leading dots
 - **RPC timeouts / "unstable API"** → using the public Base endpoint → use your own Alchemy key
 - **`npm init` in a folder that already has `package.json`** → silently overwrites it, dropping `"type": "module"` and the dependency list → run `npm install` instead; you only find out when `import` breaks
+
+---
+
+## Environment variables
+
+`backend/.env` — copy from `.env.example` and fill in.
+
+| Variable | Needed by | Notes |
+|---|---|---|
+| `THETANUTS_RPC_URL` | Phase 1 | Alchemy, Base mainnet. The only one Phase 1 needs |
+| `SUPABASE_URL` | Phase 2 | Project URL |
+| `SUPABASE_SECRET_KEY` | Phase 2 | `sb_secret_...`, server-side only |
+| `THETANUTS_PRIVATE_KEY` | **Phase 3** | Burner wallet. **Leave empty until then** |
+| `MAX_PREMIUM_PER_FILL_USDC` | Phase 3 | Hard cap, BR-33 |
+| `MAX_FILLS_PER_DAY` | Phase 3 | Hard cap, BR-34 |
+| `QUOTE_VALIDITY_SECONDS` | Phase 1 | BR-8 |
+| `PRICE_TOLERANCE_PCT` | Phase 3 | BR-9 |
+| `SCHEDULER_INTERVAL_MINUTES` | Phase 4 | BR-11 |
+| `DEFAULT_PROTECTION_PCT` | Phase 1 | BR-4 |
+| `LOAN_INTEREST_RATE_ANNUAL_PCT` | Phase 7 | Interest charged on USDC loans |
+| `VAULT_SIMULATED_YIELD_ANNUAL_PCT` | Phase 8 | **Simulated.** The UI must say so (BR-37) |
+| `VAULT_TERM_DAYS` | Phase 8 | Cannot exceed 62 — the book's longest expiry |
+| `PORT` | Phase 5 | Backend API port |
+
+`frontend/.env`:
+
+```
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+### What must NOT be an environment variable
+
+Two figures are deliberately absent, and adding them would break the product's claims:
+
+| Not this | Because |
+|---|---|
+| `LOAN_LTV_RATIO` | The credit limit comes from the filled put's strike (BR-39). A configured ratio would produce the same number with or without the option, which makes our answer to judges false |
+| `VAULT_PARTICIPATION_RATE` | It comes from the premium actually paid and the exposure actually obtained (BR-38). Configuring it means displaying a number nobody earned |
+
+Both are computed at purchase time and stored on the row (BR-40). Formulas are in `requirements.md`.
+
+**The test:** if changing a value would alter what an existing user already bought, it does not belong in the environment.
 
 ---
 
