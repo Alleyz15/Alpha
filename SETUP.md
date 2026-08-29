@@ -77,8 +77,8 @@ npx -y @thetanuts-finance/mcp       # optional, feeds SDK context to Claude / Co
 3. Set a database password and **save it in a password manager**. Losing it is painful.
 4. Settings → API, copy three values:
    - Project URL → `VITE_SUPABASE_URL`
-   - anon public key → `VITE_SUPABASE_ANON_KEY`
-   - service_role key → `SUPABASE_SERVICE_ROLE_KEY` (**server-side only**)
+   - Publishable key → `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - Secret keys → `SUPABASE_SECRET_KEY` (**server-side only**)
 5. **Enable Row Level Security on every table.** Supabase does not enable it by default, and the anon key is public — without RLS, anyone can read and write the entire database.
 
 ---
