@@ -82,20 +82,18 @@ cd Alpha
 ```bash
 cd backend
 npm install
-cp .env.example .env      # add your RPC endpoint and Supabase credentials
-npm run dev               # http://localhost:3000
+cp ../.env.example ../.env # add your RPC endpoint and Supabase credentials
+npm run inspect:orders     # verify the read-only Thetanuts connection
 ```
 
-**Frontend** — in a second terminal:
+The backend API and its `npm run dev` command have not been implemented yet.
 
-```bash
-cd frontend
-npm install
-cp .env.example .env
-npm run dev               # http://localhost:5173
-```
+**Frontend**
 
-Environment details and troubleshooting: [`docs/SETUP.md`](docs/SETUP.md)
+The `frontend/` directory is reserved for the frontend application, which has
+not been initialized yet.
+
+Environment details and troubleshooting: [`SETUP.md`](SETUP.md)
 
 ---
 
