@@ -22,26 +22,31 @@ Everyone should be on the same Node version. Mismatched versions cause "works on
 ## Quick start
 
 ```bash
-# 1. Clone
 git clone https://github.com/Alleyz15/Alpha.git
 cd Alpha
-
-# 2. Install backend dependencies
-cd backend
-npm install
-cd ..
-
-# 3. Configure secrets
-cp .env.example .env
-# Open .env and fill in the values.
-# Ask for them in a DM - never post keys in the group chat.
-
-# 4. Verify the connection to Thetanuts (read-only, no wallet needed)
-cd backend
-npm run inspect:orders
 ```
 
-> There is no `npm run dev` yet — the frontend has not been set up. The backend currently contains read-only inspection scripts.
+**Backend**
+
+```bash
+cd backend
+npm install                 # NOT npm init - that would overwrite package.json
+cp .env.example .env        # fill in the values, ask in a DM
+node scripts/test.js        # read-only connectivity check, no wallet needed
+```
+
+**Frontend** (once it exists) — in a second terminal:
+
+```bash
+cd frontend
+npm install
+cp .env.example .env
+npm run dev                 # http://localhost:5173
+```
+
+> **Never run `npm init` in a folder that already has a `package.json`.** It silently overwrites the file, dropping `"type": "module"` and the dependency list, and you won't find out until `import` stops working.
+
+> `CLAUDE.md` and `codex.md` are not in the repo — they're shared through Discord. Ask for the current copies and put them in your project root so your AI tools follow the same rules as everyone else's.
 
 ---
 
@@ -58,7 +63,6 @@ npm run inspect:orders
 ### Thetanuts SDK — DONE
 
 ```bash
-cd backend
 npm i @thetanuts-finance/thetanuts-client ethers dotenv
 npm i -g @thetanuts-finance/cli     # optional, quote and fill from the terminal
 npx -y @thetanuts-finance/mcp       # optional, feeds SDK context to Claude / Codex
@@ -70,16 +74,35 @@ npx -y @thetanuts-finance/mcp       # optional, feeds SDK context to Claude / Co
 - **If the docs and the repo disagree, trust the repo.**
 - There is no Thetanuts API key. All you need is a working Base RPC.
 
+### Frontend — NOT SET UP YET
+
+```bash
+npm create vite@latest frontend -- --template react
+cd frontend
+npm i animejs
+```
+
+**React + Vite + anime.js. Nothing else** — no UI component library, no state manager, no router. There are three screens; extra dependencies are extra surface area for things to break, and the judges do not score the tech stack.
+
+anime.js v4 notes:
+- Scope every animation with `createScope({ root })` so selectors don't leak between components
+- Always `revert()` in the `useEffect` cleanup, or animations outlive their component
+- **Never let React and anime.js control the same property on the same element.** React re-renders will overwrite mid-animation; the symptom is intermittent flicker that is very hard to trace
+
 ### Supabase — NOT SET UP YET
 
 1. Sign up at supabase.com → New Project
 2. Region: **Southeast Asia (Singapore)** — closest to Malaysia
 3. Set a database password and **save it in a password manager**. Losing it is painful.
 4. Settings → API, copy three values:
-   - Project URL → `VITE_SUPABASE_URL`
-   - Publishable key → `VITE_SUPABASE_PUBLISHABLE_KEY`
-   - Secret keys → `SUPABASE_SECRET_KEY` (**server-side only**)
-5. **Enable Row Level Security on every table.** Supabase does not enable it by default, and the anon key is public — without RLS, anyone can read and write the entire database.
+4. Settings → API Keys → **Publishable and secret API keys** tab. Use the new format:
+   - Project URL → `SUPABASE_URL`
+   - Secret key (`sb_secret_...`) → `SUPABASE_SECRET_KEY` (**server-side only**)
+
+   > Do **not** use the legacy `anon` / `service_role` JWT keys. Supabase deprecates them by the end of 2026, and new projects should start on the new format. Secret keys can also be revoked individually, instead of regenerating the whole JWT secret.
+
+   The publishable key is not needed — the frontend never talks to Supabase directly, only to our backend API.
+5. **Enable Row Level Security on every table.** Supabase does not enable it by default. Our backend uses the secret key, which bypasses RLS, so RLS is not today's line of defence — but leaving it off means any future exposure is immediately fatal.
 
 ---
 
@@ -162,6 +185,18 @@ Format: symptom → cause → fix
 - **`LF will be replaced by CRLF` warning on git add** → Windows vs Unix line endings → harmless warning, ignore. A `.gitattributes` containing `* text=auto eol=lf` silences it.
 - **`pathspec '.env.example' did not match any files`** → the file does not exist in the current folder, or Windows Explorer refused to create a dotfile → create it from inside VS Code, which allows leading dots
 - **RPC timeouts / "unstable API"** → using the public Base endpoint → use your own Alchemy key
+- **`npm init` in a folder that already has `package.json`** → silently overwrites it, dropping `"type": "module"` and the dependency list → run `npm install` instead; you only find out when `import` breaks
+
+---
+
+## Deployment
+
+**There is none.** The demo runs locally at the pitch: frontend on Vite's dev server, backend as a local Node process.
+
+Consequences:
+- CORS must be configured between the two local ports (5173 → 3000)
+- **The whole environment must be verified on the machine that will actually be used on stage.** Frontend on one laptop and backend on another will not work
+- A demo video is still required by the rules, so record it well before the deadline
 
 ---
 
@@ -170,9 +205,9 @@ Format: symptom → cause → fix
 The repo is **public**. Treat this seriously.
 
 - `.env` is gitignored. Never commit it, never screenshot it, never paste keys in the group chat.
-- Share keys one-to-one, or through the Vercel environment variable panel.
+- Share keys one-to-one in a DM. Nothing is hosted, so there is no platform panel to put them in.
 - Before sharing, confirm the other person's `.gitignore` contains `.env`.
 - **Run `git status` after creating `.env`.** If `.env` shows up, `.gitignore` is not working — stop and fix it before continuing.
 - Once a key is committed it stays in the git history forever, even if you delete it later. Rotate the key instead.
-- **Variables prefixed with `VITE_` are bundled into the browser** and readable by anyone. Never put a private key or a service_role key behind that prefix.
+- **Variables prefixed with `VITE_` are bundled into the browser** and readable by anyone. Never put a private key or the Supabase secret key behind that prefix.
 - The wallet used for trading must be a **fresh burner** holding only a few USDC and cents of ETH for gas.

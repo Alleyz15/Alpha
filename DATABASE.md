@@ -18,13 +18,13 @@ The product is **custodial** (requirements.md §0). On-chain, one burner wallet 
 
 ```
 users
-  │
-  ├──1:N──> quotes ──1:0..1──> positions
-  │                                │
-  └──────────1:N──────────────────┘
-                                   │
-                                   └──1:N──> position_events
+  ├──1:N──> quotes ──1:0..1──> positions ──1:N──> position_events
+  ├──1:N──> positions                    <──0..1──┐
+  ├──1:N──> loans  ──────────────────────────────┤  (Phase 7)
+  └──1:N──> vaults ──────────────────────────────┘  (Phase 8)
 ```
+
+Both `loans` and `vaults` reference a position — the option that makes the product work. A loan points at the put that floors its collateral; a vault points at the call that provides its upside.
 
 | Relationship | Meaning |
 |---|---|
@@ -43,6 +43,8 @@ users
 | **DR-2** | A user may hold zero or more positions. Each position belongs to exactly one user. | 1 : M |
 | **DR-3** | A quote may result in zero or one position. Each position originates from exactly one quote. | 1 : 0..1 |
 | **DR-4** | A position generates one or more position events. Each event records exactly one position. | 1 : M |
+| **DR-11** | A user may hold zero or more loans. Each loan belongs to exactly one user and references exactly one position. | 1 : M |
+| **DR-12** | A user may hold zero or more vaults. Each vault belongs to exactly one user and references at most one position. | 1 : M |
 
 ### Participation and attribute rules
 
@@ -52,8 +54,11 @@ users
 | **DR-6** | `quotes.user_id` is mandatory. |
 | **DR-7** | A position holds exactly one status at any time, drawn from the defined status set. |
 | **DR-8** | A quote records exactly one input mode. `percentage` requires `input_protection_pct`; `goal` requires both `input_target_value` and `input_target_date`. |
-| **DR-9** | A position holds exactly one strike and one expiry. Both are fixed at fill time and never change (on-chain values are immutable). |
+| **DR-9** | A position holds exactly one strike and one expiry. Both are fixed at fill time and never change, because on-chain values are immutable. |
 | **DR-10** | Deleting a user is prohibited while positions reference them. History is retained, not removed. |
+| **DR-13** | `loans.credit_limit` is derived from the referenced position's strike. It is never an independent figure that could drift from the option backing it. |
+| **DR-14** | A vault records both `yield_rate_annual` and `participation_rate` as stored values, so any displayed number can be traced back to the row that produced it. |
+
 
 ---
 
@@ -158,6 +163,53 @@ A priced offer shown to the user. Most expire unused; keeping them gives us an a
 
 ---
 
+### `loans` (Phase 7)
+
+A USDC loan against protected collateral. The credit limit comes from the put's strike.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID` PK | |
+| `user_id` | `UUID` FK → users NOT NULL | Ownership, same rule as positions |
+| `position_id` | `UUID` FK → positions NOT NULL | The put that provides the floor |
+| `status` | `TEXT` NOT NULL | `active`, `repaid`, `defaulted` |
+| `principal` | `NUMERIC` NOT NULL | USDC disbursed |
+| `credit_limit` | `NUMERIC` NOT NULL | **Derived from strike × contracts, never a hardcoded ratio** |
+| `interest_rate` | `NUMERIC` NOT NULL | Stored so the figure is auditable |
+| `collateral_amount` | `NUMERIC` NOT NULL | Asset units held |
+| `disbursement_tx` | `TEXT` NULL | Lowercase. On-chain USDC transfer |
+| `repayment_tx` | `TEXT` NULL | |
+| `due_at` | `TIMESTAMPTZ` NOT NULL | Matches the put's expiry |
+| `created_at` | `TIMESTAMPTZ` NOT NULL | |
+| `updated_at` | `TIMESTAMPTZ` NOT NULL | |
+
+> **`credit_limit` must be computed, not configured.** The product's entire claim is that the limit comes from the option's strike. If it is a hardcoded loan-to-value ratio, the claim is false and the answer we give judges is a lie.
+
+---
+
+### `vaults` (Phase 8)
+
+A principal-protected deposit. The yield portion is simulated; the option portion buys a real call.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID` PK | |
+| `user_id` | `UUID` FK → users NOT NULL | Ownership |
+| `position_id` | `UUID` FK → positions | The real call bought on-chain |
+| `status` | `TEXT` NOT NULL | `active`, `matured`, `failed` |
+| `principal` | `NUMERIC` NOT NULL | Total deposited, USDC |
+| `yield_portion` | `NUMERIC` NOT NULL | **Simulated** |
+| `option_portion` | `NUMERIC` NOT NULL | Real premium paid |
+| `yield_rate_annual` | `NUMERIC` NOT NULL | Assumed rate, stored so it's auditable |
+| `participation_rate` | `NUMERIC` NOT NULL | Calculated at deposit, displayed to the user |
+| `maturity` | `TIMESTAMPTZ` NOT NULL | Matches the call's expiry |
+| `payout` | `NUMERIC` NULL | Filled at maturity |
+| `created_at` | `TIMESTAMPTZ` NOT NULL | |
+
+> `yield_rate_annual` and `participation_rate` are **stored rather than recomputed on read**, so that if anyone asks how a displayed number was produced, the row answers.
+
+---
+
 ### `position_events`
 
 Append-only history. Required by BR-19 (settled positions are immutable) and invaluable for debugging.
@@ -178,18 +230,22 @@ Append-only history. Required by BR-19 (settled positions are immutable) and inv
 
 ## Row Level Security
 
-**Every table gets RLS enabled** (BR-16). Supabase does not do this by default, and the anon key is public — without RLS the entire database is world-readable and world-writable.
+**Every table gets RLS enabled** (BR-16). Supabase does not do this by default. Our backend uses the secret key, which bypasses RLS by design, so RLS is not what protects us today — but it must still be on, so that a future change or a leaked publishable key doesn't leave the database wide open.
 
-| Table | anon (browser) | service_role (backend) |
+| Table | Frontend (no direct access) | Backend (secret key) |
 |---|---|---|
-| `users` | read own row only | full |
-| `quotes` | read own rows only | full |
-| `positions` | **read own rows only** | full |
-| `position_events` | no access | full |
+| `users` | none | full |
+| `quotes` | none | full |
+| `positions` | none | full |
+| `position_events` | none | full |
 
-**All writes go through the backend using `service_role`.** The browser never writes. This is simpler to secure and matches the custodial model — the frontend is a view, not an actor.
+Policies should still be written as if a low-privilege client existed. If we ever expose a publishable key, the database must already be safe — not made safe afterwards.
 
-**Verify it:** after enabling RLS, query each table with the anon key and confirm you get nothing you shouldn't. Assuming RLS works is how databases leak.
+**All reads and writes go through the backend using the secret key.** The frontend never talks to Supabase at all — it only calls our API. This is simpler to secure and matches the custodial model: the frontend is a view, not an actor.
+
+> We use Supabase's **new API key format** (`sb_publishable_...` / `sb_secret_...`). The legacy `anon` and `service_role` JWT keys are deprecated by the end of 2026, and a new project should not start on them. A further benefit: multiple secret keys can exist, so a leaked one can be revoked individually instead of regenerating the whole JWT secret.
+
+**Verify it:** after enabling RLS, query each table with a publishable key and confirm you get nothing you shouldn't. Assuming RLS works is how databases leak.
 
 ---
 
