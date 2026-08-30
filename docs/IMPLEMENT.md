@@ -259,11 +259,21 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 8 — Principal-protected vault ⬜
+## Phase 8 — 26-day principal protection ⬜
+
+> ⚠️ **Repositioned 30 Aug.** The buyable book tops out at ~26 days — the +62 day
+> expiry exists but every order on it is on the forbidden side (BR-52). Over 26
+> days the yield portion generates ~0.34 USDC, which buys 7–11 USDC of exposure:
+> a **participation rate of 4–7%, not 10–16%**.
+>
+> The product is therefore named and pitched as **"26-day principal protection with
+> a small share of the upside"**, not as a savings vault. The guarantee is the
+> product; the upside is a bonus. Displaying 4–7% honestly is required (BR-38) —
+> a judge will calculate it.
 
 **Depends on Phases 1–4**, for the same reason as Phase 7: it buys and settles an option, only a call instead of a put.
 
-**The constraint that shapes it:** the longest expiry on the book is 62 days, not a year. Over 62 days, 95 USDC at 5% generates ~0.81 USDC, which buys 10–16 USDC of exposure. **Participation rate is 10–16%, not 40–50%.** That number goes on screen.
+**The constraint that shapes it:** the longest *buyable* expiry is ~26 days. Over 26 days, 95 USDC at 5% generates ~0.34 USDC, which buys 7–11 USDC of exposure. **Participation rate is 4–7%.** That number goes on screen.
 
 **What's real:** the call, on Base mainnet, BaseScan verifiable.
 **What's simulated:** yield accrual, labelled as such in the UI.
@@ -272,7 +282,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 |---|---|---|---|
 | 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
 | 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
-| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable, 62-day expiry |
+| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. **Longest buyable expiry is ~26 days**, not 62 (BR-52) |
 | 8.4 | Simulated yield accrual | ⬜ | Labelled as simulated in the UI, not hidden (BR-37) |
 | 8.5 | Participation rate displayed | ⬜ | `exposure ÷ principal`, from the real premium paid (BR-38). See requirements.md for the full formula |
 | 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
