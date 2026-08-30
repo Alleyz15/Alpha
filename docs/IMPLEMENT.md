@@ -111,6 +111,7 @@ Not started: database, quote engine, any transaction, any frontend.
 | 2.4 | RLS enabled on every table | ⬜ | BR-16 — verify with a publishable key that nothing leaks |
 | 2.5 | DB access layer | ⬜ | Insert/update/query helpers, secret key server-side only |
 | 2.6 | Seed a demo user | ⬜ | Demo works without a login flow |
+| 2.7 | Seed demo balances | ⬜ | Each demo user holds a balance per asset; quotes refuse to exceed it (BR-49) |
 
 **Definition of done:** a fresh machine can run the migrations and get an identical database.
 

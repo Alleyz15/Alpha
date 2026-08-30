@@ -242,6 +242,62 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 
 **Decimals: `strikePrice` and `price` both use 8 decimals — divide by 1e8.** Getting this wrong makes premiums look 100x too expensive.
 
+### Identifying which asset an order is for
+
+**`order.underlyingToken` is not a usable asset identifier.** It is the WETH address for ETH, an unrelated token for BTC, and **`0x0000…0000` for SOL, XRP, BNB and AVAX** — four assets share one value, so it cannot tell them apart.
+
+**Use `rawApiData.priceFeed` instead**, resolved against `client.chainConfig.priceFeeds`:
+
+```js
+client.chainConfig.priceFeeds
+// { ETH: "0x71041d…", BTC: "0x64c911…", SOL: "0x975043…", DOGE: "0x8422f3…",
+//   XRP: "0x9f0C1d…", BNB: "0x4b7836…", PAXG: "0x5213eB…", AVAX: "0xE70f2D…",
+//   "ETH/USD": "0x71041d…", "BTC/USD": "0x64c911…" }
+```
+
+Feed addresses are unique per asset and present on every order. Note the `ETH/USD` and `BTC/USD` aliases point at the same addresses as `ETH` and `BTC` — drop keys containing `/` or those two assets get listed twice. `DOGE` and `PAXG` have feeds but no market data and no orders.
+
+> `api.filterOrders({ asset, type })` looks like it would do this for us. **It is broken** — it throws `Cannot read properties of undefined (reading 'map')` for every asset. Filter `fetchOrders()` by hand.
+
+### Spot prices are already plain numbers
+
+`api.getMarketData()` returns human-scale JS numbers, **not** 8-decimal integers:
+
+```js
+{ prices: { ETH: 2458.24, BTC: 78156.73, SOL: 105.13, XRP: 1.39, BNB: 693.54, AVAX: 7.38 },
+  metadata: { lastUpdated: 1788088438000, currentTime: 1788088412911 } }
+```
+
+**The 8-decimal rule applies only to `strikePrice` and `price` on order objects.** Dividing a spot price by 1e8 gives a number 100 million times too small.
+
+> `api.getMarketPrices()` returns `{ price: "0", change24h: 0, timestamp: null }` — all zeros, for every asset. **Unusable.** Use `getMarketData()`.
+
+### Order side — which orders we are allowed to fill
+
+`isBuyer` describes the **maker's** side, from the taker's perspective. We are always the taker.
+
+| `order.isBuyer` | `rawApiData.isLong` | Maker wants to | We would be the | Fillable? |
+|---|---|---|---|---|
+| `false` | `true` | sell | **buyer** | ✅ yes |
+| `true` | `false` | buy | **seller** | ❌ **never — BR-1** |
+
+`isLong === !isBuyer` always (verified across all 359 orders on the book).
+
+**This is a product constraint, not a detail.** Selling exposes us to near-unlimited loss, which is the exact risk this product exists to keep users away from. Roughly **half the puts on the book are the forbidden side**, so an unfiltered "puts on ETH" count is about double what we can actually trade.
+
+**Consequence for asset selection:** filtering to buyable puts leaves **ETH and BTC only**. SOL, XRP, BNB and AVAX each have 10–20 puts on the book and **zero** we can fill.
+
+| Asset | Puts on book | Buyable by us |
+|---|---|---|
+| ETH | 48 | **19** |
+| BTC | 54 | **22** |
+| SOL | 20 | 0 |
+| XRP | 13 | 0 |
+| BNB | 16 | 0 |
+| AVAX | 10 | 0 |
+
+Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has been stable. This is what UC-1 exception E2 ("disable that asset in the UI") has to act on.
+
 ---
 
 ## Gotchas we already hit

@@ -118,6 +118,45 @@ As a risk-averse user, I want to see clearly that the premium is the most I can 
 
 ## 3. Use Cases
 
+### UC-0 — Establish a protected balance (simulated)
+
+| | |
+|---|---|
+| **Actor** | System |
+| **Goal** | Give each demo user a holding that protection can refer to |
+| **Precondition** | Demo users seeded |
+| **Postcondition** | Each user has a credited balance per asset |
+
+**This is a prototype. Users never transfer assets to us.**
+
+Protection has to protect *something*. Without a position to point at, a put is just
+a financial bet — and this product exists to be the opposite of that. So the
+prototype seeds each demo user with a balance, notionally backed by assets already
+in the operating wallet.
+
+**Flow**
+
+1. Demo users are seeded with a balance per asset
+2. The interface states that the holding is simulated
+3. Quote size is capped by that balance (BR-49)
+4. Everything downstream is real
+
+**What is real and what is not**
+
+```
+Balance / deposit    simulated     prototype scope
+Quote                real          live order book
+Option purchase      real          Base mainnet, BaseScan verifiable
+Settlement           real          protocol-driven
+```
+
+**Exception**
+
+- **E1 — Requested size exceeds the credited balance:** refuse to quote. Do not
+  silently reduce the size; the user asked for something we cannot honestly offer.
+
+---
+
 ### UC-1 — Quote protection
 
 | | |
@@ -250,7 +289,7 @@ As a risk-averse user, I want to see clearly that the premium is the most I can 
 | ID | Rule |
 |---|---|
 | **BR-1** | The system **only ever buys options on behalf of users. It never sells them.** Buyers have capped losses; sellers have near-unlimited losses. Retail users must never be placed on the seller side. |
-| **BR-2** | Maximum possible user loss is the premium paid, and this must be stated explicitly before every purchase. |
+| **BR-2** | **Two different maximum losses exist and must never be conflated.** The loss on the *protection itself* is capped at the premium. The loss on the *combined position* (asset plus protection) is `(spot − strike) + premium` — the user still carries every point of decline down to the floor. Confirmation screens state the combined figure in currency, because that is what the user actually stands to lose. |
 | **BR-3** | Options terminology (strike, IV, theta, delta, premium, put, call) must **never** appear in the user-facing UI. Internal code and admin views may use it freely. |
 
 ### Deriving the option
@@ -333,7 +372,15 @@ The premium comes from the live book, so the rate moves with the market. It is f
 | **BR-37** | Any simulated component must be labelled as simulated in the interface, at the point where the user sees the number. Demo simplifications are acceptable; presenting them as real is not. |
 | **BR-38** | A principal-protected product's participation rate is calculated from the actual premium paid and the exposure obtained, never hardcoded, and is displayed before the user commits. |
 | **BR-39** | A loan's credit limit is derived from the backing option's strike. It is never a fixed loan-to-value ratio — the derivation is the product's entire claim, and a hardcoded ratio would make that claim false. |
-| **BR-41** | The protection level is offered as a small number of fixed tiers, never a free-form input or slider. The book carries only discrete strikes, so a continuous control would promise precision the market cannot deliver — and asking the user to pick a number is the decision this product exists to remove. |
+| **BR-41** | Protection tiers are **derived from the strikes actually available at the chosen expiry** — normally three (highest, middle, lowest below spot), with the middle preselected. Never a hardcoded percentage list, never a slider. If fewer than three strikes exist below spot, show fewer tiers rather than padding the list. Verified on the live book: a 20% floor on ETH is only deliverable at the +27 day expiry; short tenors top out near 10–15%. |
+| **BR-44** | Every option shown must be fillable at the moment it is shown. The interface never offers a protection level the book cannot deliver, which makes BR-6's disclosure a safety net rather than a routine occurrence. |
+| **BR-45** | **Settlement pays USDC, not fiat.** Never describe protection in AUD, MYR or any local currency. "You will have at least 2,000 AUD" is a promise we cannot keep — the payout is USDC and the FX rate on the settlement date is outside our control. Say "at least 2,000 USDC" and, where a fiat goal motivated the purchase, state plainly that the exchange rate is not covered. |
+| **BR-46** | **Never imply continuous protection.** Options here are European: nothing pays out before expiry, no matter how far the price falls in between. Copy says "at expiry, if the price is below your floor, you receive the difference" — never "your assets will not go below X for 30 days". |
+| **BR-47** | Never promise that settlement will succeed. The protocol emits `OptionSettlementFailed` events. Copy says results are synced once the protocol settles, and that anomalies are flagged for review. |
+| **BR-49** | Protection is only quoted against a balance the system holds a record of, and never exceeds it. A larger position would be a directional bet dressed as insurance — the exact thing this product exists to avoid. |
+| **BR-50** | This is a prototype. There is no user deposit flow and users never transfer assets to us. Balances are seeded. Do not build a deposit path; if one becomes necessary, propose it rather than assuming. |
+| **BR-51** | The boundary between simulated and real must be stated wherever a user or a judge can see it (BR-37). Balances are simulated; quotes, fills and settlement are real and verifiable on BaseScan. Blurring the two is worse than either alone. |
+| **BR-48** | **A loan's maturity must equal the expiry of the put backing it.** The collateral floor only exists at expiry — before that, the put's market value is not its strike. A loan that can come due earlier than its protection has no floor at the moment it matters, and the product's central claim collapses. |
 | **BR-42** | No user-facing screen offers a sell action on an option. Buyers have capped losses; sellers do not. If a second action is needed, it is borrowing or depositing — both keep the user on the buy side (BR-1). |
 | **BR-43** | A protection level is a floor, not a guarantee against all loss. Screens must make clear that movement above the floor is carried by the user, or someone who drops 10% under a 20% floor will ask why nothing paid out. |
 | **BR-40** | Derived figures are computed once, at the moment of purchase, from the order actually filled — then stored on the row. They are never recomputed on read. A number shown to a user must always be traceable to the row that produced it. |
@@ -364,7 +411,7 @@ The premium comes from the live book, so the rate moves with the market. It is f
 
 | User story | Use case | Key rules |
 |---|---|---|
-| US-1 Quote | UC-1 | BR-3, BR-4, BR-6, BR-7 |
+| US-1 Quote | UC-0, UC-1 | BR-3, BR-4, BR-6, BR-7, BR-49 |
 | US-2 Buy | UC-2 | BR-8, BR-9, BR-10, BR-12, BR-14 |
 | US-3 Goal input | UC-1 (3b) | BR-5, BR-6 |
 | US-4 Trade-off | UC-1 (9) | BR-2, BR-3 |
