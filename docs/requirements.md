@@ -498,7 +498,9 @@ Verified by introspecting `client` at runtime and reading `node_modules/@thetanu
 
 - `strikePrice`, `price`, settlement prices: **8 decimals**
 - USDC / collateral: **6 decimals**
-- `numContracts`: **18 decimals**
+- `numContracts` on an Order: **6 decimals** — verified against `.d.ts:758` and confirmed arithmetically against the live book (`numContracts × price == availableAmount`, exact at 6dp, off by 10¹² at 18dp)
+- ⚠️ `utils.calculatePayout`'s doc example implies **18 decimals** for its own `numContracts` parameter. Whether the payout helpers really use a different scale than the order struct is **unverified** — check empirically before passing an order's value into one, because the mismatch is a 10¹² error that does not throw
+- `availableAmount` / `maxCollateralUsable`: **6 decimals**, USDC collateral — not a contract count
 - Helpers: `utils.fromStrikeDecimals`, `fromUsdcDecimals`, `fromPriceDecimals`, `toBigInt`, `fromBigInt`
 
 ### Relevant to the deprioritised Idea 1
