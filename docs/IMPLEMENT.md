@@ -38,11 +38,11 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 1 in progress — tasks 1.1 to 1.6 complete.**
+**Phase 1 tasks 1.1 to 1.6 complete. Phase 2 complete.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly.
+Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly. Database: schema, RLS, seeds and access layer.
 
-Not started: database, any transaction, any frontend.
+Not started: 1.7–1.8, any transaction, the API layer.
 
 ⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
 
@@ -88,7 +88,7 @@ Not started: database, any transaction, any frontend.
 | 1.2 | Filter book to puts on one asset | ✅ | `src/thetanuts/orders.js` — `getBuyablePutOrders(asset)`. Buy-side only (BR-1) |
 | 1.3 | Convert raw order fields to human values | ✅ | `src/thetanuts/decimals.js` — `toHumanOrder()`. Verified by hand against the live book |
 | 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
-| 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters; cap is `min(requested, collateral, premium cap)` |
+| 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters. The premium cap is for the fill path only, not quoting (BR-33) |
 | 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
 | 1.7 | Goal-based input path | ⬜ | "I need $2,000 by 1 Nov" resolves to the same quote object |
 | 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
@@ -99,7 +99,7 @@ Not started: database, any transaction, any frontend.
 
 ---
 
-## Phase 2 — Database ⬜
+## Phase 2 — Database ✅
 
 **Goal:** persist users, quotes and positions. See DATABASE.md for the schema.
 
@@ -107,13 +107,13 @@ Not started: database, any transaction, any frontend.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 2.1 | Supabase project created | ⬜ | Region: Singapore. Keys in `.env` |
-| 2.2 | Migration tooling set up | ⬜ | `supabase/migrations/` exists, first migration applies cleanly |
-| 2.3 | Core tables created | ⬜ | Per DATABASE.md |
-| 2.4 | RLS enabled on every table | ⬜ | BR-16 — verify with a publishable key that nothing leaks |
-| 2.5 | DB access layer | ⬜ | Insert/update/query helpers, secret key server-side only |
-| 2.6 | Seed a demo user | ⬜ | Demo works without a login flow |
-| 2.7 | Seed demo balances | ⬜ | Each demo user holds a balance per asset; quotes refuse to exceed it (BR-49) |
+| 2.1 | Supabase project created | ✅ | `gphzqvsdubygvijunobj`, region ap-southeast-1 (Singapore) |
+| 2.2 | Migration tooling set up | ✅ | `supabase/migrations/`, 5 migrations applied and recorded |
+| 2.3 | Core tables created | ✅ | users, balances, quotes, positions, position_events + DR-3/DR-7/DR-8/DR-10 constraints |
+| 2.4 | RLS enabled on every table | ✅ | All five; anon blocked by RLS *and* absent grants — verified with a publishable key |
+| 2.5 | DB access layer | ✅ | `src/db/` — secret key server-side only; no bare position update exists |
+| 2.6 | Seed a demo user | ✅ | Two users, fixed UUIDs, idempotent (BR-31) |
+| 2.7 | Seed demo balances | ✅ | 0.4 ETH and 0.15 ETH, `source=demo_seed` (BR-49, BR-50) |
 
 **Definition of done:** a fresh machine can run the migrations and get an identical database.
 

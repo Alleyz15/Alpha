@@ -157,7 +157,38 @@ anime.js v4 notes:
 - Always `revert()` in the `useEffect` cleanup, or animations outlive their component
 - **Never let React and anime.js control the same property on the same element.** React re-renders will overwrite mid-animation; the symptom is intermittent flicker that is very hard to trace
 
-### Supabase — NOT SET UP YET
+### Supabase — DONE
+
+Project `gphzqvsdubygvijunobj`, region `ap-southeast-1` (Singapore). Schema, RLS and demo seeds are applied.
+
+**Verify your setup in one command**, from `backend/`:
+
+```bash
+node --env-file-if-exists=../.env scripts/db-check.js
+```
+
+It checks the tables, the seeds, that an anonymous client is locked out, and a full quote → position → settled round trip including the event trail. It writes test rows and deletes them again. Set `SUPABASE_PUBLISHABLE_KEY` to include the anonymous-lockout check; without it that one is skipped.
+
+#### Migrations
+
+The schema lives in `supabase/migrations/`, one logical change per file, named `YYYYMMDDHHMMSS_description.sql`.
+
+- **Never edit a migration that has already been applied.** Write a new one. Editing an applied file makes your database and everyone else's diverge silently, and nobody finds out until something breaks in a way that makes no sense.
+- **Never change the schema in the Supabase web editor.** Clicking through the table editor creates no migration file, so the folder and the real database drift apart and the whole thing stops being trustworthy.
+- The filename timestamp must match the version recorded in `supabase_migrations.schema_migrations`, or the CLI will try to re-apply work that is already done.
+
+#### Two failure modes that look identical
+
+Both make a query come back with nothing, and they have different fixes:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `42501 permission denied for table X` | missing `GRANT` | grant the role DML — see `20260830210500_grant_service_role_access.sql` |
+| query returns zero rows, no error | RLS with no matching policy | add a policy, or use the secret key |
+
+> ⚠️ **This project's default privileges do not grant DML on new tables to `service_role`.** A newly created table is unreadable by the backend until it is granted explicitly. The grant migration sets `ALTER DEFAULT PRIVILEGES` so future tables are covered, but if you add a table and immediately get `42501`, this is why.
+
+#### If you are setting up a fresh project
 
 1. Sign up at supabase.com → New Project
 2. Region: **Southeast Asia (Singapore)** — closest to Malaysia
