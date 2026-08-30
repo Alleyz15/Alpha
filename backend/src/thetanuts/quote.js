@@ -33,7 +33,7 @@ export class QuoteRefusedError extends Error {
  * Build a quote.
  *
  * ---------------------------------------------------------------------------
- * Three limits can bind, and they are NOT interchangeable
+ * Two limits can bind here, and they are NOT interchangeable
  * ---------------------------------------------------------------------------
  *
  *   balance  - a fact about the USER. Quoting more than they hold would invent
@@ -44,12 +44,24 @@ export class QuoteRefusedError extends Error {
  *              the largest fillable size is honest, provided we say so.
  *              CLAMP and disclose. (UC-1 A3)
  *
- *   premium  - a fact about US. Our own safety cap, not a property of the user
- *              or the market. Refusing on it would leak an operational guard
- *              into product behaviour, and pretending it away would overstate
- *              the cover. CLAMP and disclose. (BR-33)
- *
  * They look alike at the call site and will be conflated if not named.
+ *
+ * ---------------------------------------------------------------------------
+ * The premium cap is deliberately NOT applied here. Do not add it back.
+ * ---------------------------------------------------------------------------
+ *
+ * MAX_PREMIUM_PER_FILL_USDC is an operational guard of OURS, not a fact about
+ * the user or the market. BR-33 requires that a misplaced decimal be impossible
+ * to *broadcast* - and broadcasting is the fill path, not the pricing path.
+ *
+ * Applying it here would let an internal safety limit shape the price a user is
+ * shown: quotes would come back partially covered because of a number in our
+ * .env, not because of anything true about the book. A quote reflects the
+ * market.
+ *
+ * The cap belongs in Phase 3's pre-flight checklist, alongside the balance and
+ * gas checks and before callStaticFillOrder (BR-28) - see IMPLEMENT.md 3.5b.
+ * sizePosition() still accepts maxPremiumUsdc for exactly that caller.
  *
  * @param {string} asset
  * @param {object} opts
@@ -57,7 +69,6 @@ export class QuoteRefusedError extends Error {
  * @param {number} [opts.balance] - the user's recorded holding (BR-49)
  * @param {Date|string|number} [opts.targetDate] - date, ISO string, or days out
  * @param {string} [opts.tier] - 'highest' | 'middle' | 'lowest'
- * @param {number} [opts.maxPremiumUsdc] - our per-fill cap (BR-33)
  * @param {number} [opts.validitySeconds] - quote lifetime (BR-8)
  * @returns {Promise<object>} JSON-safe quote DTO
  * @throws {QuoteRefusedError}
@@ -67,7 +78,6 @@ export async function buildQuote(asset, {
   balance,
   targetDate = 25,
   tier = 'middle',
-  maxPremiumUsdc,
   validitySeconds = 60,
 } = {}) {
   if (!Number.isFinite(units) || units <= 0) {
@@ -106,9 +116,9 @@ export async function buildQuote(asset, {
     throw new QuoteRefusedError('NO_TIERS', `no strikes below spot for ${asset} at this expiry`, {});
   }
 
-  // depth + premium: clamp. sizePosition takes the smaller of the two and
-  // reports which one bound, so the disclosure below can name it.
-  const size = sizePosition(chosen.order, { units, maxPremiumUsdc });
+  // depth: clamp. No premium cap here - see the note above. boundBy can only
+  // be 'requested' or 'collateral' in a quote.
+  const size = sizePosition(chosen.order, { units });
 
   const { spot } = selection;
   const unprotectedUnits = Math.max(0, units - size.contracts);

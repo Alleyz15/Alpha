@@ -233,7 +233,9 @@ const BALANCE = 2;   // seeded, simulated (UC-0, BR-51)
 
 console.log(`\n--- 1.6 quote object ---`);
 console.log(`holding ${HOLDING} ${asset}, recorded balance ${BALANCE} ${asset}, ` +
-  `${TARGET_DAYS}-day target, premium cap ${usd(MAX_PREMIUM)}\n`);
+  `${TARGET_DAYS}-day target`);
+console.log(`the premium cap is NOT applied when quoting — it guards broadcasting,`);
+console.log(`not pricing (BR-33, Phase 3.5b)\n`);
 
 try {
   const q = await buildQuote(asset, {
@@ -281,11 +283,11 @@ try {
 console.log(`\n--- 1.6 refuse vs clamp ---`);
 for (const [label, opts] of [
   ['balance exceeded (refuse)', { units: 5, balance: 2 }],
-  ['premium cap (clamp)', { units: 1, balance: 2, maxPremiumUsdc: 1 }],
+  ['collateral depth (clamp)', { units: 1e6, balance: 1e9 }],
   ['unreachable expiry (refuse)', { units: 1, balance: 2, targetDate: 62 }],
 ]) {
   try {
-    const q = await buildQuote(asset, { targetDate: TARGET_DAYS, maxPremiumUsdc: MAX_PREMIUM, ...opts });
+    const q = await buildQuote(asset, { targetDate: TARGET_DAYS, ...opts });
     console.log(`  ${label.padEnd(30)} -> quoted ${q.size.protectedUnits} ${asset}, ` +
       `premium ${usd(q.cost.premiumUsdc)}, boundBy ${q.size.boundBy}`);
   } catch (e) {
