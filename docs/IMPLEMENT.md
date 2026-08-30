@@ -38,11 +38,11 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 1 tasks 1.1 to 1.7 complete. Phase 2 complete. API layer built (5.1, 5.2).**
+**Phase 1 tasks 1.1 to 1.7 complete. Phase 2 complete. API layer built (5.1, 5.2). Phase 3 through 3.6 — nothing broadcast yet.**
 
 Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly, goal-based input. Database: schema, RLS, seeds and access layer. HTTP API: four endpoints the interface consumes.
 
-Not started: 1.8, any transaction. **No fill exists yet** — purchase persists a pending position and returns `txHash: null`.
+Not started: 1.8, 3.7 onward. **Nothing has been broadcast.** The pre-flight checklist runs and blocks; the fill itself is unwritten.
 
 ⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
 
@@ -119,7 +119,7 @@ Not started: 1.8, any transaction. **No fill exists yet** — purchase persists 
 
 ---
 
-## Phase 3 — Buy execution ⬜ ← highest risk
+## Phase 3 — Buy execution 🔄 ← highest risk
 
 **Goal:** actually fill an order on Base mainnet with real USDC.
 
@@ -127,13 +127,13 @@ Not started: 1.8, any transaction. **No fill exists yet** — purchase persists 
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 3.1 | Create burner wallet | ⬜ | Fresh wallet, key only in `.env` (BR-30) |
-| 3.2 | Fund it | ⬜ | A few USDC + cents of ETH on Base |
-| 3.3 | Balance checks | ⬜ | Refuses to proceed without enough USDC and gas (BR-10) |
-| 3.4 | Exact-amount approval | ⬜ | `ensureAllowance`, never MaxUint256 (BR-12) |
-| 3.5 | Dry run the fill | ⬜ | `callStaticFillOrder` passes before anything is broadcast (BR-28) |
-| 3.5b | Pre-flight checklist as code | ⬜ | A single function that must return pass before any fill; any failure aborts |
-| 3.6 | Write pending row, then broadcast | ⬜ | DB row exists before the transaction is sent (BR-14) |
+| 3.1 | Create burner wallet | ✅ | `0x4fB77837bf2A0B86D167627Ded2E894f92F15127`, key only in `.env` (BR-30) |
+| 3.2 | Fund it | ✅ | ~9.89 USDC + 0.00445 ETH on Base |
+| 3.3 | Balance checks | ✅ | `src/thetanuts/wallet.js` — refuses on either; reports USDC remaining after the fill |
+| 3.4 | Exact-amount approval | ✅ | `src/thetanuts/allowance.js` + `scripts/approve.js`. MaxUint256 refused, 100 USDC sanity cap |
+| 3.5 | Dry run the fill | ✅ | `callStaticFillOrder` wired as check 9. **Fails until an approval exists** — see below |
+| 3.5b | Pre-flight checklist as code | ✅ | `src/thetanuts/preflight.js` — ten items plus a `pending_verification` hard block. Reports every item, not just the first failure |
+| 3.6 | Write pending row, then broadcast | ✅ | Row written by the purchase path; check 10 verifies it is `pending` before any broadcast (BR-14) |
 | 3.7 | **First real on-chain fill** | ⬜ | Transaction confirmed, visible on BaseScan, ~1–3 USDC (BR-15) |
 | 3.8 | Record the result | ⬜ | Row updated to `active` with tx hash, option address, real fill price |
 | 3.9 | Handle failure paths | ⬜ | Revert → `failed`; timeout → `pending_verification`, never blind-retry |

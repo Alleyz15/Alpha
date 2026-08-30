@@ -157,6 +157,46 @@ anime.js v4 notes:
 - Always `revert()` in the `useEffect` cleanup, or animations outlive their component
 - **Never let React and anime.js control the same property on the same element.** React re-renders will overwrite mid-animation; the symptom is intermittent flicker that is very hard to trace
 
+### The fill path — pre-flight only, nothing broadcast
+
+From `backend/`:
+
+```bash
+npm run preflight
+```
+
+Runs the ten-item checklist against a real order and broadcasts nothing. Takes arguments, because premiums moved fourfold in a single day and a script that cannot be re-aimed is one you rewrite under time pressure:
+
+```bash
+node --env-file-if-exists=../.env scripts/preflight-check.js 0.05 middle
+```
+
+`UNITS` then `TIER` (`highest` | `middle` | `lowest`), plus `--keep` to leave the test rows behind.
+
+> ⚠️ **Check 9 (`callStaticFillOrder`) fails until an approval exists.** With allowance at 0 the simulation reverts with `Panic due to OVERFLOW(17)`, which says nothing about allowances — expect it, and don't read it as a broken order.
+
+**The approval is a separate script**, because a check that silently sends a transaction is one nobody can run freely:
+
+```bash
+node --env-file-if-exists=../.env scripts/approve.js 3
+```
+
+Reports what it would do and sends nothing. Add `--confirm` to actually send it. It spends **gas only** (a fraction of a cent on Base), moves **no USDC**, and is reversible by approving 0.
+
+#### The budget is not $10
+
+Every fill has to sit at the bottom of BR-15's 1–3 USDC range, not the middle:
+
+| | |
+|---|---|
+| Phase 3 first fill | 1–3 USDC |
+| Phase 4 short-dated position | 1–3 USDC — required to demo settlement at all |
+| Two rehearsals | 2–6 USDC |
+| Demo day, live on stage | 1–3 USDC |
+| **Total** | **5–15 USDC against a ~10 USDC wallet** |
+
+The pre-flight output prints USDC remaining after the fill would settle, and how many more of that size are affordable. Watch that number rather than the balance.
+
 ### Backend API — DONE (no fill yet)
 
 Two terminals. Backend first, from `backend/`:

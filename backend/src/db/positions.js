@@ -173,3 +173,48 @@ export async function listPositionEvents(positionId) {
     `listPositionEvents(${positionId})`,
   );
 }
+
+/**
+ * How many fills have been broadcast today (UTC). BR-34.
+ *
+ * Counts `broadcast` events rather than position rows. A row is written before
+ * every attempt, including ones the pre-flight checklist then rejects - and a
+ * rejected attempt spent nothing, so it must not consume the daily cap. What
+ * the cap exists to bound is money leaving the wallet, and that is a broadcast.
+ *
+ * @param {Date} [now]
+ * @returns {Promise<number>}
+ */
+export async function countFillsToday(now = new Date()) {
+  const startOfDayUtc = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+  )).toISOString();
+
+  const { count, error } = await db
+    .from('position_events')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_type', 'broadcast')
+    .gte('created_at', startOfDayUtc);
+
+  if (error) throw new Error(`countFillsToday: ${error.message}`);
+  return count ?? 0;
+}
+
+/**
+ * Positions whose outcome is unknown.
+ *
+ * `pending_verification` does not mean the fill failed - it means we do not
+ * know. The transaction may have landed. Any such row must be resolved against
+ * chain state by a human before another fill is attempted, because filling
+ * again would spend twice and create a second option nobody asked for.
+ *
+ * @returns {Promise<object[]>}
+ */
+export async function listUnresolvedPositions() {
+  return unwrap(
+    await db.from('positions').select('*')
+      .eq('status', 'pending_verification')
+      .order('created_at', { ascending: true }),
+    'listUnresolvedPositions',
+  );
+}
