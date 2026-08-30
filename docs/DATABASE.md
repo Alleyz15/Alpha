@@ -93,6 +93,30 @@ Minimal by design — the demo has no login (IMPLEMENT.md 2.6).
 
 ---
 
+### `balances`
+
+What each demo user notionally holds. **Seeded, not deposited** — this is a
+prototype and there is no deposit flow (BR-50).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID` PK | |
+| `user_id` | `UUID` FK → users NOT NULL | |
+| `asset` | `TEXT` NOT NULL | 'ETH', 'BTC' |
+| `amount` | `NUMERIC` NOT NULL | Units held |
+| `source` | `TEXT` NOT NULL | `demo_seed` — the only value this prototype produces |
+| `created_at` | `TIMESTAMPTZ` NOT NULL | |
+| `updated_at` | `TIMESTAMPTZ` NOT NULL | |
+
+**Relationship:** users 1:N balances.
+
+> `source` exists so a seeded balance can never be silently reinterpreted as a real
+> deposit — in a query, in a report, or in an answer to a judge. It has one value
+> today, and that is the point: the moment a second value appears, someone built a
+> deposit flow, and that should have been a conversation first.
+
+---
+
 ### `quotes`
 
 A priced offer shown to the user. Most expire unused; keeping them gives us an audit trail of what was actually shown before a purchase.

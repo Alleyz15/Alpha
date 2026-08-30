@@ -217,7 +217,26 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 | **2026-09-25** | **+27** | **49** |
 | **2026-10-30** | **+62** | **22** |
 
-> **This matters for product design.** Short-dated expiries dominate, but 27-day and 62-day options do exist with real liquidity. A "30-day downside protection" product is feasible — it maps to the +27 day expiry.
+> ⚠️ **The table above is the RAW book. It is not what we can buy.** Once puts, below-spot strikes and the buy side (BR-1) are filtered, the picture is much smaller — see below. An earlier version of this note claimed 27-day and 62-day options "exist with real liquidity" and that a 30-day product was feasible. **Both claims are false of the buyable book.**
+
+### Raw book vs buyable book (BR-52)
+
+Checked 31 Aug 2026. Of ~330 raw orders, these are the ones we can actually fill — puts, struck below spot, where the maker is the seller:
+
+| Expiry | Days out | ETH strikes | BTC strikes | Floors available |
+|---|---|---|---|---|
+| 2026-09-04 | +4.7 | 4 | 4 | 3–9% (ETH), 2–6% (BTC) |
+| 2026-09-11 | +11.7 | 6 | 7 | 5–15% (ETH), 3–11% (BTC) |
+| **2026-09-25** | **+25.7** | **9** | **9** | **7–23% (ETH), 5–19% (BTC)** |
+| ~~2026-10-30~~ | ~~+62~~ | **0** | **0** | — |
+
+**There are no buyable puts beyond ~26 days.** The +62 day expiry carries 22 raw orders but none survive the filter. Consequences:
+
+- **A 30-day protection product is not deliverable.** BR-6 forbids an expiry earlier than the user's target date, so a 30-day request returns nothing — the longest available is 25.7 days, 4.3 days short. Quote 25 days, not 30.
+- **Only ETH and BTC are tradable at all.** SOL, XRP, BNB and AVAX have puts on the book but zero on the buy side.
+- **Phase 8's vault cannot use a 62-day call.** It is repositioned as 26-day principal protection with a 4–7% participation rate.
+
+Always measure the *buyable* book. The raw count is roughly double and is a misleading number to plan against.
 
 ### Order object shape
 
@@ -241,6 +260,132 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 ```
 
 **Decimals: `strikePrice` and `price` both use 8 decimals — divide by 1e8.** Getting this wrong makes premiums look 100x too expensive.
+
+### Decimals — the full table
+
+All verified against the live book on 31 Aug 2026, not from documentation. Conversions live in `backend/src/thetanuts/decimals.js`; do not convert inline anywhere else.
+
+| Value | Decimals | Notes |
+|---|---|---|
+| `strikePrice`, `strikes[]` | 8 | |
+| `price` | **8** | The per-contract premium. **8, not USDC's 6** — see the trap below |
+| `availableAmount`, `maxCollateralUsable` | 6 | USDC |
+| `Order.numContracts` | **6** | Not 18 — see below |
+| `numContracts` **argument** to the payout helpers | **18** | Different from the field above |
+| return value of the payout helpers | 6 | USDC |
+
+**Runtime types:** order fields are `bigint` — `strikePrice`, `price`, `expiry`, `numContracts`, `deadline`, `availableAmount`. But `rawApiData.strikes[]` and `rawApiData.maxCollateralUsable` are **strings**. The same strike is reachable as both types, and a string passed to some SDK helpers skips scaling silently. Always read from `order.order`, never `rawApiData`.
+
+#### Trap 1 — the premium is 8 decimals even though it is paid in USDC
+
+```js
+client.utils.fromPriceDecimals(215625969n)  // "2.15625969"  correct
+client.utils.fromUsdcDecimals(215625969n)   // "215.625969"  100x too expensive
+```
+
+`price` is a USDC amount, so reaching for `fromUsdcDecimals` is the natural mistake. It does not throw.
+
+#### Trap 2 — `numContracts` means two different scales
+
+**`Order.numContracts` is 6 decimals.** Verified by arithmetic: `numContracts(6dp) × price(8dp)` equals `availableAmount(6dp)` exactly, 8/8 orders sampled.
+
+```
+nc=4303987819  px= 2.32342665  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+nc=2425421120  px= 4.12299535  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+nc= 642855247  px=15.55560141  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+```
+
+**But `utils.calculatePayoutAtPrice` and `utils.calculateMaxPayout` expect 18 decimals** for the same argument, and return 6 decimals. Verified by computing payouts by hand against the live book: 25/25 for `calculatePayoutAtPrice`, 10/10 for `calculateMaxPayout`, across several strikes, contract counts, in-the-money and out-of-the-money cases.
+
+**Both are correct — they are describing different things.** The `.d.ts` field comment on the `Order` struct (line 758) documents the field; the `@example` blocks on the payout helpers (`5n * 10n**18n`) document the argument. Reading either as the whole story gives a 10¹² error.
+
+**Passing an order's own `numContracts` into a payout helper is silently wrong:**
+
+```
+strike $2,250, settling at $2,000, 4637.660318 contracts
+
+hand                4637.660318 × $250 = $1,159,415.08
+passed as-is (6dp)  raw             1 =        0.000001 USDC   ← 10^12 too small
+rescaled to 18dp    raw 1159415079500 =  1,159,415.0795 USDC   ← correct
+```
+
+It returns `1`, not an error. Use `toPayoutContracts()` from `decimals.js` at that boundary. **This matters for task 1.8** (scenario previews) and for anything showing a user what they would receive.
+
+#### Trap 3 — `order.numContracts` is not the order's size
+
+It looks like the quantity available. It is not, and it overstates the real cap by roughly 1000×:
+
+```
+order.numContracts        4932.23    = availableAmount / price   ← NOT a size limit
+calculateMaxContracts()      4.44    = availableAmount / strike  ← the real cap
+maxContracts × strike   10,000.00    = the maker's collateral, exactly
+```
+
+The seller's collateral has to cover the **maximum payout**, which is `strike × contracts` — so the cap is `availableAmount / strike`. `order.numContracts` instead answers "how many contracts if the entire collateral were spent on premium", which is not a thing anyone can do.
+
+Verified: `maxContracts × strike` equals `availableAmount` to the cent on every order sampled.
+
+**Always size with `optionBook.calculateMaxContracts(order)`.** `toHumanOrder()` deliberately does not expose `numContracts` so it cannot be picked up by mistake. See `backend/src/thetanuts/sizing.js`.
+
+**One contract protects one unit of the underlying** — `calculateMaxPayout` returns exactly `strike` for one contract. Protecting 1 ETH takes 1 contract.
+
+**Fractional contracts work.** `calculateNumContracts(usdcAmount, price)` round-trips exactly at 6dp granularity: 1 USDC buys 0.493223 contracts, and 0.493223 × 2.02747993 = 1.000000 USDC. The protocol's *minimum* fill size is still undocumented (requirements.md §7 open question 4), so `sizePosition()` takes `minContracts` as a parameter and only reports violations — it must become a hard refusal once the real figure is known.
+
+### Identifying which asset an order is for
+
+**`order.underlyingToken` is not a usable asset identifier.** It is the WETH address for ETH, an unrelated token for BTC, and **`0x0000…0000` for SOL, XRP, BNB and AVAX** — four assets share one value, so it cannot tell them apart.
+
+**Use `rawApiData.priceFeed` instead**, resolved against `client.chainConfig.priceFeeds`:
+
+```js
+client.chainConfig.priceFeeds
+// { ETH: "0x71041d…", BTC: "0x64c911…", SOL: "0x975043…", DOGE: "0x8422f3…",
+//   XRP: "0x9f0C1d…", BNB: "0x4b7836…", PAXG: "0x5213eB…", AVAX: "0xE70f2D…",
+//   "ETH/USD": "0x71041d…", "BTC/USD": "0x64c911…" }
+```
+
+Feed addresses are unique per asset and present on every order. Note the `ETH/USD` and `BTC/USD` aliases point at the same addresses as `ETH` and `BTC` — drop keys containing `/` or those two assets get listed twice. `DOGE` and `PAXG` have feeds but no market data and no orders.
+
+> `api.filterOrders({ asset, type })` looks like it would do this for us. **It is broken** — it throws `Cannot read properties of undefined (reading 'map')` for every asset. Filter `fetchOrders()` by hand.
+
+### Spot prices are already plain numbers
+
+`api.getMarketData()` returns human-scale JS numbers, **not** 8-decimal integers:
+
+```js
+{ prices: { ETH: 2458.24, BTC: 78156.73, SOL: 105.13, XRP: 1.39, BNB: 693.54, AVAX: 7.38 },
+  metadata: { lastUpdated: 1788088438000, currentTime: 1788088412911 } }
+```
+
+**The 8-decimal rule applies only to `strikePrice` and `price` on order objects.** Dividing a spot price by 1e8 gives a number 100 million times too small.
+
+> `api.getMarketPrices()` returns `{ price: "0", change24h: 0, timestamp: null }` — all zeros, for every asset. **Unusable.** Use `getMarketData()`.
+
+### Order side — which orders we are allowed to fill
+
+`isBuyer` describes the **maker's** side, from the taker's perspective. We are always the taker.
+
+| `order.isBuyer` | `rawApiData.isLong` | Maker wants to | We would be the | Fillable? |
+|---|---|---|---|---|
+| `false` | `true` | sell | **buyer** | ✅ yes |
+| `true` | `false` | buy | **seller** | ❌ **never — BR-1** |
+
+`isLong === !isBuyer` always (verified across all 359 orders on the book).
+
+**This is a product constraint, not a detail.** Selling exposes us to near-unlimited loss, which is the exact risk this product exists to keep users away from. Roughly **half the puts on the book are the forbidden side**, so an unfiltered "puts on ETH" count is about double what we can actually trade.
+
+**Consequence for asset selection:** filtering to buyable puts leaves **ETH and BTC only**. SOL, XRP, BNB and AVAX each have 10–20 puts on the book and **zero** we can fill.
+
+| Asset | Puts on book | Buyable by us |
+|---|---|---|
+| ETH | 48 | **19** |
+| BTC | 54 | **22** |
+| SOL | 20 | 0 |
+| XRP | 13 | 0 |
+| BNB | 16 | 0 |
+| AVAX | 10 | 0 |
+
+Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has been stable. This is what UC-1 exception E2 ("disable that asset in the UI") has to act on.
 
 ---
 

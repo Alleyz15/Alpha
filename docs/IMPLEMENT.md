@@ -2,7 +2,7 @@
 
 **Project:** MUBA Hacks 2026 — Thetanuts Track 01
 **Repo:** github.com/Alleyz15/Alpha
-**Last updated:** 29 Aug 2026
+**Last updated:** 30 Aug 2026
 
 ---
 
@@ -38,15 +38,17 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 0 complete. Phase 1 is next.**
+**Phase 1 in progress — tasks 1.1 to 1.5 complete.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK connected to Base mainnet, live order book readable, SDK surface mapped.
+Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing.
 
-Not started: database, quote engine, any transaction, any frontend.
+Not started: database, any transaction, any frontend.
+
+⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
 
 **Nothing is blocked.** All open questions from requirements.md §7 are resolved.
 
-**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `IDEA.md`.
+**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `PRODUCT-THINKING.md`.
 
 ---
 
@@ -61,7 +63,7 @@ Not started: database, quote engine, any transaction, any frontend.
 | Thetanuts SDK installed | ✅ | `thetanuts-client`, `ethers`, `dotenv` |
 | Connectivity check passing | ✅ | ~320 live orders, prices for 6 assets |
 | Order book structure documented | ✅ | See SETUP.md |
-| Expiries mapped | ✅ | +1 to +62 days; +27 has 49 orders |
+| Expiries mapped | ✅ | Raw book +1 to +62 days. **Buyable puts stop at ~26 days** (BR-52) — see SETUP.md |
 | SDK method surface mapped | ✅ | See requirements.md appendix |
 | Requirements written | ✅ | requirements.md |
 | Custodial vs non-custodial decided | ✅ | Custodial; the backend developer operates the wallet |
@@ -74,7 +76,7 @@ Not started: database, quote engine, any transaction, any frontend.
 
 ---
 
-## Phase 1 — Quote engine ⬜
+## Phase 1 — Quote engine 🔄
 
 **Goal:** given an asset, an amount and a protection level, return a real quote from the live book. Read-only — no wallet, no transactions.
 
@@ -82,11 +84,11 @@ Not started: database, quote engine, any transaction, any frontend.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 1.1 | Fetch spot price for an asset | ⬜ | `getMarketData()` returns ETH price, converted to a plain number |
-| 1.2 | Filter book to puts on one asset | ⬜ | Given ETH, returns only ETH puts, count printed |
-| 1.3 | Convert raw order fields to human values | ⬜ | strike/premium correct at 8 decimals, expiry as a Date |
-| 1.4 | Select best order for a target strike + expiry | ⬜ | Given "20% protection, 30 days", returns one order with the actual strike and days |
-| 1.5 | Size the position | ⬜ | `calculateNumContracts` used; respects `availableAmount` |
+| 1.1 | Fetch spot price for an asset | ✅ | `src/thetanuts/market.js` — `getSpotPrice(asset)`. Prices are already plain numbers |
+| 1.2 | Filter book to puts on one asset | ✅ | `src/thetanuts/orders.js` — `getBuyablePutOrders(asset)`. Buy-side only (BR-1) |
+| 1.3 | Convert raw order fields to human values | ✅ | `src/thetanuts/decimals.js` — `toHumanOrder()`. Verified by hand against the live book |
+| 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
+| 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters; cap is `min(requested, collateral, premium cap)` |
 | 1.6 | Produce a quote object | ⬜ | Returns: premium, protected floor, expiry, max loss, actual vs requested protection |
 | 1.7 | Goal-based input path | ⬜ | "I need $2,000 by 1 Nov" resolves to the same quote object |
 | 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
@@ -111,6 +113,7 @@ Not started: database, quote engine, any transaction, any frontend.
 | 2.4 | RLS enabled on every table | ⬜ | BR-16 — verify with a publishable key that nothing leaks |
 | 2.5 | DB access layer | ⬜ | Insert/update/query helpers, secret key server-side only |
 | 2.6 | Seed a demo user | ⬜ | Demo works without a login flow |
+| 2.7 | Seed demo balances | ⬜ | Each demo user holds a balance per asset; quotes refuse to exceed it (BR-49) |
 
 **Definition of done:** a fresh machine can run the migrations and get an identical database.
 
@@ -240,7 +243,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 **Depends on Phases 1–4.** The put that acts as a collateral floor is bought and settled by the same code the core product uses, so that code must work first. This is a dependency, not a priority ranking.
 
-**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `IDEA.md` Idea 1.
+**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `PRODUCT-THINKING.md` Idea 1.
 
 **Why it's cheap once the core works:** it reuses ~90% of the existing code. Buying, settlement, database and scheduler are unchanged — what's new is a `loans` table and two flows.
 
@@ -258,11 +261,21 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 8 — Principal-protected vault ⬜
+## Phase 8 — 26-day principal protection ⬜
+
+> ⚠️ **Repositioned 30 Aug.** The buyable book tops out at ~26 days — the +62 day
+> expiry exists but every order on it is on the forbidden side (BR-52). Over 26
+> days the yield portion generates ~0.34 USDC, which buys 7–11 USDC of exposure:
+> a **participation rate of 4–7%, not 10–16%**.
+>
+> The product is therefore named and pitched as **"26-day principal protection with
+> a small share of the upside"**, not as a savings vault. The guarantee is the
+> product; the upside is a bonus. Displaying 4–7% honestly is required (BR-38) —
+> a judge will calculate it.
 
 **Depends on Phases 1–4**, for the same reason as Phase 7: it buys and settles an option, only a call instead of a put.
 
-**The constraint that shapes it:** the longest expiry on the book is 62 days, not a year. Over 62 days, 95 USDC at 5% generates ~0.81 USDC, which buys 10–16 USDC of exposure. **Participation rate is 10–16%, not 40–50%.** That number goes on screen.
+**The constraint that shapes it:** the longest *buyable* expiry is ~26 days. Over 26 days, 95 USDC at 5% generates ~0.34 USDC, which buys 7–11 USDC of exposure. **Participation rate is 4–7%.** That number goes on screen.
 
 **What's real:** the call, on Base mainnet, BaseScan verifiable.
 **What's simulated:** yield accrual, labelled as such in the UI.
@@ -271,7 +284,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 |---|---|---|---|
 | 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
 | 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
-| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable, 62-day expiry |
+| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. **Longest buyable expiry is ~26 days**, not 62 (BR-52) |
 | 8.4 | Simulated yield accrual | ⬜ | Labelled as simulated in the UI, not hidden (BR-37) |
 | 8.5 | Participation rate displayed | ⬜ | `exposure ÷ principal`, from the real premium paid (BR-38). See requirements.md for the full formula |
 | 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
@@ -322,7 +335,6 @@ Recorded so nobody quietly starts one of these:
 - RFQ flow (§0 decision)
 - Non-custodial wallet integration
 - Hosted deployment — the demo runs locally
-- Principal-protected vault (Idea 3) — needs an RWA yield source, and its value only shows after a year
 - **Writing our own smart contracts** — mainnet deployment costs real gas and Thetanuts has no testnet, so there is nowhere to deploy them
 - Rolling or cancelling protection before expiry
 - Notifications
