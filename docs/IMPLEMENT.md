@@ -38,9 +38,9 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 1 in progress — tasks 1.1 to 1.5 complete.**
+**Phase 1 in progress — tasks 1.1 to 1.6 complete.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing.
+Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly.
 
 Not started: database, any transaction, any frontend.
 
@@ -89,7 +89,7 @@ Not started: database, any transaction, any frontend.
 | 1.3 | Convert raw order fields to human values | ✅ | `src/thetanuts/decimals.js` — `toHumanOrder()`. Verified by hand against the live book |
 | 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
 | 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters; cap is `min(requested, collateral, premium cap)` |
-| 1.6 | Produce a quote object | ⬜ | Returns: premium, protected floor, expiry, max loss, actual vs requested protection |
+| 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
 | 1.7 | Goal-based input path | ⬜ | "I need $2,000 by 1 Nov" resolves to the same quote object |
 | 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
 
