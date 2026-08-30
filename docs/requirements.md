@@ -185,7 +185,7 @@ Settlement           real          protocol-driven
 **Alternate flows**
 
 - **A1 — No order close enough to the requested strike:** the system offers the nearest available strike and states the real protection level plainly ("closest available protects you below $1,900, not $1,946"). RFQ is **out of scope** — see §0.
-- **A2 — No expiry near the requested date:** system offers the nearest available expiry and states the difference explicitly ("closest available is 27 days, you asked for 34")
+- **A2 — No expiry on or after the requested date:** the request is **refused**, and the shortfall is stated precisely: "the longest available is 26 days, you asked for 62." Never offer an earlier expiry as a substitute. Protection that ends before the date it is needed is worthless at the only moment it matters (BR-6, and the same reasoning as BR-48). An expiry *later* than requested is acceptable and is disclosed.
 - **A3 — Requested size exceeds `availableAmount`:** system offers the maximum fillable size, or splits across orders (stretch)
 
 **Exceptions**
@@ -380,6 +380,7 @@ The premium comes from the live book, so the rate moves with the market. It is f
 | **BR-49** | Protection is only quoted against a balance the system holds a record of, and never exceeds it. A larger position would be a directional bet dressed as insurance — the exact thing this product exists to avoid. |
 | **BR-50** | This is a prototype. There is no user deposit flow and users never transfer assets to us. Balances are seeded. Do not build a deposit path; if one becomes necessary, propose it rather than assuming. |
 | **BR-51** | The boundary between simulated and real must be stated wherever a user or a judge can see it (BR-37). Balances are simulated; quotes, fills and settlement are real and verifiable on BaseScan. Blurring the two is worse than either alone. |
+| **BR-52** | Expiry availability is measured against the **buyable** book, not the raw book. Orders that exist but sit on the forbidden side do not count as liquidity. As of 30 Aug the raw book carries a +62 day expiry but none of it is buyable — the longest protection we can actually deliver is ~26 days. |
 | **BR-48** | **A loan's maturity must equal the expiry of the put backing it.** The collateral floor only exists at expiry — before that, the put's market value is not its strike. A loan that can come due earlier than its protection has no floor at the moment it matters, and the product's central claim collapses. |
 | **BR-42** | No user-facing screen offers a sell action on an option. Buyers have capped losses; sellers do not. If a second action is needed, it is borrowing or depositing — both keep the user on the buy side (BR-1). |
 | **BR-43** | A protection level is a floor, not a guarantee against all loss. Screens must make clear that movement above the floor is carried by the user, or someone who drops 10% under a 20% floor will ask why nothing paid out. |

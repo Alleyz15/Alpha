@@ -242,6 +242,56 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 
 **Decimals: `strikePrice` and `price` both use 8 decimals — divide by 1e8.** Getting this wrong makes premiums look 100x too expensive.
 
+### Decimals — the full table
+
+All verified against the live book on 31 Aug 2026, not from documentation. Conversions live in `backend/src/thetanuts/decimals.js`; do not convert inline anywhere else.
+
+| Value | Decimals | Notes |
+|---|---|---|
+| `strikePrice`, `strikes[]` | 8 | |
+| `price` | **8** | The per-contract premium. **8, not USDC's 6** — see the trap below |
+| `availableAmount`, `maxCollateralUsable` | 6 | USDC |
+| `Order.numContracts` | **6** | Not 18 — see below |
+| `numContracts` **argument** to the payout helpers | **18** | Different from the field above |
+| return value of the payout helpers | 6 | USDC |
+
+**Runtime types:** order fields are `bigint` — `strikePrice`, `price`, `expiry`, `numContracts`, `deadline`, `availableAmount`. But `rawApiData.strikes[]` and `rawApiData.maxCollateralUsable` are **strings**. The same strike is reachable as both types, and a string passed to some SDK helpers skips scaling silently. Always read from `order.order`, never `rawApiData`.
+
+#### Trap 1 — the premium is 8 decimals even though it is paid in USDC
+
+```js
+client.utils.fromPriceDecimals(215625969n)  // "2.15625969"  correct
+client.utils.fromUsdcDecimals(215625969n)   // "215.625969"  100x too expensive
+```
+
+`price` is a USDC amount, so reaching for `fromUsdcDecimals` is the natural mistake. It does not throw.
+
+#### Trap 2 — `numContracts` means two different scales
+
+**`Order.numContracts` is 6 decimals.** Verified by arithmetic: `numContracts(6dp) × price(8dp)` equals `availableAmount(6dp)` exactly, 8/8 orders sampled.
+
+```
+nc=4303987819  px= 2.32342665  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+nc=2425421120  px= 4.12299535  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+nc= 642855247  px=15.55560141  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+```
+
+**But `utils.calculatePayoutAtPrice` and `utils.calculateMaxPayout` expect 18 decimals** for the same argument, and return 6 decimals. Verified by computing payouts by hand against the live book: 25/25 for `calculatePayoutAtPrice`, 10/10 for `calculateMaxPayout`, across several strikes, contract counts, in-the-money and out-of-the-money cases.
+
+**Both are correct — they are describing different things.** The `.d.ts` field comment on the `Order` struct (line 758) documents the field; the `@example` blocks on the payout helpers (`5n * 10n**18n`) document the argument. Reading either as the whole story gives a 10¹² error.
+
+**Passing an order's own `numContracts` into a payout helper is silently wrong:**
+
+```
+strike $2,250, settling at $2,000, 4637.660318 contracts
+
+hand                4637.660318 × $250 = $1,159,415.08
+passed as-is (6dp)  raw             1 =        0.000001 USDC   ← 10^12 too small
+rescaled to 18dp    raw 1159415079500 =  1,159,415.0795 USDC   ← correct
+```
+
+It returns `1`, not an error. Use `toPayoutContracts()` from `decimals.js` at that boundary. **This matters for task 1.8** (scenario previews) and for anything showing a user what they would receive.
+
 ### Identifying which asset an order is for
 
 **`order.underlyingToken` is not a usable asset identifier.** It is the WETH address for ETH, an unrelated token for BTC, and **`0x0000…0000` for SOL, XRP, BNB and AVAX** — four assets share one value, so it cannot tell them apart.
