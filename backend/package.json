@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "api": "node --env-file-if-exists=../.env scripts/serve.js",
+    "db:check": "node --env-file-if-exists=../.env scripts/db-check.js",
+    "api:check": "node --env-file-if-exists=../.env scripts/api-check.js",
     "inspect:orders": "node --env-file-if-exists=../.env scripts/inspect-order.js",
     "inspect:sdk": "node --env-file-if-exists=../.env scripts/inspect-sdk.js",
     "inspect:expiries": "node --env-file-if-exists=../.env scripts/expiries.js",

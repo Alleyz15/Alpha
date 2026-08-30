@@ -38,11 +38,11 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 1 tasks 1.1 to 1.6 complete. Phase 2 complete.**
+**Phase 1 tasks 1.1 to 1.7 complete. Phase 2 complete. API layer built (5.1, 5.2).**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly. Database: schema, RLS, seeds and access layer.
+Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly, goal-based input. Database: schema, RLS, seeds and access layer. HTTP API: four endpoints the interface consumes.
 
-Not started: 1.7–1.8, any transaction, the API layer.
+Not started: 1.8, any transaction. **No fill exists yet** — purchase persists a pending position and returns `txHash: null`.
 
 ⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
 
@@ -90,7 +90,7 @@ Not started: 1.7–1.8, any transaction, the API layer.
 | 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
 | 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters. The premium cap is for the fill path only, not quoting (BR-33) |
 | 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
-| 1.7 | Goal-based input path | ⬜ | "I need $2,000 by 1 Nov" resolves to the same quote object |
+| 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5), USDC not fiat (BR-45) |
 | 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
 
 **Definition of done:** `node quote.js` prints a complete, correct quote for ETH using live data.
@@ -207,8 +207,8 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 5.1 | API contract agreed | ⬜ | Endpoint shapes written down **before either side builds** |
-| 5.2 | CORS configured | ⬜ | 5173 → 3000. Requests are blocked without it and the error doesn't say so |
+| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. 4 endpoints, verified against the interface's adapter |
+| 5.2 | CORS configured | ✅ | `http://localhost:5173` explicitly, never a wildcard; preflight handled |
 | 5.3 | Quote screen | ⬜ | No options jargon anywhere (BR-3) |
 | 5.4 | Confirmation screen | ⬜ | Shows max loss explicitly (BR-2, US-9) |
 | 5.5 | Position dashboard | ⬜ | Status, floor, expiry, BaseScan link |

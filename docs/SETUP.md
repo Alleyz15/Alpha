@@ -157,6 +157,42 @@ anime.js v4 notes:
 - Always `revert()` in the `useEffect` cleanup, or animations outlive their component
 - **Never let React and anime.js control the same property on the same element.** React re-renders will overwrite mid-animation; the symptom is intermittent flicker that is very hard to trace
 
+### Backend API — DONE (no fill yet)
+
+Two terminals. Backend first, from `backend/`:
+
+```bash
+npm run api
+```
+
+Then the frontend, from `frontend/`:
+
+```bash
+npm run dev
+```
+
+Verify the whole surface without a browser:
+
+```bash
+npm run api:check
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/demo-context` | display name, simulated balances |
+| `POST /api/quote` | `{ asset, units, mode, protectionPct? \| targetValueUsdc?+targetDate? }` → tier set |
+| `POST /api/purchase` | `{ quoteId, tierId }` — identifiers only |
+| `GET /api/positions` | the demo user's positions |
+| `GET /health` | liveness, touches nothing |
+
+Error envelope is `{ error: { code, message, details? } }` with `QUOTE_EXPIRED` 409, `BALANCE_EXCEEDED` 400, `NO_EXPIRY` 404, `NO_TIERS` 404, `INVALID_REQUEST` 400, `UPSTREAM_ERROR` 502.
+
+> ⚠️ **`POST /api/purchase` does not buy anything yet.** It persists the chosen quote and a `pending` position, then returns `txHash: null`, `explorerUrl: null`, `status: "pending_fill"`, `simulated: true`. The real fill is Phase 3. **Keep `VITE_USE_MOCK_API=true` until it lands** — in live mode the interface tells the user a real transaction was sent, and right now that would be untrue (BR-51).
+
+**Quote sets live in memory for 60 seconds** (`QUOTE_VALIDITY_SECONDS`), not in Postgres — the `quotes` table records what was purchased, not every price displayed. Restarting the API drops outstanding quotes and users must re-quote. Only the tier actually bought is persisted, at purchase time.
+
+`DEMO_USER_ID` pins which seeded user the API acts for; without it the earliest is used. The client never sends a user id.
+
 ### Supabase — DONE
 
 Project `gphzqvsdubygvijunobj`, region `ap-southeast-1` (Singapore). Schema, RLS and demo seeds are applied.

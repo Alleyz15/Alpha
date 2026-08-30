@@ -1,6 +1,9 @@
-// HTTP API endpoints.
+// HTTP endpoints consumed by the frontend (IMPLEMENT.md Phase 5).
 //
-// Placeholder - not implemented yet. See docs/IMPLEMENT.md Phase 5.
-// CORS will need to allow the Vite dev server (5173) to reach this (3000).
+// Read-only with respect to the chain: nothing here signs or broadcasts.
+// The fill is Phase 3.
 
-export {};
+export { startApi, stopApi } from './server.js';
+export { getDemoContext, postQuote, postPurchase, getPositions } from './routes.js';
+export { ApiError, toErrorResponse, statusForCode } from './errors.js';
+export { getDemoUser, resetDemoUser } from './demoUser.js';

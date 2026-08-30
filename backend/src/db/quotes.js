@@ -36,6 +36,8 @@ export async function insertQuote({
   numContractsRaw,
   orderSnapshot,
   validUntil,
+  quoteSetId = null,
+  tierLabel = null,
 }) {
   return unwrap(
     await db.from('quotes').insert({
@@ -55,9 +57,53 @@ export async function insertQuote({
       num_contracts_raw: String(numContractsRaw),
       order_snapshot: orderSnapshot,
       valid_until: validUntil,
+      quote_set_id: quoteSetId,
+      tier_label: tierLabel,
     }).select().single(),
     'insertQuote',
   );
+}
+
+/**
+ * Persist the tier a user actually chose, at the moment they choose it.
+ *
+ * Only the purchased tier is stored. The other two were shown and declined,
+ * and a `quotes` row records a commitment rather than a display. `quote_set_id`
+ * keeps the row correlatable with the purchase log, which records the whole set.
+ *
+ * @param {object} args
+ * @param {string} args.userId
+ * @param {object} args.set - the served buildQuoteSet() result
+ * @param {object} args.tier - the chosen tier from that set
+ * @returns {Promise<object>} the inserted quote row
+ */
+export async function insertPurchasedTier({ userId, set, tier }) {
+  const isGoal = set.requested.mode === 'goal';
+
+  return insertQuote({
+    userId,
+    asset: set.asset,
+    inputMode: set.requested.mode,
+    inputAmount: set.requested.units,
+    // DR-8: a quote carries the inputs its mode requires, and only those.
+    inputProtectionPct: isGoal ? null : set.requested.protectionPct,
+    inputTargetValue: isGoal ? set.requested.targetValueUsdc : null,
+    inputTargetDate: isGoal ? set.requested.targetDate.slice(0, 10) : null,
+    spotPrice: set.spot,
+    // BR-6: both, so the gap stays recoverable.
+    requestedStrike: set.requested.requestedStrikeUsdc,
+    actualStrike: tier.actual.floorUsdc,
+    expiry: tier.actual.expiry,
+    premium: tier.cost.premiumUsdc,
+    numContractsRaw: tier.size.contractsRaw,
+    // The order as quoted. When a fill fails, this is the only record of what
+    // we tried to buy - by then the book has moved.
+    orderSnapshot: JSON.parse(JSON.stringify(tier.order ?? {}, (k, v) =>
+      (typeof v === 'bigint' ? v.toString() : v))),
+    validUntil: set.expiresAt,
+    quoteSetId: set.quoteId,
+    tierLabel: tier.actual.tier,
+  });
 }
 
 /**
