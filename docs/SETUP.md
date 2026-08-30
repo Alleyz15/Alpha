@@ -217,7 +217,26 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 | **2026-09-25** | **+27** | **49** |
 | **2026-10-30** | **+62** | **22** |
 
-> **This matters for product design.** Short-dated expiries dominate, but 27-day and 62-day options do exist with real liquidity. A "30-day downside protection" product is feasible — it maps to the +27 day expiry.
+> ⚠️ **The table above is the RAW book. It is not what we can buy.** Once puts, below-spot strikes and the buy side (BR-1) are filtered, the picture is much smaller — see below. An earlier version of this note claimed 27-day and 62-day options "exist with real liquidity" and that a 30-day product was feasible. **Both claims are false of the buyable book.**
+
+### Raw book vs buyable book (BR-52)
+
+Checked 31 Aug 2026. Of ~330 raw orders, these are the ones we can actually fill — puts, struck below spot, where the maker is the seller:
+
+| Expiry | Days out | ETH strikes | BTC strikes | Floors available |
+|---|---|---|---|---|
+| 2026-09-04 | +4.7 | 4 | 4 | 3–9% (ETH), 2–6% (BTC) |
+| 2026-09-11 | +11.7 | 6 | 7 | 5–15% (ETH), 3–11% (BTC) |
+| **2026-09-25** | **+25.7** | **9** | **9** | **7–23% (ETH), 5–19% (BTC)** |
+| ~~2026-10-30~~ | ~~+62~~ | **0** | **0** | — |
+
+**There are no buyable puts beyond ~26 days.** The +62 day expiry carries 22 raw orders but none survive the filter. Consequences:
+
+- **A 30-day protection product is not deliverable.** BR-6 forbids an expiry earlier than the user's target date, so a 30-day request returns nothing — the longest available is 25.7 days, 4.3 days short. Quote 25 days, not 30.
+- **Only ETH and BTC are tradable at all.** SOL, XRP, BNB and AVAX have puts on the book but zero on the buy side.
+- **Phase 8's vault cannot use a 62-day call.** It is repositioned as 26-day principal protection with a 4–7% participation rate.
+
+Always measure the *buyable* book. The raw count is roughly double and is a misleading number to plan against.
 
 ### Order object shape
 
@@ -291,6 +310,26 @@ rescaled to 18dp    raw 1159415079500 =  1,159,415.0795 USDC   ← correct
 ```
 
 It returns `1`, not an error. Use `toPayoutContracts()` from `decimals.js` at that boundary. **This matters for task 1.8** (scenario previews) and for anything showing a user what they would receive.
+
+#### Trap 3 — `order.numContracts` is not the order's size
+
+It looks like the quantity available. It is not, and it overstates the real cap by roughly 1000×:
+
+```
+order.numContracts        4932.23    = availableAmount / price   ← NOT a size limit
+calculateMaxContracts()      4.44    = availableAmount / strike  ← the real cap
+maxContracts × strike   10,000.00    = the maker's collateral, exactly
+```
+
+The seller's collateral has to cover the **maximum payout**, which is `strike × contracts` — so the cap is `availableAmount / strike`. `order.numContracts` instead answers "how many contracts if the entire collateral were spent on premium", which is not a thing anyone can do.
+
+Verified: `maxContracts × strike` equals `availableAmount` to the cent on every order sampled.
+
+**Always size with `optionBook.calculateMaxContracts(order)`.** `toHumanOrder()` deliberately does not expose `numContracts` so it cannot be picked up by mistake. See `backend/src/thetanuts/sizing.js`.
+
+**One contract protects one unit of the underlying** — `calculateMaxPayout` returns exactly `strike` for one contract. Protecting 1 ETH takes 1 contract.
+
+**Fractional contracts work.** `calculateNumContracts(usdcAmount, price)` round-trips exactly at 6dp granularity: 1 USDC buys 0.493223 contracts, and 0.493223 × 2.02747993 = 1.000000 USDC. The protocol's *minimum* fill size is still undocumented (requirements.md §7 open question 4), so `sizePosition()` takes `minContracts` as a parameter and only reports violations — it must become a hard refusal once the real figure is known.
 
 ### Identifying which asset an order is for
 

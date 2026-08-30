@@ -24,6 +24,11 @@
 //    rawApiData.maxCollateralUsable are strings. The same strike is available
 //    as both types. Passing the string silently skips scaling in some helpers.
 //
+// 4. `order.numContracts` is NOT the order's fillable size, so it is
+//    deliberately not exposed by toHumanOrder(). It equals
+//    availableAmount / price and overstates the real cap by ~1000x. The
+//    fillable size is availableAmount / strike - see sizing.js.
+//
 // See docs/SETUP.md for the verification arithmetic.
 
 import { client } from './client.js';
@@ -87,9 +92,7 @@ export function toHumanOrder(orderWithSig) {
     strike: Number(client.utils.fromStrikeDecimals(strikeRaw)),
     // 8 decimals - see trap 1. Per contract, in USDC.
     premiumPerContract: Number(client.utils.fromPriceDecimals(priceRaw)),
-    // 6 decimals - see trap 2. Human contract count as the ORDER carries it.
-    numContracts: Number(client.utils.fromBigInt(contractsRaw, DECIMALS.ORDER_CONTRACTS)),
-    // 6 decimals, USDC
+    // 6 decimals, USDC. The maker's posted collateral.
     availableCollateralUsdc: Number(client.utils.fromBigInt(availableRaw, DECIMALS.USDC)),
 
     expiry: new Date(expiryUnix * 1000),

@@ -38,11 +38,13 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 0 complete. Phase 1 is next.**
+**Phase 0 complete. Phase 1 in progress — 1.1–1.5 done.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK connected to Base mainnet, live order book readable, SDK surface mapped.
+Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK connected to Base mainnet, live order book readable, SDK surface mapped. Quote engine: spot prices, buy-side put filtering, decimal conversion, expiry and tier selection, position sizing.
 
-Not started: database, quote engine, any transaction, any frontend.
+Not started: 1.6–1.8, database, any transaction, any frontend.
+
+⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
 
 **Nothing is blocked.** All open questions from requirements.md §7 are resolved.
 
@@ -82,11 +84,11 @@ Not started: database, quote engine, any transaction, any frontend.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 1.1 | Fetch spot price for an asset | ⬜ | `getMarketData()` returns ETH price, converted to a plain number |
-| 1.2 | Filter book to puts on one asset | ⬜ | Given ETH, returns only ETH puts, count printed |
-| 1.3 | Convert raw order fields to human values | ⬜ | strike/premium correct at 8 decimals, expiry as a Date |
-| 1.4 | Select best order for a target strike + expiry | ⬜ | Given "20% protection, 30 days", returns one order with the actual strike and days |
-| 1.5 | Size the position | ⬜ | `calculateNumContracts` used; respects `availableAmount` |
+| 1.1 | Fetch spot price for an asset | ✅ | `src/thetanuts/market.js` — `getSpotPrice(asset)`. Prices are already plain numbers |
+| 1.2 | Filter book to puts on one asset | ✅ | `src/thetanuts/orders.js` — `getBuyablePutOrders(asset)`. Buy-side only (BR-1) |
+| 1.3 | Convert raw order fields to human values | ✅ | `src/thetanuts/decimals.js` — `toHumanOrder()`. Verified by hand against the live book |
+| 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
+| 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters; cap is `min(requested, collateral, premium cap)` |
 | 1.6 | Produce a quote object | ⬜ | Returns: premium, protected floor, expiry, max loss, actual vs requested protection |
 | 1.7 | Goal-based input path | ⬜ | "I need $2,000 by 1 Nov" resolves to the same quote object |
 | 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
