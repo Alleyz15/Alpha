@@ -2,7 +2,7 @@
 
 **Project:** MUBA Hacks 2026 — Thetanuts Track 01
 **Repo:** github.com/Alleyz15/Alpha
-**Last updated:** 29 Aug 2026
+**Last updated:** 30 Aug 2026
 
 ---
 
@@ -38,17 +38,17 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 0 complete. Phase 1 in progress — 1.1–1.5 done.**
+**Phase 1 in progress — tasks 1.1 to 1.5 complete.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK connected to Base mainnet, live order book readable, SDK surface mapped. Quote engine: spot prices, buy-side put filtering, decimal conversion, expiry and tier selection, position sizing.
+Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing.
 
-Not started: 1.6–1.8, database, any transaction, any frontend.
+Not started: database, any transaction, any frontend.
 
 ⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
 
 **Nothing is blocked.** All open questions from requirements.md §7 are resolved.
 
-**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `IDEA.md`.
+**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `PRODUCT-THINKING.md`.
 
 ---
 
@@ -63,7 +63,7 @@ Not started: 1.6–1.8, database, any transaction, any frontend.
 | Thetanuts SDK installed | ✅ | `thetanuts-client`, `ethers`, `dotenv` |
 | Connectivity check passing | ✅ | ~320 live orders, prices for 6 assets |
 | Order book structure documented | ✅ | See SETUP.md |
-| Expiries mapped | ✅ | +1 to +62 days; +27 has 49 orders |
+| Expiries mapped | ✅ | Raw book +1 to +62 days. **Buyable puts stop at ~26 days** (BR-52) — see SETUP.md |
 | SDK method surface mapped | ✅ | See requirements.md appendix |
 | Requirements written | ✅ | requirements.md |
 | Custodial vs non-custodial decided | ✅ | Custodial; the backend developer operates the wallet |
@@ -76,7 +76,7 @@ Not started: 1.6–1.8, database, any transaction, any frontend.
 
 ---
 
-## Phase 1 — Quote engine ⬜
+## Phase 1 — Quote engine 🔄
 
 **Goal:** given an asset, an amount and a protection level, return a real quote from the live book. Read-only — no wallet, no transactions.
 
@@ -243,7 +243,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 **Depends on Phases 1–4.** The put that acts as a collateral floor is bought and settled by the same code the core product uses, so that code must work first. This is a dependency, not a priority ranking.
 
-**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `IDEA.md` Idea 1.
+**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `PRODUCT-THINKING.md` Idea 1.
 
 **Why it's cheap once the core works:** it reuses ~90% of the existing code. Buying, settlement, database and scheduler are unchanged — what's new is a `loans` table and two flows.
 
@@ -335,7 +335,6 @@ Recorded so nobody quietly starts one of these:
 - RFQ flow (§0 decision)
 - Non-custodial wallet integration
 - Hosted deployment — the demo runs locally
-- Principal-protected vault (Idea 3) — needs an RWA yield source, and its value only shows after a year
 - **Writing our own smart contracts** — mainnet deployment costs real gas and Thetanuts has no testnet, so there is nowhere to deploy them
 - Rolling or cancelling protection before expiry
 - Notifications

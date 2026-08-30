@@ -156,7 +156,7 @@ Stated plainly, because they're real:
 
 | Name | Role | LinkedIn |
 |---|---|---|
-| [name] | Backend — SDK integration, database, settlement | [url] |
+| Alvin | Backend — SDK integration, database, settlement | [url] |
 | [name] | Frontend | [url] |
 | [name] | [role] | [url] |
 
