@@ -452,7 +452,7 @@ Judging is **"does it work"** and **"would anyone use it"** — not complexity. 
 1. ✅ **Resolved:** custodial, single burner wallet operated by Alvin. See §0.
 2. ✅ **Resolved:** OptionBook only. RFQ is out of scope for the MVP — too much demo risk. See §0.
 3. ✅ **Resolved:** settlement is fully automatic via the factory callback. `payout()` is deprecated and throws. UC-3 is read-only — no transaction, no gas.
-4. What's the minimum fillable size? Constrains BR-15 and the demo script.
+4. ✅ **Resolved:** fractional fills work. Thetanuts confirmed it, and Shawn has filled with **0.01 USDC**. `calculateNumContracts` round-trips exactly at 6dp granularity, so BR-15's 1–3 USDC sizing is comfortable — 1 USDC buys ~0.1 contracts at the 26-day expiry. `sizePosition()` still takes `minContracts` as a parameter in case a floor appears later; it currently reports rather than refuses.
 5. How many demo users to seed — see `DATABASE.md` open questions. There is no login either way.
 
 ---

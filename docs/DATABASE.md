@@ -136,7 +136,7 @@ A priced offer shown to the user. Most expire unused; keeping them gives us an a
 | `actual_strike` | `NUMERIC` NOT NULL | What the book could give (BR-6) |
 | `expiry` | `TIMESTAMPTZ` NOT NULL | Actual expiry selected |
 | `premium` | `NUMERIC` NOT NULL | Total cost in USDC |
-| `num_contracts_raw` | `TEXT` NOT NULL | 18 decimals |
+| `num_contracts_raw` | `TEXT` NOT NULL | **6 decimals** — see note below |
 | `order_snapshot` | `JSONB` NOT NULL | The full order as quoted |
 | `valid_until` | `TIMESTAMPTZ` NOT NULL | BR-8 |
 | `created_at` | `TIMESTAMPTZ` NOT NULL | |
@@ -159,13 +159,29 @@ A priced offer shown to the user. Most expire unused; keeping them gives us an a
 | `strike` | `NUMERIC` NOT NULL | Human-readable |
 | `strike_raw` | `TEXT` NOT NULL | 8 decimals |
 | `expiry` | `TIMESTAMPTZ` NOT NULL | |
-| `num_contracts_raw` | `TEXT` NOT NULL | 18 decimals |
+| `num_contracts_raw` | `TEXT` NOT NULL | **6 decimals** — see note below |
 | `premium_paid` | `NUMERIC` NULL | Actual, may differ from quote |
 | `settlement_price` | `NUMERIC` NULL | Filled at settlement |
 | `payout` | `NUMERIC` NULL | Filled at settlement |
 | `settled_at` | `TIMESTAMPTZ` NULL | |
 | `created_at` | `TIMESTAMPTZ` NOT NULL | |
 | `updated_at` | `TIMESTAMPTZ` NOT NULL | |
+
+**Constraint — one position per quote (DR-3)**
+
+```sql
+ALTER TABLE positions ADD CONSTRAINT positions_quote_id_key UNIQUE (quote_id);
+```
+
+DR-3 says a quote yields at most one position. Stating the cardinality is not enforcing it: without this constraint a double-click, a retried request or a client-side timeout can produce two positions from one quote — and each one spends real money on an irreversible fill. The database is the only layer that can make that impossible, because it is the only one that sees concurrent attempts.
+
+> **Why `num_contracts_raw` is 6 decimals, not 18**
+>
+> The `Order` struct carries `numContracts` at **6 decimals** when collateral is USDC, and that is the scale `fillOrder` consumes. Store the number that corresponds to the actual on-chain fill, so a stored row can be compared with chain state directly and reconciliation (BR-36) needs no rescaling.
+>
+> The exception is `utils.calculatePayoutAtPrice` and `utils.calculateMaxPayout`, whose `numContracts` **argument** is 18 decimals. That is a boundary to convert at, not a storage format — multiply by 10¹² when calling them. Storing 18dp instead would mean rescaling on every write and every comparison against the chain, which is more places to get it wrong.
+>
+> Passing a 6dp value straight to a payout helper returns a plausible-looking number 10¹² too small, and does not throw. See `backend/src/thetanuts/decimals.js` and the decimals table in `SETUP.md`.
 
 **Status values**
 
@@ -278,9 +294,12 @@ Append-only history. Required by BR-19 (settled positions are immutable) and inv
 | Table | Frontend (no direct access) | Backend (secret key) |
 |---|---|---|
 | `users` | none | full |
+| `balances` | none | full |
 | `quotes` | none | full |
 | `positions` | none | full |
 | `position_events` | none | full |
+| `loans` (Phase 7) | none | full |
+| `vaults` (Phase 8) | none | full |
 
 Policies should still be written as if a low-privilege client existed. If we ever expose a publishable key, the database must already be safe — not made safe afterwards.
 
