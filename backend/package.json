@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "inspect:orders": "node --env-file-if-exists=../.env inspect-order.js",
-    "inspect:sdk": "node --env-file-if-exists=../.env inspect-sdk.js",
-    "inspect:expiries": "node --env-file-if-exists=../.env expiries.js",
+    "inspect:orders": "node --env-file-if-exists=../.env scripts/inspect-order.js",
+    "inspect:sdk": "node --env-file-if-exists=../.env scripts/inspect-sdk.js",
+    "inspect:expiries": "node --env-file-if-exists=../.env scripts/expiries.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

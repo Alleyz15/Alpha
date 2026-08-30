@@ -1,0 +1,7 @@
+# Local-only. The root .gitignore also covers these; kept here to match
+# what `npm create vite` produces.
+node_modules
+dist
+dist-ssr
+*.local
+.env
