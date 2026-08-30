@@ -14,6 +14,7 @@ import { getSpotPrice } from '../src/thetanuts/market.js';
 import { getBuyablePutOrders } from '../src/thetanuts/orders.js';
 import { toHumanOrder, toPayoutContracts, payoutToUsdc } from '../src/thetanuts/decimals.js';
 import { listExpiries, selectProtectionTiers } from '../src/thetanuts/selection.js';
+import { sizePosition, maxContractsFor } from '../src/thetanuts/sizing.js';
 
 const asset = (process.argv[2] || 'ETH').toUpperCase();
 
@@ -78,20 +79,20 @@ row('premium', r.price, 'fromPriceDecimals', `${human.premiumPerContract} USDC p
 console.log(`             hand check: ${r.price} / 1e8 = ${Number(r.price) / 1e8}`);
 console.log(`             WRONG (6dp): ${r.price} / 1e6 = ${Number(r.price) / 1e6}   <-- the 100x error`);
 
-row('numContracts', r.numContracts, 'fromBigInt(_, 6)', `${human.numContracts} contracts`);
-console.log(`             hand check: ${r.numContracts} / 1e6 = ${Number(r.numContracts) / 1e6}`);
-
 row('available', sample.availableAmount, 'fromBigInt(_, 6)', `${usd(human.availableCollateralUsdc)} USDC`);
 console.log(`             hand check: ${sample.availableAmount} / 1e6 = ${Number(sample.availableAmount) / 1e6}`);
 
 row('expiry', r.expiry, 'new Date(_ * 1000)', human.expiry.toISOString());
 console.log(`             ${human.daysToExpiry.toFixed(1)} days out`);
 
-// Cross-check: premium x contracts should equal the collateral on the order.
-const implied = human.premiumPerContract * human.numContracts;
-console.log(`\ncross-check: premium ${human.premiumPerContract} x ${human.numContracts} contracts = ` +
-  `${usd(implied)} vs available ${usd(human.availableCollateralUsdc)}  ` +
-  `${Math.abs(implied - human.availableCollateralUsdc) < 1 ? 'ok' : 'MISMATCH'}`);
+// Cross-check: the maker's collateral must cover the maximum payout, so
+// maxContracts x strike should equal availableAmount.
+const maxC = Number(maxContractsFor(sample)) / 1e6;
+console.log(`\ncross-check: maxContracts ${maxC.toFixed(6)} x strike ${usd(human.strike)} = ` +
+  `${usd(maxC * human.strike)} vs available ${usd(human.availableCollateralUsdc)}  ` +
+  `${Math.abs(maxC * human.strike - human.availableCollateralUsdc) < 1 ? 'ok' : 'MISMATCH'}`);
+console.log(`note: order.numContracts is ${Number(r.numContracts) / 1e6} — NOT a size limit, ` +
+  `it is availableAmount/price. The real cap is ${maxC.toFixed(6)}.`);
 
 // --- The numContracts scale trap --------------------------------------------
 //
@@ -102,12 +103,15 @@ console.log(`\ncross-check: premium ${human.premiumPerContract} x ${human.numCon
 const settleAt = human.strike - 250;
 const settle8 = BigInt(Math.round(settleAt * 1e8));
 
-const wrong = client.utils.calculatePayoutAtPrice(sample.order, r.numContracts, settle8);
-const right = client.utils.calculatePayoutAtPrice(sample.order, toPayoutContracts(r.numContracts), settle8);
+// One whole contract, as the Order struct scales it (6dp).
+const oneContract6 = 10n ** 6n;
+const wrong = client.utils.calculatePayoutAtPrice(sample.order, oneContract6, settle8);
+const right = client.utils.calculatePayoutAtPrice(sample.order, toPayoutContracts(oneContract6), settle8);
 
 console.log(`\n--- numContracts scale: Order struct 6dp vs payout helpers 18dp ---\n`);
-console.log(`payout if ${asset} settles at ${usd(settleAt)} (strike ${usd(human.strike)}, $250 in the money):`);
-console.log(`  hand:               ${human.numContracts} contracts x $250 = ${usd(human.numContracts * 250)}`);
+console.log(`payout on 1 contract if ${asset} settles at ${usd(settleAt)} ` +
+  `(strike ${usd(human.strike)}, $250 in the money):`);
+console.log(`  hand:               1 contract x $250 = ${usd(250)}`);
 console.log(`  passed as-is (6dp):  raw ${String(wrong).padStart(13)} = ${payoutToUsdc(wrong)} USDC` +
   `   <-- 10^12 too small, and it does not throw`);
 console.log(`  rescaled to 18dp:    raw ${String(right).padStart(13)} = ${payoutToUsdc(right)} USDC` +
@@ -173,3 +177,50 @@ showTiers(await selectProtectionTiers(asset, 30));
 
 console.log(`\n--- 1.4 BR-6 check: a 62-day target ---`);
 showTiers(await selectProtectionTiers(asset, 62));
+
+// --- Task 1.5: size the position --------------------------------------------
+//
+// Every limit is passed in. The premium cap comes from the environment (BR-33)
+// so it can be tightened without a code review; the minimum fillable size is
+// still unknown, so it is reported rather than enforced.
+
+const MAX_PREMIUM = Number(process.env.MAX_PREMIUM_PER_FILL_USDC ?? 5);
+
+const sized = await selectProtectionTiers(asset, TARGET_DAYS);
+
+if (sized.tiers.length > 0) {
+  const tier = sized.tiers.find((t) => t.recommended) ?? sized.tiers[0];
+
+  console.log(`\n--- 1.5 sizing the ${tier.label} tier ` +
+    `(floor ${usd(tier.floorUsd)}, ${usd(tier.costPerUnit)} per unit) ---`);
+  console.log(`premium cap ${usd(MAX_PREMIUM)} (BR-33, from the environment)\n`);
+
+  console.log(`  ${'holding'.padStart(9)}${'contracts'.padStart(12)}${'premium'.padStart(11)}` +
+    `${'protected'.padStart(12)}${'max payout'.padStart(13)}   bound by`);
+  console.log('  ' + '-'.repeat(72));
+
+  for (const units of [0.1, 0.5, 1, 5, 100]) {
+    const s = sizePosition(tier.order, { units, maxPremiumUsdc: MAX_PREMIUM });
+    console.log(
+      `  ${(units + ' ' + asset).padStart(9)}` +
+      `${s.contracts.toFixed(6).padStart(12)}` +
+      `${usd(s.premiumUsdc).padStart(11)}` +
+      `${(s.protectedUnits.toFixed(4) + ' ' + asset).padStart(12)}` +
+      `${usd(s.maxPayoutUsdc).padStart(13)}   ${s.boundBy}`,
+    );
+  }
+
+  console.log(`\n  limits on this order: collateral backs ` +
+    `${sizePosition(tier.order, { units: 1e9, maxPremiumUsdc: MAX_PREMIUM }).limits.byCollateral.toFixed(6)} contracts, ` +
+    `the ${usd(MAX_PREMIUM)} cap allows ` +
+    `${sizePosition(tier.order, { units: 1e9, maxPremiumUsdc: MAX_PREMIUM }).limits.byPremiumCap.toFixed(6)}`);
+
+  // BR-15 keeps trades at 1-3 USDC. What does that actually buy here?
+  console.log(`\n  BR-15 check — what 1-3 USDC buys at this tier:`);
+  for (const budget of [1, 2, 3]) {
+    const s = sizePosition(tier.order, { units: 1e9, maxPremiumUsdc: budget });
+    console.log(`    ${usd(budget).padStart(6)} -> ${s.contracts.toFixed(6)} contracts, ` +
+      `protecting ${s.protectedUnits.toFixed(4)} ${asset} ` +
+      `(${usd(s.protectedUnits * spot)} of holdings) with a ${usd(s.maxPayoutUsdc)} floor`);
+  }
+}

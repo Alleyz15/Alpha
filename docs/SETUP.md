@@ -311,6 +311,26 @@ rescaled to 18dp    raw 1159415079500 =  1,159,415.0795 USDC   ← correct
 
 It returns `1`, not an error. Use `toPayoutContracts()` from `decimals.js` at that boundary. **This matters for task 1.8** (scenario previews) and for anything showing a user what they would receive.
 
+#### Trap 3 — `order.numContracts` is not the order's size
+
+It looks like the quantity available. It is not, and it overstates the real cap by roughly 1000×:
+
+```
+order.numContracts        4932.23    = availableAmount / price   ← NOT a size limit
+calculateMaxContracts()      4.44    = availableAmount / strike  ← the real cap
+maxContracts × strike   10,000.00    = the maker's collateral, exactly
+```
+
+The seller's collateral has to cover the **maximum payout**, which is `strike × contracts` — so the cap is `availableAmount / strike`. `order.numContracts` instead answers "how many contracts if the entire collateral were spent on premium", which is not a thing anyone can do.
+
+Verified: `maxContracts × strike` equals `availableAmount` to the cent on every order sampled.
+
+**Always size with `optionBook.calculateMaxContracts(order)`.** `toHumanOrder()` deliberately does not expose `numContracts` so it cannot be picked up by mistake. See `backend/src/thetanuts/sizing.js`.
+
+**One contract protects one unit of the underlying** — `calculateMaxPayout` returns exactly `strike` for one contract. Protecting 1 ETH takes 1 contract.
+
+**Fractional contracts work.** `calculateNumContracts(usdcAmount, price)` round-trips exactly at 6dp granularity: 1 USDC buys 0.493223 contracts, and 0.493223 × 2.02747993 = 1.000000 USDC. The protocol's *minimum* fill size is still undocumented (requirements.md §7 open question 4), so `sizePosition()` takes `minContracts` as a parameter and only reports violations — it must become a hard refusal once the real figure is known.
+
 ### Identifying which asset an order is for
 
 **`order.underlyingToken` is not a usable asset identifier.** It is the WETH address for ETH, an unrelated token for BTC, and **`0x0000…0000` for SOL, XRP, BNB and AVAX** — four assets share one value, so it cannot tell them apart.
