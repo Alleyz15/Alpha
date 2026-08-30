@@ -13,13 +13,14 @@ import { listSupportedAssets } from '../src/thetanuts/assets.js';
 import { getSpotPrice } from '../src/thetanuts/market.js';
 import { getBuyablePutOrders } from '../src/thetanuts/orders.js';
 import { toHumanOrder, toPayoutContracts, payoutToUsdc } from '../src/thetanuts/decimals.js';
+import { listExpiries, selectProtectionTiers } from '../src/thetanuts/selection.js';
 
 const asset = (process.argv[2] || 'ETH').toUpperCase();
 
-// Default protection level, BR-4. Deriving the target strike properly is task
-// 1.4 - this is here only to show how far the book's real strikes sit from
-// what a user would ask for (BR-6).
-const PROTECTION_PCT = Number(process.env.DEFAULT_PROTECTION_PCT ?? 20);
+// Target tenor in days. 25 by default because the buyable book tops out around
+// 26 days (BR-52) - a 30-day target has no answer under BR-6, which the run
+// below demonstrates.
+const TARGET_DAYS = Number(process.argv[3] ?? 25);
 
 const usd = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -112,40 +113,63 @@ console.log(`  passed as-is (6dp):  raw ${String(wrong).padStart(13)} = ${payout
 console.log(`  rescaled to 18dp:    raw ${String(right).padStart(13)} = ${payoutToUsdc(right)} USDC` +
   `   <-- correct`);
 
-// --- Strike depth per expiry ------------------------------------------------
-//
-// How thin is the book? If an expiry offers only a couple of strikes, BR-6's
-// "closest available" can land a long way from what the user asked for, and
-// the UI has to say so.
+// --- Task 1.4: expiries and protection tiers --------------------------------
 
-const targetStrike = spot * (1 - PROTECTION_PCT / 100);
-console.log(`\n--- strike depth by expiry ---`);
-console.log(`a ${PROTECTION_PCT}% floor on ${asset} at ${usd(spot)} wants a strike near ${usd(targetStrike)}\n`);
+const { expiries } = await listExpiries(asset);
 
-const byExpiry = new Map();
-for (const o of puts.map(toHumanOrder)) {
-  if (!byExpiry.has(o.expiryUnix)) byExpiry.set(o.expiryUnix, []);
-  byExpiry.get(o.expiryUnix).push(o.strike);
-}
-
-for (const expiryUnix of [...byExpiry.keys()].sort((a, b) => a - b)) {
-  const strikes = [...new Set(byExpiry.get(expiryUnix))].sort((a, b) => a - b);
-  const days = ((expiryUnix * 1000 - Date.now()) / 86_400_000).toFixed(1);
-
-  // Closest available strike to the target, and how far off it lands.
-  const closest = strikes.reduce((best, s) =>
-    Math.abs(s - targetStrike) < Math.abs(best - targetStrike) ? s : best);
-  const gapPct = ((closest - targetStrike) / targetStrike) * 100;
-  const realFloorPct = ((spot - closest) / spot) * 100;
-
+console.log(`\n--- 1.4 expiries with buyable puts below spot ---\n`);
+for (const e of expiries) {
+  const lo = e.strikes.at(-1).strike;
+  const hi = e.strikes[0].strike;
   console.log(
-    `${new Date(expiryUnix * 1000).toISOString().slice(0, 10)}  (+${days.padStart(5)} days)  ` +
-    `${String(strikes.length).padStart(2)} strikes  ` +
-    `${usd(strikes[0])} - ${usd(strikes.at(-1))}`,
-  );
-  console.log(
-    `    closest to target: ${usd(closest)}  ` +
-    `(${gapPct >= 0 ? '+' : ''}${gapPct.toFixed(1)}% off target, ` +
-    `a real floor of ${realFloorPct.toFixed(1)}% down)`,
+    `${e.expiry.toISOString().slice(0, 10)}  (+${e.daysToExpiry.toFixed(1).padStart(5)} days)  ` +
+    `${String(e.strikes.length).padStart(2)} strikes  ${usd(lo)} - ${usd(hi)}  ` +
+    `(floors ${(((spot - hi) / spot) * 100).toFixed(1)}% - ${(((spot - lo) / spot) * 100).toFixed(1)}%)`,
   );
 }
+
+const showTiers = (result) => {
+  const { selection } = result;
+
+  if (!result.expiry) {
+    console.log(`  no expiry available on or after ` +
+      `${selection.requestedDate.toISOString().slice(0, 10)} — ${selection.reason}`);
+    if (selection.longestAvailable) {
+      console.log(`  longest available: ${selection.longestAvailable.expiry.toISOString().slice(0, 10)} ` +
+        `(+${selection.longestAvailable.daysToExpiry.toFixed(1)} days), ` +
+        `${selection.shortfallDays.toFixed(1)} days short of the target`);
+    }
+    return;
+  }
+
+  console.log(`  expiry ${result.expiry.expiry.toISOString().slice(0, 10)} ` +
+    `(+${result.expiry.daysToExpiry.toFixed(1)} days), ` +
+    `${result.availableStrikes} strikes below spot, ` +
+    `${selection.gapDays.toFixed(1)} days after the target`);
+  console.log();
+  console.log(`    ${'tier'.padEnd(10)}${'floor'.padStart(12)}${'protection'.padStart(12)}` +
+    `${'cost / unit'.padStart(14)}${'% of spot'.padStart(11)}`);
+  console.log('    ' + '-'.repeat(59));
+  for (const t of result.tiers) {
+    console.log(
+      `    ${(t.label + (t.recommended ? ' *' : '')).padEnd(10)}` +
+      `${usd(t.floorUsd).padStart(12)}` +
+      `${('-' + t.protectionPct.toFixed(1) + '%').padStart(12)}` +
+      `${(t.costPerUnit.toFixed(4) + ' USDC').padStart(14)}` +
+      `${(t.costPctOfSpot.toFixed(2) + '%').padStart(11)}`,
+    );
+  }
+  console.log(`    * recommended (BR-41: middle tier preselected)`);
+};
+
+console.log(`\n--- 1.4 tiers for a ${TARGET_DAYS}-day target ---`);
+showTiers(await selectProtectionTiers(asset, TARGET_DAYS));
+
+// BR-6 is strict: an expiry is never earlier than the target date. The buyable
+// book tops out around 26 days (BR-52), so anything longer has no answer at
+// all - including the 30 days the product has been describing.
+console.log(`\n--- 1.4 BR-6 check: a 30-day target ---`);
+showTiers(await selectProtectionTiers(asset, 30));
+
+console.log(`\n--- 1.4 BR-6 check: a 62-day target ---`);
+showTiers(await selectProtectionTiers(asset, 62));
