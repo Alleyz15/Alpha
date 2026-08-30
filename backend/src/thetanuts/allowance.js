@@ -97,13 +97,40 @@ export async function ensureExactAllowance(amountRaw, { dryRun = false } = {}) {
 
   const client = getSigningClient();
   const receipt = await client.erc20.ensureAllowance(usdcAddress(), optionBookAddress(), amountRaw);
-  const after = await readAllowance();
+
+  // Re-read until the node reflects the write, rather than once immediately.
+  // An RPC node can serve a read from a block that predates the transaction it
+  // just confirmed, which reports the allowance as unchanged. That reads as a
+  // failed approval and invites someone to send a second one - so poll, and
+  // only report a figure the chain has actually caught up to.
+  const after = await pollAllowanceUntil(amountRaw);
 
   return {
     sent: true,
     reason: 'approval sent',
     before,
     after,
+    confirmed: after >= amountRaw,
     txHash: receipt?.hash ?? receipt?.transactionHash ?? null,
   };
+}
+
+/**
+ * Poll the allowance until it reaches `expected`, or the attempts run out.
+ * Returns whatever the last read was - the caller decides what that means.
+ *
+ * @param {bigint} expected
+ * @param {number} [attempts]
+ * @param {number} [delayMs]
+ * @returns {Promise<bigint>}
+ */
+export async function pollAllowanceUntil(expected, attempts = 8, delayMs = 1500) {
+  let current = await readAllowance();
+
+  for (let i = 0; i < attempts && current < expected; i++) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    current = await readAllowance();
+  }
+
+  return current;
 }

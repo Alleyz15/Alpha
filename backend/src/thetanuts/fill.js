@@ -18,10 +18,10 @@
 //   5. wait for confirmation             (3.7)
 //   6. update the row                    (3.8)
 
-import { getSigningClient } from './signer.js';
+import { getSigningClient, getWalletAddress } from './signer.js';
 import { getBuyablePutOrders } from './orders.js';
 import { runPreflight } from './preflight.js';
-import { getPosition } from '../db/positions.js';
+import { getPosition, transitionPosition } from '../db/positions.js';
 import { getQuote } from '../db/quotes.js';
 
 /**
@@ -118,16 +118,189 @@ export async function prepareFill(positionId) {
 }
 
 /**
- * Task 3.7. Deliberately not implemented.
+ * Broadcast a fill (IMPLEMENT.md tasks 3.7, 3.8, 3.9).
  *
- * Adding it means the next call to this module can spend real USDC on a
- * transaction that cannot be undone. It is a separate, deliberate step.
+ * ---------------------------------------------------------------------------
+ * THIS SPENDS REAL USDC ON A TRANSACTION THAT CANNOT BE UNDONE.
+ * ---------------------------------------------------------------------------
+ *
+ * Strike, expiry, contract count and premium are permanent once it confirms.
+ * The only remedies for a wrong fill are waiting for expiry or buying again.
+ *
+ * The order of operations is fixed:
+ *
+ *   1. pre-flight checklist must pass, or nothing happens
+ *   2. move the row to pending_verification BEFORE the call
+ *   3. broadcast
+ *   4. on receipt   -> active, with the hash, option address and real premium
+ *      on revert    -> failed
+ *      on anything else, including a timeout -> LEAVE IT at
+ *                      pending_verification and stop
+ *
+ * Step 2 looks pessimistic and is deliberate. fillOrder() waits for its own
+ * receipt, so between submission and return there is a window in which the
+ * transaction may have landed and this process may die. A row that already
+ * says "outcome unknown" is recoverable; one that still says `pending` looks
+ * like nothing was attempted.
+ *
+ * @param {string} positionId - a `pending` position
+ * @param {object} [opts]
+ * @param {boolean} [opts.confirmed] - must be true; a guard against calling this by accident
+ * @returns {Promise<object>}
  */
-export async function executeFill() {
-  throw new Error(
-    'executeFill is not implemented. Broadcasting is task 3.7 and has not been approved yet — ' +
-    'see docs/IMPLEMENT.md Phase 3.',
-  );
+export async function executeFill(positionId, { confirmed = false } = {}) {
+  if (!confirmed) {
+    throw new Error(
+      'executeFill requires { confirmed: true }. This spends real USDC and cannot be undone.',
+    );
+  }
+
+  const prepared = await prepareFill(positionId);
+
+  if (!prepared.ready) {
+    throw new Error(
+      `executeFill refused: ${prepared.reason}. ` +
+      'Every pre-flight item must pass before anything is broadcast.',
+    );
+  }
+
+  const { liveOrder, usdcAmountRaw, position } = prepared;
+  const client = getSigningClient();
+
+  // Outcome unknown from here until the receipt says otherwise.
+  await transitionPosition(positionId, {
+    toStatus: 'pending_verification',
+    eventType: 'broadcast',
+    payload: {
+      usdcAmountRaw: usdcAmountRaw.toString(),
+      strikeRaw: liveOrder.order.strikePrice.toString(),
+      expiry: liveOrder.order.expiry.toString(),
+      contractsRaw: position.num_contracts_raw,
+      submittedAt: new Date().toISOString(),
+    },
+  });
+
+  let result;
+  try {
+    // The amount is ALWAYS passed. fillOrder() with no amount fills the
+    // maximum available, which would spend the whole wallet.
+    result = await client.optionBook.fillOrder(liveOrder, usdcAmountRaw);
+  } catch (error) {
+    // A revert is a definite answer: nothing was bought, nothing was charged.
+    const reverted = error?.code === 'CONTRACT_REVERT' ||
+      error?.code === 'CALL_EXCEPTION' ||
+      /revert/i.test(error?.message ?? '');
+
+    if (reverted) {
+      await transitionPosition(positionId, {
+        toStatus: 'failed',
+        eventType: 'failed',
+        payload: { error: String(error?.message ?? error).slice(0, 500) },
+      });
+      throw new Error(`fill reverted, nothing was bought: ${error?.message ?? error}`);
+    }
+
+    // Anything else - a timeout, a dropped connection - is NOT an answer. The
+    // transaction may have landed. Retrying would spend twice and create a
+    // second option nobody asked for, so the row stays at
+    // pending_verification and a human resolves it against chain state.
+    throw new Error(
+      `fill outcome UNKNOWN for position ${positionId}: ${error?.message ?? error}\n` +
+      `The transaction may have landed. Position is pending_verification. DO NOT RETRY — ` +
+      `check https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
+    );
+  }
+
+  // fillOrder's return shape differs between SDK versions; take the hash and
+  // the option address from wherever they actually are rather than assuming.
+  const txHash = result?.txHash ?? result?.hash ?? result?.transactionHash ?? null;
+  const receipt = typeof result?.wait === 'function' ? await result.wait() : result;
+  const optionAddress = result?.optionAddress ?? extractOptionAddress(receipt);
+
+  // The real premium, read from the USDC that actually left the wallet, rather
+  // than the figure we quoted. They should match; if they do not, the row
+  // should record what happened, not what was expected.
+  const premiumPaid = extractUsdcSpent(receipt, getWalletAddress()) ?? Number(usdcAmountRaw) / 1e6;
+
+  await transitionPosition(positionId, {
+    toStatus: 'active',
+    eventType: 'confirmed',
+    txHash,
+    optionAddress,
+    premiumPaid,
+    payload: {
+      blockNumber: receipt?.blockNumber ?? null,
+      gasUsed: receipt?.gasUsed?.toString() ?? null,
+      status: receipt?.status ?? null,
+    },
+  });
+
+  return {
+    positionId,
+    txHash,
+    optionAddress,
+    premiumPaid,
+    explorerUrl: txHash ? `https://basescan.org/tx/${txHash}` : null,
+    receipt,
+  };
+}
+
+/** ERC20 Transfer(address,address,uint256) */
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+/**
+ * The USDC that actually left the wallet, from the receipt's Transfer logs.
+ * Returns null if it cannot be determined - the caller falls back to the
+ * quoted figure rather than recording a wrong one.
+ */
+function extractUsdcSpent(receipt, fromAddress) {
+  try {
+    const usdc = getSigningClient().chainConfig.tokens.USDC.address.toLowerCase();
+    const from = fromAddress.toLowerCase().slice(2).padStart(64, '0');
+
+    // SUM every outgoing transfer, not just the first. A fill moves USDC out
+    // twice: the premium to the maker, and a protocol fee to the OptionBook.
+    // Recording only the premium understates what the position cost - the
+    // indexer's entryPrice is the total, and the row should agree with it.
+    let total = 0n;
+    let found = false;
+
+    for (const log of receipt?.logs ?? []) {
+      if (log.address?.toLowerCase() !== usdc) continue;
+      if (log.topics?.[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
+      if (log.topics?.[1]?.toLowerCase().slice(2) !== from) continue;
+      total += BigInt(log.data);
+      found = true;
+    }
+
+    if (found) return Number(total) / 1e6;
+  } catch {
+    // Deliberately quiet: this is a nicety, and failing to parse a log must
+    // never take down a fill that already succeeded.
+  }
+  return null;
+}
+
+/**
+ * The option contract created by this fill. Best effort: the first address
+ * that appears as a log emitter and is not a token we already know.
+ */
+function extractOptionAddress(receipt) {
+  try {
+    const known = new Set(
+      Object.values(getSigningClient().chainConfig.tokens ?? {})
+        .map((t) => t.address.toLowerCase())
+        .concat(Object.values(getSigningClient().chainConfig.contracts ?? {}).map((a) => a.toLowerCase())),
+    );
+
+    for (const log of receipt?.logs ?? []) {
+      const address = log.address?.toLowerCase();
+      if (address && !known.has(address)) return address;
+    }
+  } catch {
+    // Same reasoning as above.
+  }
+  return null;
 }
 
 /** Re-exported so callers do not need to reach past this module. */
