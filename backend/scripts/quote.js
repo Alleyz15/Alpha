@@ -1,9 +1,9 @@
 // Quote engine exercise script (IMPLEMENT.md Phase 1).
 //
 // Read-only: no wallet, no signing, no transactions.
-// Covers tasks 1.1, 1.2 and 1.3 so far. Grows as 1.4-1.8 land.
+// Covers tasks 1.1 to 1.6 so far. Grows as 1.7-1.8 land.
 //
-//   node --env-file-if-exists=../.env scripts/quote.js [ASSET]
+//   node --env-file-if-exists=../.env scripts/quote.js [ASSET] [TARGET_DAYS]
 //
 // This is an internal dev tool, so options terminology is fine here.
 // BR-3 forbids it in user-facing output only.
@@ -15,6 +15,7 @@ import { getBuyablePutOrders } from '../src/thetanuts/orders.js';
 import { toHumanOrder, toPayoutContracts, payoutToUsdc } from '../src/thetanuts/decimals.js';
 import { listExpiries, selectProtectionTiers } from '../src/thetanuts/selection.js';
 import { sizePosition, maxContractsFor } from '../src/thetanuts/sizing.js';
+import { buildQuote, isQuoteFresh, QuoteRefusedError } from '../src/thetanuts/quote.js';
 
 const asset = (process.argv[2] || 'ETH').toUpperCase();
 
@@ -222,5 +223,73 @@ if (sized.tiers.length > 0) {
     console.log(`    ${usd(budget).padStart(6)} -> ${s.contracts.toFixed(6)} contracts, ` +
       `protecting ${s.protectedUnits.toFixed(4)} ${asset} ` +
       `(${usd(s.protectedUnits * spot)} of holdings) with a ${usd(s.maxPayoutUsdc)} floor`);
+  }
+}
+
+// --- Task 1.6: the quote object ---------------------------------------------
+
+const HOLDING = 1;
+const BALANCE = 2;   // seeded, simulated (UC-0, BR-51)
+
+console.log(`\n--- 1.6 quote object ---`);
+console.log(`holding ${HOLDING} ${asset}, recorded balance ${BALANCE} ${asset}, ` +
+  `${TARGET_DAYS}-day target, premium cap ${usd(MAX_PREMIUM)}\n`);
+
+try {
+  const q = await buildQuote(asset, {
+    units: HOLDING,
+    balance: BALANCE,
+    targetDate: TARGET_DAYS,
+    maxPremiumUsdc: MAX_PREMIUM,
+    validitySeconds: Number(process.env.QUOTE_VALIDITY_SECONDS ?? 60),
+  });
+
+  console.log(`  quote ${q.quoteId}`);
+  console.log(`  valid for ${q.validForSeconds}s, until ${q.expiresAt}   fresh: ${isQuoteFresh(q)}`);
+  console.log(`\n  protection`);
+  console.log(`    floor              ${usd(q.actual.floorUsdc)}  (-${q.actual.protectionPct}%)`);
+  console.log(`    expires            ${q.actual.expiry.slice(0, 10)}  ` +
+    `(${q.actual.daysToExpiry} days, ${q.actual.expiryGapDays} after the target)`);
+  console.log(`    covers             ${q.size.protectedUnits} of ${q.requested.units} ${asset}` +
+    `   (limited by: ${q.size.boundBy})`);
+  console.log(`\n  cost`);
+  console.log(`    premium            ${usd(q.cost.premiumUsdc)}  ` +
+    `(${usd(q.cost.premiumPerContractUsdc)}/contract, ${q.cost.premiumPctOfSpot}% of spot)`);
+  console.log(`\n  maximum loss (BR-2 — three different questions)`);
+  console.log(`    on the protection  ${usd(q.maxLoss.onProtection).padStart(10)}   the premium, and nothing more`);
+  console.log(`    on this purchase   ${usd(q.maxLoss.onProtectedPortion).padStart(10)}   <-- forConfirmation`);
+  console.log(`    on the holding     ${usd(q.maxLoss.onWholeHolding).padStart(10)}   includes pre-existing exposure`);
+  console.log(`\n  disclosure`);
+  console.log(`    size reduced       ${q.disclosure.sizeReduced}`);
+  console.log(`    unprotected        ${q.disclosure.unprotectedUnits} ${asset} = ` +
+    `${usd(q.disclosure.unprotectedValueUsdc)}`);
+  console.log(`    expiry later       ${q.disclosure.expiryLaterThanRequested}`);
+  console.log(`\n  if ${asset} goes to zero, the floor pays ${usd(q.payout.maxPayoutUsdc)}`);
+
+  // The frontend consumes JSON. Nothing here may be a BigInt or a Date.
+  const json = JSON.stringify(q);
+  console.log(`\n  JSON-safe: ${json.length} bytes, ` +
+    `raw order excluded: ${!('order' in JSON.parse(json))}, ` +
+    `order still reachable server-side: ${q.order !== undefined}`);
+} catch (e) {
+  if (e instanceof QuoteRefusedError) {
+    console.log(`  refused [${e.code}]: ${e.message}`);
+  } else throw e;
+}
+
+// The three limits behave differently on purpose.
+console.log(`\n--- 1.6 refuse vs clamp ---`);
+for (const [label, opts] of [
+  ['balance exceeded (refuse)', { units: 5, balance: 2 }],
+  ['premium cap (clamp)', { units: 1, balance: 2, maxPremiumUsdc: 1 }],
+  ['unreachable expiry (refuse)', { units: 1, balance: 2, targetDate: 62 }],
+]) {
+  try {
+    const q = await buildQuote(asset, { targetDate: TARGET_DAYS, maxPremiumUsdc: MAX_PREMIUM, ...opts });
+    console.log(`  ${label.padEnd(30)} -> quoted ${q.size.protectedUnits} ${asset}, ` +
+      `premium ${usd(q.cost.premiumUsdc)}, boundBy ${q.size.boundBy}`);
+  } catch (e) {
+    if (!(e instanceof QuoteRefusedError)) throw e;
+    console.log(`  ${label.padEnd(30)} -> refused [${e.code}]`);
   }
 }
