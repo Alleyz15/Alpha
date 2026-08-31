@@ -22,6 +22,7 @@ import { insertPurchasedTier } from '../src/db/quotes.js';
 import { insertPendingPosition, getPosition, listPositionEvents } from '../src/db/positions.js';
 import { getDemoUser } from '../src/api/demoUser.js';
 import { db } from '../src/db/client.js';
+import { discardTestRows } from '../src/db/testCleanup.js';
 import { getWalletBalances } from '../src/thetanuts/wallet.js';
 import { readAllowance } from '../src/thetanuts/allowance.js';
 import { getWalletAddressChecksummed } from '../src/thetanuts/signer.js';
@@ -103,9 +104,7 @@ async function discardUnbroadcastRows(why) {
     console.log('\n  Rows KEPT: a transaction was already in flight and the record must survive.');
     return;
   }
-  await db.from('position_events').delete().eq('position_id', position.id);
-  await db.from('positions').delete().eq('id', position.id);
-  await db.from('quotes').delete().eq('id', quoteRow.id);
+  await discardTestRows({ positionId: position.id, quoteId: quoteRow.id });
   console.log(`  rows discarded (${why}) — nothing was broadcast`);
 }
 

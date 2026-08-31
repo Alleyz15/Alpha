@@ -172,6 +172,7 @@ export async function purchaseQuote({ quoteId, tierId }) {
     optionAddress: null,
     explorerUrl: null,
     fill: 'operator',
+    paymentStatus: 'held',
     simulated: true,
   };
 
@@ -185,6 +186,8 @@ export async function purchaseQuote({ quoteId, tierId }) {
     status: 'pending_fill',
     simulated: true,
     fill: 'operator',
+    paymentStatus: 'held',
+    premiumUsdc: selectedTier.cost.premiumUsdc,
   };
 }
 

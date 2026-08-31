@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-import { toApiErrorViewModel } from '../adapters/quoteViewModel.js';
+import { toApiErrorViewModel, toPaymentStatusLabel } from '../adapters/quoteViewModel.js';
 import { ArrowIcon, ClockIcon, ShieldIcon } from '../components/Icons.jsx';
 import FloorCrossingScenario from '../components/FloorCrossingScenario.jsx';
 import RealityDisclosure from '../components/RealityDisclosure.jsx';
@@ -19,6 +19,7 @@ function useSecondsRemaining(expiresAt) {
 
 function PurchaseComplete({ purchase, tier, isMock, reality, onViewDashboard }) {
   const hasOnchainTransaction = purchase.fill === 'onchain' && typeof purchase.txHash === 'string';
+  const paymentStatusLabel = toPaymentStatusLabel(purchase.paymentStatus);
 
   return (
     <section className="completion-card" aria-labelledby="complete-title">
@@ -33,6 +34,11 @@ function PurchaseComplete({ purchase, tier, isMock, reality, onViewDashboard }) 
       />
 
       <RealityDisclosure variant="transaction" isMock={isMock} reality={reality} fill={purchase.fill} explorerUrl={purchase.explorerUrl} />
+
+      <p className="payment-status-summary">
+        <span>Payment status</span>
+        <strong>{isMock ? 'Sample · ' : ''}{paymentStatusLabel}</strong>
+      </p>
 
       <div className="completion-actions">
         <button className="secondary-button" type="button" onClick={onViewDashboard}>View my protection</button>

@@ -35,8 +35,11 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
               <div className="position-metric"><small>Protection floor</small><strong>{position.floorLabel}</strong></div>
               <div className="position-metric"><small>End date</small><strong>{position.expiryLabel}</strong></div>
               <div className="position-metric">
-                <small>{position.fill === 'onchain' ? 'Cost paid' : 'Payment status'}</small>
-                <strong>{position.fill === 'onchain' ? position.premiumLabel : 'Not paid yet'}</strong>
+                <small>Payment status</small>
+                <strong>
+                  {isMock ? 'Sample · ' : ''}{position.paymentStatusLabel}
+                  {position.paymentStatus === 'paid' ? ` · ${position.premiumLabel}` : ''}
+                </strong>
               </div>
               <RealityDisclosure variant="positionStatus" isMock={isMock} statusLabel={position.statusLabel} />
               <RealityDisclosure variant="transaction" isMock={isMock} reality={reality} fill={position.fill} explorerUrl={position.explorerUrl} compact />
