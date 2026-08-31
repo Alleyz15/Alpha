@@ -33,6 +33,7 @@ import { ethers } from 'ethers';
 import { client } from '../src/thetanuts/client.js';
 import { db } from '../src/db/client.js';
 import { getWalletAddress } from '../src/thetanuts/signer.js';
+import { resolveUnverified, resolveWallet as _rw } from '../src/thetanuts/reconcile.js';
 
 // The wallet whose positions we reconcile. Prefer THETANUTS_WALLET_ADDRESS so
 // this audit runs read-only without the private key; otherwise derive it from
@@ -50,6 +51,10 @@ function resolveWallet() {
 }
 
 const wallet = resolveWallet();
+
+// Repairing is opt-in and separate from auditing: an audit you cannot run
+// freely is an audit nobody runs.
+const applyFixes = process.argv.includes('--confirm');
 
 /** The option address on an indexer entry, however the field is named. */
 const addrOf = (o) =>
@@ -208,6 +213,33 @@ if (!indexerOk) {
     console.log('\n  This is the unrecoverable case (BR-31): the chain owns it, but no');
     console.log('  local row records which user it belongs to. Investigate before the demo.');
   }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Resolve positions stuck at pending_verification
+// ---------------------------------------------------------------------------
+//
+// Pre-flight check 0 blocks EVERY fill while any position sits unresolved, so
+// one timeout during a rehearsal wedges the fill path. Each row is decided from
+// evidence - a receipt, or a matching position on chain - never from a guess.
+
+console.log("\n--- unresolved fills (pending_verification) ---\n");
+
+const resolutions = await resolveUnverified({ wallet, apply: applyFixes });
+
+if (resolutions.length === 0) {
+  console.log('  none — nothing is blocking the fill path.');
+} else {
+  for (const r of resolutions) {
+    const verb = r.applied ? `-> ${r.action}` : `would be ${r.action}`;
+    console.log(`  ${r.positionId}`);
+    console.log(`    ${verb.padEnd(22)} ${r.reason}`);
+  }
+  if (!applyFixes) {
+    console.log("\n  report only — re-run with --confirm to apply these.");
+  }
+  // An unresolved row still blocks fills, so it counts as a finding.
+  mismatches += resolutions.filter((r) => !r.applied).length;
 }
 
 // ---------------------------------------------------------------------------
