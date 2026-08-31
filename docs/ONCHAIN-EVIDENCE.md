@@ -78,3 +78,83 @@ of a position that is merely active.
 **If the payout is zero** (ETH finished above $2,320) that is a *success*, not a
 failure: the protection was not needed. Record it as such — US-7 exists because a
 user who sees "expired worthless" without explanation assumes something broke.
+
+---
+
+## 4. Options-powered lending — 31 Aug 2026
+
+**A USDC loan whose size IS the option's strike times its contract count.** Not a
+loan-to-value ratio we chose; a number three independent sources agree on.
+
+### The backing put
+
+| | |
+|---|---|
+| **BaseScan** | https://basescan.org/tx/0x637242cabaf89a69cea5d240da3ef4ab78b380df1292f87b6df8a58a33a0fd94 |
+| Option contract | `0xaa77372360c2414198080dc837df680674b6e7e1` |
+| Strike (floor) | $2,300 |
+| Contracts | **0.001999** |
+| Expiry | 2026-09-03 08:00 UTC |
+| Premium paid | 0.022186 USDC |
+| Position row | `efa8d071-444c-46f5-a0e6-8b7915f6c778` |
+
+### The disbursement
+
+| | |
+|---|---|
+| **BaseScan** | https://basescan.org/tx/0x29165d16cb9ad2a38f7fa875c0d436464cd9a91090e3f6699074be134fa0201b |
+| Block | 50699221 |
+| Amount | **4.597700 USDC** |
+| From | `0x4fB77837bf2A0B86D167627Ded2E894f92F15127` (the app's wallet) |
+| To | `0xc169c7c000cAA28807Ab2585D707C7A6457d718E` |
+| Loan row | `740a417d-3393-444f-bc09-6979d2315971` |
+| Due | 2026-09-03 08:00 UTC — **the put's expiry** (BR-48) |
+
+### Why the number is provable by inspection
+
+```
+credit limit = strike x contracts = 2300 x 0.001999 = 4.5977 USDC
+```
+
+**Both figures come from the option contract, not from our quote.** Read
+`0xaa77372360c2414198080dc837df680674b6e7e1` and you get strike `230000000000`
+(8 decimals) and `numContracts` `1999` (6 decimals). Multiply them and you have the
+amount transferred, to the cent.
+
+Three independent sources agree on 4.5977:
+
+1. the option contract's strike x contracts
+2. **the collateral the counterparty locked** — 4.597700 USDC
+3. the USDC actually transferred on chain
+
+There is no ratio anywhere in the derivation. `backend/src/lending/credit.js`
+contains no configurable factor, and the database refuses a `credit_limit` that
+does not equal strike x contracts — a loan-to-value ratio cannot be inserted.
+
+### The row was corrected from chain, and that is part of the evidence
+
+Our database first recorded **2000** contracts, the count we quoted. The chain says
+**1999**. The post-fill read that should have caught this returned null: the option
+contract was not yet queryable milliseconds after its creation confirmed.
+
+The row was corrected to 1999 through `transitionPosition`, so the event trail
+records the quoted count, the on-chain count, the exact read that produced it, and
+why the first read failed.
+
+This is worth stating rather than hiding. The credit limit is $4.5977 and not
+$4.6000 **because the number was taken from the chain rather than asserted from our
+own quote** — which is precisely the claim the artefact exists to make. A figure
+that needed a footnote would not be provable by inspection.
+
+### What is real and what is not
+
+```
+the put              real, on Base mainnet, buyer side
+the credit limit     derived from that put, not configured
+the USDC transfer    real, 4.597700 moved between two addresses
+the recipient        an address we control, standing in for a user address -
+                     the prototype is custodial and users have no wallets (BR-32)
+repayment            NOT built. Roadmap.
+```
+
+Wallet after: **4.773852 USDC**, 0.00444069 ETH.
