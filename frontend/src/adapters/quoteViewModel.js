@@ -7,6 +7,16 @@ const currency = new Intl.NumberFormat('en-US', {
 
 const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
 
+const paymentStatusCopy = {
+  held: 'Funds locked',
+  paid: 'Paid',
+  refunded: 'Refunded',
+};
+
+export function toPaymentStatusLabel(paymentStatus) {
+  return paymentStatusCopy[paymentStatus] ?? 'Payment status unavailable';
+}
+
 const tierCopy = {
   highest: { name: 'More protection', description: 'A higher floor with broader coverage.' },
   middle: { name: 'Balanced', description: 'A practical balance of cost and protection.' },
@@ -128,9 +138,19 @@ export function toPositionViewModel(position) {
     failed: 'Failed',
   };
 
+  const paymentStatus = paymentStatusCopy[position.paymentStatus]
+    ? position.paymentStatus
+    : position.fill === 'onchain'
+      ? 'paid'
+      : ['pending', 'pending_fill', 'pending_verification'].includes(position.status)
+        ? 'held'
+        : null;
+
   return {
     ...position,
     statusLabel: statusCopy[position.status] ?? position.status,
+    paymentStatus,
+    paymentStatusLabel: toPaymentStatusLabel(paymentStatus),
     amountLabel: `${number.format(position.protectedAmount)} ${position.asset}`,
     floorLabel: formatUsdc(position.protectionFloorUsdc),
     premiumLabel: formatUsdc(position.premiumPaidUsdc),

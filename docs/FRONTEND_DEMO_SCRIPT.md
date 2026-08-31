@@ -75,6 +75,10 @@
 - **Transaction is slow:** “The request has been submitted by the app's wallet. We can verify its status through the returned BaseScan transaction.”
 - **BaseScan is slow:** Stay on the success screen and point to the transaction hash; do not spend demo time waiting on another site.
 
+## Product scope line (if asked)
+
+> The backend already supports a target-amount mode, but we have deliberately kept it out of the interface for now. The currently buyable market only reaches about three days, which is not long enough to make a promise such as protecting next month's rent.
+
 ## Language guardrails
 
 - Say **protection floor**, **amount paid**, **end date**, and **pays in USDC**.
