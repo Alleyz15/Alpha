@@ -25,9 +25,37 @@ export async function getDemoContext() {
   return {
     displayName: user.display_name,
     balances: balances.map((b) => ({ asset: b.asset, amount: Number(b.amount) })),
+    // Kept: the balance is seeded, never deposited (BR-50).
     simulated: true,
+    reality: REALITY,
   };
 }
+
+/**
+ * Where the boundary between simulated and real currently sits (BR-51).
+ *
+ * Four stages, four independent answers. The interface previously had two
+ * states - "mock" and "real" - and no way to express the one we are actually
+ * in: live quotes off the Base order book, with the fill executed by the
+ * operator rather than by the confirm button. In that state the old "real"
+ * copy told the user a transaction had been sent, which was untrue.
+ *
+ *   balance     'simulated'  seeded, no deposit flow exists (BR-50)
+ *   quote       'live'       priced from the live book, every time
+ *   fill        'operator'   POST /api/purchase does NOT broadcast. A person
+ *                            runs scripts/fill.js. Becomes 'automatic' if the
+ *                            fill is ever wired into the request path.
+ *   settlement  'live'       read from chain by the scheduler
+ *
+ * Values come from a closed set so the interface can switch on them rather
+ * than inferring from nulls. The wording is the frontend's (BR-3).
+ */
+export const REALITY = Object.freeze({
+  balance: 'simulated',
+  quote: 'live',
+  fill: 'operator',
+  settlement: 'live',
+});
 
 /**
  * POST /api/quote
@@ -152,12 +180,16 @@ export async function postPurchase(body) {
     positionId: position.id,
     // Null, not a synthesised hash. Nothing was broadcast, and inventing a
     // transaction id would make sample data look verifiable - exactly what
-    // the interface stopped doing on purpose. Phase 3 populates this.
+    // the interface stopped doing on purpose.
     txHash: null,
     explorerUrl: null,
     optionAddress: null,
     status: 'pending_fill',
     simulated: true,
+    // 'operator': the row is written and a person fills it with
+    // scripts/fill.js. The confirm button did not send a transaction, and the
+    // interface must not say it did (BR-51).
+    fill: REALITY.fill,
   };
 }
 
@@ -182,8 +214,19 @@ export async function getPositions() {
       premiumPaidUsdc: p.premium_paid === null ? 0 : Number(p.premium_paid),
       status: p.status,
       payoutUsdc: p.payout === null ? null : Number(p.payout),
-      // Populated once there is a transaction to point at.
+      settlementPriceUsdc: p.settlement_price === null ? null : Number(p.settlement_price),
+
+      // The hash itself, not only a link. The interface shows a truncated
+      // hash next to the link, and could not do that from a URL alone.
+      txHash: p.tx_hash,
+      optionAddress: p.option_address,
       explorerUrl: p.tx_hash ? `https://basescan.org/tx/${p.tx_hash}` : null,
+
+      // Per position, because they differ: a position filled by the operator
+      // has a real transaction, while one whose row exists but has not been
+      // filled yet does not. 'onchain' is a promise the interface may make;
+      // 'operator' is not.
+      fill: p.tx_hash ? 'onchain' : 'operator',
       simulated: p.tx_hash === null,
     })),
   };
