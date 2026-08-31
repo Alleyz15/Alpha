@@ -12,10 +12,13 @@ unprotected one flagging for liquidation while the protected one does not.
 
 ```
 GET /api/loans/:loanId/stress?price=1800
+GET /api/loans/:loanId/stress?price=1800&rule=current
 ```
 
-`price` is the hypothetical ETH price to test, in dollars. That is the only
-input — everything else is read from the loan and the put backing it.
+`price` is the hypothetical ETH price to test, in dollars.
+
+`rule` is `as-disbursed` (the default) or `current`, and it matters — see
+**Which credit rule** below. Everything else is read from the loan and the put.
 
 ---
 
@@ -32,6 +35,15 @@ input — everything else is read from the loan and the put backing it.
     "principal": 4.59599,
     "interest": 0.00171,
     "total": 4.5977
+  },
+
+  "ruleApplied": "current",
+  "note": "This loan was disbursed under the previous credit rule, which lent the full floor. Shown here under the current rule, which reserves interest.",
+
+  "asDisbursed": {
+    "principal": 4.5977,
+    "underCurrentRule": 4.59599,
+    "writtenUnderCurrentRule": false
   },
 
   "rule": {
@@ -91,6 +103,38 @@ makes the product's central claim false.
 
 ---
 
+## Which credit rule — and why the label is not optional
+
+The first real loan was disbursed under the ORIGINAL credit rule, which lent the
+whole floor and then charged interest on top. Its debt therefore exceeds the
+guarantee, and **both sides liquidate** — the screen shows our own product
+failing.
+
+That is the honest picture of that loan, and `rule=as-disbursed` shows it,
+unflattering and all. Keep that view. A judge asking "what does the real loan
+look like?" should get the real answer.
+
+`rule=current` re-derives what the same put would support under the revised rule,
+where the limit reserves the interest it charges. Under that rule the
+demonstration works: the protected side survives, the unprotected one does not.
+
+**It is a hypothetical, and the payload says so.** `ruleApplied` names the rule
+and `note` explains the difference in plain language. **Display the note whenever
+it is non-null.** Do not decide whether to — same principle as `isRealProtocol`.
+Showing a loan under a rule it was not written under, without saying so, is the
+thing this field exists to prevent.
+
+`note` is `null` when nothing is being re-derived, including for any loan written
+under the current rule — so "render it if present" is the whole logic.
+
+`asDisbursed` is always present, so both figures can be compared without a second
+call.
+
+**The default is `as-disbursed`.** A default that quietly shows a hypothetical is
+exactly the kind of thing that stops being noticed.
+
+---
+
 ## The one subtlety worth knowing
 
 `debt.total` is measured against **`floorUsdc`**, not against the credit limit.
@@ -119,8 +163,11 @@ kind and frightening without being informative.
 
 ---
 
-## Not yet built
+## Status
 
-The endpoint does not exist at the time of writing — this is the agreed shape so
-you can build against it. If you need it stubbed sooner than the backend lands,
-say so and it can return a fixed response behind the same URL.
+**Built and live.** Restart the backend (`npm run api`) if yours predates 1 Sep —
+the route did not exist before then and an old process will return 404.
+
+Errors follow the usual envelope: `404 NOT_FOUND` for an unknown loan,
+`400 INVALID_REQUEST` for a missing or non-positive `price`, or an unknown
+`rule`.

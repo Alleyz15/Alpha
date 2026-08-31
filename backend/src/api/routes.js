@@ -290,7 +290,7 @@ export async function getPositions() {
  * not in the interface. Same principle as the reality block: a truth the screen
  * must tell should not depend on the screen remembering to tell it.
  */
-export async function getLoanStress(loanId, priceParam) {
+export async function getLoanStress(loanId, priceParam, ruleParam) {
   if (priceParam === null || priceParam === undefined || priceParam === '') {
     throw new ApiError('INVALID_REQUEST', 'A price is required, e.g. ?price=1800.');
   }
@@ -300,8 +300,14 @@ export async function getLoanStress(loanId, priceParam) {
     throw new ApiError('INVALID_REQUEST', `price must be a positive number, got '${priceParam}'.`);
   }
 
+  const rule = ruleParam ?? 'as-disbursed';
+  if (!['as-disbursed', 'current'].includes(rule)) {
+    throw new ApiError('INVALID_REQUEST',
+      `rule must be 'as-disbursed' or 'current', got '${ruleParam}'.`);
+  }
+
   try {
-    return await stressLoanById(loanId, price);
+    return await stressLoanById(loanId, price, rule);
   } catch (error) {
     // PostgREST reports a missing single() row as code PGRST116 - the message
     // only says the result could not be coerced to one object, and the "0 rows"

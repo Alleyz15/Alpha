@@ -122,3 +122,40 @@ test('a non-positive price is refused rather than producing a nonsense answer', 
   assert.throws(() => stressLoan({ loan, position, price: -100 }), RangeError);
   assert.throws(() => stressLoan({ loan, position, price: NaN }), RangeError);
 });
+
+test('the current-rule view is labelled in the payload, not left to the interface', () => {
+  const r = stressLoan({ loan: oldRuleLoan, position, price: 1000, rule: 'current' });
+
+  assert.equal(r.ruleApplied, 'current');
+  assert.match(r.note, /disbursed under the previous credit rule/);
+  assert.equal(r.asDisbursed.writtenUnderCurrentRule, false);
+  assert.equal(r.asDisbursed.principal, 4.5977);
+  assert.ok(r.asDisbursed.underCurrentRule < r.asDisbursed.principal);
+
+  // And under that rule the demonstration works.
+  assert.equal(r.protected.wouldLiquidate, false);
+  assert.equal(r.unprotected.wouldLiquidate, true);
+});
+
+test('as-disbursed is the default, so a hypothetical is never shown by accident', () => {
+  const a = stressLoan({ loan: oldRuleLoan, position, price: 1000 });
+  const b = stressLoan({ loan: oldRuleLoan, position, price: 1000, rule: 'as-disbursed' });
+
+  assert.equal(a.ruleApplied, 'as-disbursed');
+  assert.deepEqual(a, b);
+  assert.equal(a.note, null, 'no note when nothing is being re-derived');
+  assert.equal(a.debt.principal, 4.5977, 'the real principal, unmodified');
+});
+
+test('a loan already written under the current rule carries no note', () => {
+  const r = stressLoan({ loan: newRuleLoan(), position, price: 1000, rule: 'current' });
+  assert.equal(r.note, null);
+  assert.equal(r.asDisbursed.writtenUnderCurrentRule, true);
+});
+
+test('an unknown rule is refused rather than silently defaulted', () => {
+  assert.throws(
+    () => stressLoan({ loan: oldRuleLoan, position, price: 1000, rule: 'whatever' }),
+    RangeError,
+  );
+});

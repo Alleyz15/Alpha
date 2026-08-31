@@ -60,15 +60,47 @@ const RULE = Object.freeze({
  * @param {number} [args.spotNow] - current spot, for context only
  * @returns {object} the API payload
  */
-export function stressLoan({ loan, position, price, spotNow = null }) {
+export function stressLoan({ loan, position, price, spotNow = null, rule = 'as-disbursed' }) {
   if (!Number.isFinite(price) || price <= 0) {
     throw new RangeError(`stressLoan: price must be a positive number, got ${price}`);
+  }
+  if (!['as-disbursed', 'current'].includes(rule)) {
+    throw new RangeError(`stressLoan: rule must be 'as-disbursed' or 'current', got '${rule}'`);
   }
 
   // The floor comes from the filled put, in bigint, at the stored scales - the
   // same derivation the credit limit uses (BR-39). Never a constant.
   const limit = creditLimitFor(position, { annualRatePct: Number(loan.interest_rate) });
-  const owed = amountOwed(loan);
+
+  // --- which rule is this loan being judged under? -------------------------
+  //
+  // The first real loan was disbursed under the ORIGINAL BR-39, which lent the
+  // whole floor and then charged interest on top - so its debt exceeds the
+  // guarantee and BOTH sides liquidate. That is the honest picture of that loan
+  // and 'as-disbursed' shows it, unflattering and all.
+  //
+  // 'current' re-derives what the same put would support under the revised rule.
+  // It is a hypothetical, and saying so is not optional: ruleApplied and note
+  // travel in the payload for the same reason isRealProtocol does. An interface
+  // must not be able to show a loan under a rule it was not written under and
+  // leave that off the screen.
+  //
+  // The default is 'as-disbursed'. A default that quietly shows a hypothetical
+  // is exactly the kind of thing that stops being noticed.
+  const asDisbursedPrincipal = Number(loan.principal);
+  const currentRulePrincipal = creditLimitFor(position, {
+    annualRatePct: Number(loan.interest_rate),
+    now: new Date(loan.created_at),
+  }).creditLimitUsdc;
+
+  const writtenUnderCurrentRule =
+    Math.abs(asDisbursedPrincipal - currentRulePrincipal) < 0.000001;
+
+  const effectiveLoan = rule === 'current' && !writtenUnderCurrentRule
+    ? { ...loan, principal: currentRulePrincipal }
+    : loan;
+
+  const owed = amountOwed(effectiveLoan);
 
   const units = limit.contracts;
   const floorUsdc = limit.floorUsdc;
@@ -102,6 +134,22 @@ export function stressLoan({ loan, position, price, spotNow = null }) {
       principal: usdc6(owed.principalUsdc),
       interest: usdc6(owed.interestUsdc),
       total: owed.totalUsdc,
+    },
+
+    // Which credit rule produced the debt above, and - if it is not the rule the
+    // loan was actually written under - why the figures differ. The interface
+    // DISPLAYS this; it does not decide whether to.
+    ruleApplied: rule,
+    note: rule === 'current' && !writtenUnderCurrentRule
+      ? 'This loan was disbursed under the previous credit rule, which lent the ' +
+        'full floor. Shown here under the current rule, which reserves interest.'
+      : null,
+
+    // Always present, so the two figures can be compared without a second call.
+    asDisbursed: {
+      principal: usdc6(asDisbursedPrincipal),
+      underCurrentRule: usdc6(currentRulePrincipal),
+      writtenUnderCurrentRule,
     },
 
     rule: RULE,
@@ -143,9 +191,10 @@ export function crossoverPrice({ loan, position }) {
  *
  * @param {string} loanId
  * @param {number} price
+ * @param {'as-disbursed'|'current'} [rule]
  * @returns {Promise<object>}
  */
-export async function stressLoanById(loanId, price) {
+export async function stressLoanById(loanId, price, rule = 'as-disbursed') {
   const { db, unwrap } = await import('../db/client.js');
   const { getSpotPrice } = await import('../thetanuts/market.js');
 
@@ -172,5 +221,5 @@ export async function stressLoanById(loanId, price) {
     // slow would be the wrong trade.
   }
 
-  return stressLoan({ loan, position, price, spotNow });
+  return stressLoan({ loan, position, price, spotNow, rule });
 }

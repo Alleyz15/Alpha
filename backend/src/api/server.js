@@ -71,7 +71,7 @@ const routes = [
     method: 'GET',
     pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/stress$'),
     path: '/api/loans/:loanId/stress',
-    handler: (_body, { params, query }) => getLoanStress(params[0], query.get('price')),
+    handler: (_body, { params, query }) => getLoanStress(params[0], query.get('price'), query.get('rule')),
   },
 ];
 
