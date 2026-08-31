@@ -48,13 +48,17 @@ function buildScenarios(chosen, size, spot) {
   const contracts18 = toPayoutContracts(size.contractsRaw);
 
   // Representative prices, highest first: a rise (protection unused), unchanged,
-  // exactly the floor (the boundary where payout is still zero), and a fall well
+  // exactly the floor (the boundary where payout is still zero), and a fall
   // below the floor (where the protection pays).
   const prices = [
     { label: 'up', priceUsdc: spot * 1.10 },
     { label: 'flat', priceUsdc: spot },
     { label: 'atFloor', priceUsdc: chosen.strike },
-    { label: 'down', priceUsdc: spot * 0.80 },
+    // A fall of 20% from spot, but never above the floor — so the crash case
+    // still shows the protection paying even if the floor itself is deep. With
+    // a fixed spot*0.80 a deep floor could sit below the "down" price and read
+    // as a zero payout, which would misrepresent the protection (finding #6).
+    { label: 'down', priceUsdc: Math.min(spot * 0.80, chosen.strike * 0.95) },
   ];
 
   return prices.map(({ label, priceUsdc }) => {
