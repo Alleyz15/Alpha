@@ -8,6 +8,7 @@
     "db:check": "node --env-file-if-exists=../.env scripts/db-check.js",
     "api:check": "node --env-file-if-exists=../.env scripts/api-check.js",
     "preflight": "node --env-file-if-exists=../.env scripts/preflight-check.js",
+    "fill:position": "node --env-file-if-exists=../.env scripts/fill-position.js",
     "approve": "node --env-file-if-exists=../.env scripts/approve.js",
     "inspect:orders": "node --env-file-if-exists=../.env scripts/inspect-order.js",
     "inspect:sdk": "node --env-file-if-exists=../.env scripts/inspect-sdk.js",
