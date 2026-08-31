@@ -38,19 +38,49 @@ Before implementing anything, the assistant must:
 
 ## Where we are right now
 
-**Phase 1 tasks 1.1 to 1.7 complete. Phase 2 complete. API layer built (5.1, 5.2). Phase 3 through 3.6 — nothing broadcast yet.**
+**Last verified against the code and the chain on 31 Aug, not against this file.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK on Base mainnet, spot prices, buyable-put filtering, decimal conversion, tier selection, sizing, quote assembly, goal-based input. Database: schema, RLS, seeds and access layer. HTTP API: four endpoints the interface consumes.
+**A full purchase has happened on Base mainnet.** tx `0x6420c71c…`, an ETH put with a
+$2,320 floor expiring 2 Sep, 0.495926 USDC. We hold the buyer side, confirmed on
+chain. See `docs/ONCHAIN-EVIDENCE.md`.
 
-Not started: 1.8, 3.7 onward. **Nothing has been broadcast.** The pre-flight checklist runs and blocks; the fill itself is unwritten.
+Working: quote engine (1.1–1.7), database with RLS and seeds, HTTP API, the fill
+path with its ten-item pre-flight, and the settlement scheduler.
 
-⚠️ **The buyable book tops out at ~26 days (BR-52).** A 30-day target returns nothing under BR-6. Quote 25 days. Only ETH and BTC are tradable.
+Not started: 1.8 scenario preview, 3.10 reconciliation, 5.7 front-to-back
+integration.
 
-**Nothing is blocked.** All open questions from requirements.md §7 are resolved.
+### The product changed shape on 31 Aug
 
-**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `PRODUCT-THINKING.md`.
+Two bugs in the order filter were found while trying to fill (see Phase 3). Once
+corrected, the book looks nothing like what the earlier documents describe:
 
----
+| | Was believed | Actually |
+|---|---|---|
+| Longest tenor | ~26 days | **2.4 days** (vanilla puts) |
+| Deepest floor | 20%+ | **~6%** |
+| Tradable assets | ETH, BTC | **ETH, BTC, SOL, BNB** (+AVAX partial) |
+
+**So the product is event protection, not long-horizon insurance:** *hold your floor
+through tonight, settles in two days.* The scenario is "there is a CPI print tonight
+and I want to sleep", not "my rent is due next month".
+
+**The shallow floor is the advantage, and it leads.** A 20% floor over 30 days
+rarely triggers, so the insurance never pays. A 6% floor over two days pays often,
+because ETH moves 6% in two days routinely — and it is why a full lifecycle can be
+demonstrated at all.
+
+Entry point B (income/rent hedging) moves to roadmap: two days cannot carry "next
+month", and rolling is not built.
+
+⚠️ **Settlement lands 2026-09-02 08:00 UTC = 16:00 MYT, Tuesday afternoon.** See
+Phase 4.
+
+**Nothing is blocked** except 5.7, which waits on the purchase path being real or
+the interface gaining a third state for "real quote, simulated fill".
+
+**Scope:** Phase 8 is cut — see Phase 8. Phase 7 lending is unassessed against the
+corrected book.
 
 ## Phase 0 — Foundation ✅
 
@@ -91,7 +121,7 @@ Not started: 1.8, 3.7 onward. **Nothing has been broadcast.** The pre-flight che
 | 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters. The premium cap is for the fill path only, not quoting (BR-33) |
 | 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
 | 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5), USDC not fiat (BR-45) |
-| 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
+| 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` is not in the quote path — only in the decimals demo |
 
 **Definition of done:** `node quote.js` prints a complete, correct quote for ETH using live data.
 
@@ -119,7 +149,7 @@ Not started: 1.8, 3.7 onward. **Nothing has been broadcast.** The pre-flight che
 
 ---
 
-## Phase 3 — Buy execution 🔄 ← highest risk
+## Phase 3 — Buy execution 🔄 ← first fill done
 
 **Goal:** actually fill an order on Base mainnet with real USDC.
 
@@ -134,10 +164,10 @@ Not started: 1.8, 3.7 onward. **Nothing has been broadcast.** The pre-flight che
 | 3.5 | Dry run the fill | ✅ | `callStaticFillOrder` wired as check 9. **Fails until an approval exists** — see below |
 | 3.5b | Pre-flight checklist as code | ✅ | `src/thetanuts/preflight.js` — ten items plus a `pending_verification` hard block. Reports every item, not just the first failure |
 | 3.6 | Write pending row, then broadcast | ✅ | Row written by the purchase path; check 10 verifies it is `pending` before any broadcast (BR-14) |
-| 3.7 | **First real on-chain fill** | ⬜ | Transaction confirmed, visible on BaseScan, ~1–3 USDC (BR-15) |
-| 3.8 | Record the result | ⬜ | Row updated to `active` with tx hash, option address, real fill price |
-| 3.9 | Handle failure paths | ⬜ | Revert → `failed`; timeout → `pending_verification`, never blind-retry |
-| 3.10 | Reconciliation script | ⬜ | Rebuilds all position facts from chain and diffs against the DB |
+| 3.7 | **First real on-chain fill** | ✅ | tx `0x6420c71c…` block 50670079, 0.495926 USDC. See `docs/ONCHAIN-EVIDENCE.md` |
+| 3.8 | Record the result | ✅ | Row `active` with tx hash, option `0xa609b6fb…`, real premium 0.495926 (fee included) |
+| 3.9 | Handle failure paths | ✅ | Revert → `failed`, timeout → `pending_verification`, never retried. **Implemented, not yet exercised** — the one fill succeeded |
+| 3.10 | Reconciliation script | ⬜ | Not started. `getFullOptionInfo()` gives buyer/seller/size, which is most of it |
 
 **Definition of done:** a BaseScan link to our own transaction. **Save the hash — it's the proof the whole submission rests on.**
 
@@ -209,19 +239,19 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 5 — Frontend ⬜
+## Phase 5 — Frontend 🔄
 
 **Owner:** teammates. Backend exposes the API.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
 | 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. 4 endpoints, verified against the interface's adapter |
-| 5.2 | CORS configured | ✅ | `http://localhost:5173` explicitly, never a wildcard; preflight handled |
-| 5.3 | Quote screen | ⬜ | No options jargon anywhere (BR-3) |
-| 5.4 | Confirmation screen | ⬜ | Shows max loss explicitly (BR-2, US-9) |
-| 5.5 | Position dashboard | ⬜ | Status, floor, expiry, BaseScan link |
-| 5.6 | Custody disclosure | ⬜ | Visible in the UI, not buried (BR-32) |
-| 5.7 | Front-to-back integration verified | ⬜ | Both running together on one machine, full flow works |
+| 5.2 | CORS configured | ✅ | `http://localhost:5173` named explicitly, preflight handled, unknown origins not echoed — verified in `api:check` |
+| 5.3 | Quote screen | ✅ | `frontend/src/screens/QuoteScreen.jsx`, both entry modes, no options jargon (BR-3) |
+| 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
+| 5.5 | Position dashboard | ✅ | `DashboardScreen.jsx` — status, floor, expiry, BaseScan link |
+| 5.6 | Custody disclosure | ✅ | `RealityDisclosure.jsx` — "Who holds the funds?", shown not buried (BR-32) |
+| 5.7 | Front-to-back integration verified | ⬜ | Frontend still on `VITE_USE_MOCK_API=true`. **Blocked until the purchase path is real or the UI gains a third state** |
 
 **Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.
 
@@ -269,37 +299,40 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 8 — 26-day principal protection ⬜
+## Phase 8 — Principal-protected vault ❌ CUT
 
-> ⚠️ **Repositioned 30 Aug.** The buyable book tops out at ~26 days — the +62 day
-> expiry exists but every order on it is on the forbidden side (BR-52). Over 26
-> days the yield portion generates ~0.34 USDC, which buys 7–11 USDC of exposure:
-> a **participation rate of 4–7%, not 10–16%**.
->
-> The product is therefore named and pitched as **"26-day principal protection with
-> a small share of the upside"**, not as a savings vault. The guarantee is the
-> product; the upside is a bonus. Displaying 4–7% honestly is required (BR-38) —
-> a judge will calculate it.
+**Cut 31 Aug**, after measuring rather than assuming.
 
-**Depends on Phases 1–4**, for the same reason as Phase 7: it buys and settles an option, only a call instead of a put.
+Vanilla buy-side ETH **calls** exist, so the instrument is available:
 
-**The constraint that shapes it:** the longest *buyable* expiry is ~26 days. Over 26 days, 95 USDC at 5% generates ~0.34 USDC, which buys 7–11 USDC of exposure. **Participation rate is 4–7%.** That number goes on screen.
+```
+2026-08-31 (+0.3d)  3 strikes 2420-2460   premium $0.97-9.38/unit
+2026-09-01 (+1.3d)  7 strikes 2420-2540   premium $2.29-29.08/unit
+2026-09-02 (+2.3d)  9 strikes 2420-2580   premium $3.47-39.71/unit
+```
 
-**What's real:** the call, on Base mainnet, BaseScan verifiable.
-**What's simulated:** yield accrual, labelled as such in the UI.
+**The reason to cut is not the participation rate.** Worked at the longest tenor,
+a $100 deposit at 5%/yr over 2.3 days sets aside $99.97 and spends **$0.03** on a
+call, which buys ~$21 of exposure — a participation rate of about **21%**, higher
+than the 4–7% previously feared.
 
-| # | Task | Status | Acceptance |
-|---|---|---|---|
-| 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
-| 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
-| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. **Longest buyable expiry is ~26 days**, not 62 (BR-52) |
-| 8.4 | Simulated yield accrual | ⬜ | Labelled as simulated in the UI, not hidden (BR-37) |
-| 8.5 | Participation rate displayed | ⬜ | `exposure ÷ principal`, from the real premium paid (BR-38). See requirements.md for the full formula |
-| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+**The reason to cut is that there is nothing to protect the principal from.** Over
+2.3 days the yield being given up is three cents. "Principal-protected" describes a
+product where money grows safely over a meaningful period while keeping some
+upside; over two days there is no time for anything to grow, and the guarantee
+protects against a risk that does not exist at that horizon. It would be a
+correct-looking number attached to a product that means nothing — and a judge who
+does the arithmetic sees a three-cent yield portion dressed up as structured
+finance.
 
-**Definition of done:** a BaseScan link to a real call purchase, with the interface stating the participation rate and labelling the simulated yield.
+Building it would also cost time that Phase 5 integration and rehearsal need, five
+days from freeze.
+
+**If the book ever carries long-dated vanilla calls again, revisit.** The formulas
+in `requirements.md` BR-38 are correct; only the tenor makes them meaningless.
 
 ---
+
 
 ## Timeline
 
