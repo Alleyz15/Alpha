@@ -34,6 +34,7 @@ import { client } from '../src/thetanuts/client.js';
 import { db } from '../src/db/client.js';
 import { getWalletAddress } from '../src/thetanuts/signer.js';
 import { resolveUnverified, resolveWallet as _rw } from '../src/thetanuts/reconcile.js';
+import { findStandingDebits } from '../src/db/balances.js';
 
 // The wallet whose positions we reconcile. Prefer THETANUTS_WALLET_ADDRESS so
 // this audit runs read-only without the private key; otherwise derive it from
@@ -243,6 +244,39 @@ if (resolutions.length === 0) {
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// 4. Standing debits: money held against a fill that never confirmed
+// ---------------------------------------------------------------------------
+//
+// The operator model puts a real window between the debit (at purchase) and
+// the fill (minutes later, by hand). That window is a deliberate consequence
+// of the design, not a defect - but it must be visible, and surfaced by the
+// same command as every other unresolved state rather than a special one.
+
+console.log("\n--- standing debits ---\n");
+
+const debits = await findStandingDebits();
+
+if (debits.held.length === 0 && debits.refundDue.length === 0) {
+  console.log('  none — every debit matches a confirmed or refunded fill.');
+} else {
+  for (const d of debits.held) {
+    console.log('  HELD       ' + d.position_id + '  ' + Math.abs(d.amount) + ' ' + d.asset + '  (position ' + d.positionStatus + ')');
+  }
+  for (const d of debits.refundDue) {
+    console.log('  REFUND DUE ' + d.position_id + '  ' + Math.abs(d.amount) + ' ' + d.asset + '  (fill failed, user still charged)');
+  }
+  if (debits.held.length) {
+    console.log("\n  HELD is correct while a fill is pending or unverified: the money is");
+    console.log('  reserved, not spent, and the interface should say "payment held".');
+  }
+  if (debits.refundDue.length) {
+    mismatches += debits.refundDue.length;
+    console.log("\n  REFUND DUE is a user charged for protection they do not have.");
+    console.log('  Refund with refundBalance(); it writes a compensating row, never a deletion.');
+  }
+}
 
 console.log('');
 if (mismatches > 0) {

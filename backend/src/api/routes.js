@@ -7,7 +7,8 @@
 
 import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
 import { insertPurchasedTier } from '../db/quotes.js';
-import { insertPendingPosition, listPositionsByUser, listBalances } from '../db/index.js';
+import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
+import { debitBalance } from '../db/balances.js';
 import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
@@ -25,6 +26,9 @@ export async function getDemoContext() {
   return {
     displayName: user.display_name,
     balances: balances.map((b) => ({ asset: b.asset, amount: Number(b.amount) })),
+    // The spending balance, called out so the interface does not have to find
+    // it among the asset holdings. Simulated like the rest (BR-50).
+    usdcBalance: Number(balances.find((b) => b.asset === 'USDC')?.amount ?? 0),
     // Kept: the balance is seeded, never deposited (BR-50).
     simulated: true,
     reality: REALITY,
@@ -171,6 +175,42 @@ export async function postPurchase(body) {
     premiumPaid: null,   // nothing has been paid; Phase 3 records the real fill
   });
 
+  // Charge the user: AFTER the position row exists so the debit can name what
+  // it paid for, and BEFORE any fill. Debit-then-compensate, for the same
+  // reason BR-14 writes the row before broadcasting - a fill that spent against
+  // a balance we never reserved would be unrecoverable, while a debit with no
+  // fill is visible and reversible (see refundBalance).
+  //
+  // The money has not left the custodial wallet yet: the operator fills later.
+  // So this is a HOLD, and the interface must say "payment held" rather than
+  // "paid" until fill === 'onchain'.
+  let balanceRemaining = null;
+  try {
+    balanceRemaining = await debitBalance({
+      userId: user.id,
+      asset: 'USDC',
+      amount: tier.cost.premiumUsdc,
+      positionId: position.id,
+      reason: 'premium for ' + set.asset + ' protection at $' + tier.actual.floorUsdc,
+    });
+  } catch (error) {
+    if (error.code === 'INSUFFICIENT_BALANCE') {
+      // The position row stays. It is the record of an attempt that was
+      // refused, and BR-14's reasoning applies to refusals too.
+      await transitionPosition(position.id, {
+        toStatus: 'failed',
+        eventType: 'failed',
+        payload: { reason: 'insufficient USDC balance to pay the premium' },
+      });
+      forgetQuoteSet(quoteId);
+      throw new QuoteRefusedError('BALANCE_EXCEEDED', error.message, {
+        premiumUsdc: tier.cost.premiumUsdc,
+        asset: 'USDC',
+      });
+    }
+    throw error;
+  }
+
   // One purchase per set. Leaving it available would let a second click buy a
   // second position from the same offer - the database also refuses that via
   // UNIQUE (quote_id), but not reaching that point is better.
@@ -190,6 +230,12 @@ export async function postPurchase(body) {
     // scripts/fill.js. The confirm button did not send a transaction, and the
     // interface must not say it did (BR-51).
     fill: REALITY.fill,
+    // Held, not paid. The operator has not filled yet, so the money is
+    // reserved rather than spent - the same principle as the interface only
+    // claiming "protected" when fill === 'onchain'.
+    paymentStatus: 'held',
+    premiumUsdc: tier.cost.premiumUsdc,
+    usdcBalanceRemaining: balanceRemaining,
   };
 }
 

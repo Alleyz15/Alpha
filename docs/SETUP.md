@@ -569,6 +569,38 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ## Gotchas we already hit
 
+### Read-your-own-write: decisions made against state that has already moved
+
+**This has bitten three times in one day.** It is one bug wearing three costumes,
+so recognise the shape rather than fixing each instance.
+
+The shape: read some state, decide something from it, then act — while the state
+changes underneath between the read and the act.
+
+| Where | What happened | Symptom |
+|---|---|---|
+| `ensureExactAllowance` | re-read the allowance immediately after approving | reported `0.000000 -> 0.000000` on an approval that had actually succeeded |
+| `approve(6)` after `approve(0)` | gas estimated while the allowance was still non-zero, executed once it was zero | **reverted out of gas** — a zero→non-zero SSTORE costs ~20k more, limit 46,444 against ~56,240 needed |
+| post-fill contract count | read the option contract milliseconds after its creation confirmed | returned `null`, so the row kept the quoted 2000 instead of the on-chain 1999 |
+
+Two of the three cost real money in gas; the third would have made a lending
+artefact claim a number the chain disagreed with.
+
+**What to do about it:**
+
+- **Never estimate gas across a state change you are about to cause.** If you send
+  A then B, and A changes what B writes, B's estimate must be taken after A lands.
+- **Poll, don't peek.** A single read straight after a write can be served from a
+  block that predates it. `pollAllowanceUntil()` is the pattern.
+- **A fresh contract is not immediately queryable.** Reads against an address
+  created in the transaction you just confirmed can return null for a moment.
+- **Fall back rather than block** when the read is a nicety, but record that the
+  read failed. The post-fill guard did this correctly — the event payload said
+  `onChainContractsSeen: null`, which is how the discrepancy was found later.
+- **Reconcile catches what the moment missed.** `npm run reconcile` compares every
+  row against chain and is the backstop for all of the above.
+
+
 Format: symptom → cause → fix
 
 - **`Cannot use import statement outside a module`** → `package.json` defaults to `"type": "commonjs"` → change it to `"type": "module"`

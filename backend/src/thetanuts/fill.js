@@ -23,6 +23,7 @@ import { getBuyablePutOrders } from './orders.js';
 import { runPreflight } from './preflight.js';
 import { getPosition, transitionPosition } from '../db/positions.js';
 import { getQuote } from '../db/quotes.js';
+import { refundBalance } from '../db/balances.js';
 
 /**
  * Decide which contract count to record after a fill.
@@ -235,6 +236,28 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
         eventType: 'failed',
         payload: { error: String(error?.message ?? error).slice(0, 500) },
       });
+
+      // The fill definitively did not happen, so the user must be made whole.
+      // A COMPENSATING WRITE, never a deletion: the trail reads
+      // debit -> fill failed -> refund. A debit that disappears looks like it
+      // never happened, and "we cannot tell whether the user was charged" is
+      // worse than either charging or not charging.
+      //
+      // Only on a revert. A TIMEOUT must NOT refund - see below.
+      try {
+        const premium = Number(quote?.premium ?? 0);
+        if (premium > 0) {
+          await refundBalance({
+            userId: position.user_id, asset: 'USDC', amount: premium,
+            positionId, reason: 'fill reverted; premium refunded',
+          });
+        }
+      } catch (refundError) {
+        // Never swallowed: a refund that failed silently is a user charged for
+        // nothing, and reconcile must be able to find it.
+        console.error('[fill] REFUND FAILED for position', positionId, '-', refundError.message);
+      }
+
       throw new Error(`fill reverted, nothing was bought: ${error?.message ?? error}`);
     }
 
