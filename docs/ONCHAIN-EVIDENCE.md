@@ -239,3 +239,52 @@ that horizon. The arithmetic is honest and the product it describes is thin; say
 so is better than inviting the question.
 
 Wallet after: **4.737411 USDC**.
+---
+
+## 6. The vault, resized so maturity can be real — 1 Sep 2026
+
+**The 100 USDC vault above cannot pay out.** Its maturity would transfer 100 USDC
+to the user and the wallet holds 4.66. The figure was never reachable, so a
+second, smaller call was bought at a size the wallet can actually return.
+
+| | |
+|---|---|
+| **BaseScan** | https://basescan.org/tx/0xd7fec53c5595750aff0ed994b6ded292b93c93a12185d8856ce0ef4cc0be70ac |
+| Option | `0x12520cfb58433ae7375d7c9371fdfc5a808c023b` |
+| Type | Vanilla **call**, buyer side |
+| Strike | $2,680 |
+| Expiry | 3 Sep 2026 08:00 UTC (16:00 MYT) |
+| Contracts | 284 raw (0.000284) |
+| Premium | 0.001016 USDC — the real spend |
+| Deposit modelled | 3 USDC |
+| Participation | **23.5422%** |
+
+### The participation rate is not a constant
+
+Quoted three times over one afternoon at the same 3 USDC deposit:
+
+```
+24.17%   premium 3.50898166/contract
+22.99%   premium 3.67154695/contract
+23.54%   premium 3.57885579/contract   <-- what actually filled
+```
+
+Same size, same strike, same expiry. The rate moves because the premium moves,
+which is what BR-38 requires — it is computed from what was really paid, never
+configured. **A participation rate that stayed the same across those three quotes
+would be evidence it was hardcoded.**
+
+### The quote said 285 contracts, the chain says 284
+
+Recorded as 284. A fill executes by USDC amount, so the contract count lands
+within a hair of the quote; the row takes the chain's number, not the quote's,
+through `pickRecordedContracts()`. Not a scale error — a 10^12-style difference
+would have been refused outright.
+
+### The 100 USDC vault is superseded, not deleted
+
+Its call `0x7930bc42…` is real, is held, and will settle on 3 Sep like any other.
+What it cannot do is pay its modelled principal. Both rows sit at `active`
+because the schema has no `superseded` status yet — that arrives with the
+maturity work. **The row stays.** Deleting the record of a real on-chain purchase
+to tidy a demo would be exactly the kind of gap the database exists to prevent.

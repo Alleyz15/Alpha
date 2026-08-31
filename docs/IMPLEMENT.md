@@ -30,9 +30,10 @@ Before implementing anything, the assistant must:
 |---|---|
 | ✅ | Done and verified |
 | 🔄 | In progress |
-| ⬜ | Not started |
+| ⬜ | Not started — no decision against it, just not built yet |
 | ⛔ | Blocked |
-| ❌ | Cut from scope |
+| ❌ | **Cut — do not build.** A decision was made against it. The note says when and why. |
+| ↩️ | **Back in scope after being cut.** The note says what changed. |
 
 ---
 
@@ -47,8 +48,10 @@ chain. See `docs/ONCHAIN-EVIDENCE.md`.
 Working: quote engine (1.1–1.7), database with RLS and seeds, HTTP API, the fill
 path with its ten-item pre-flight, and the settlement scheduler.
 
-Not started: 1.8 scenario preview, 3.10 reconciliation, 5.7 front-to-back
-integration.
+Not started: 7.5 no-liquidation demo. Back in scope after being cut: 7.4
+repayment and 8.6 vault maturity (1 Sep).
+
+5.7 front-to-back integration is verified as of 1 Sep.
 
 ### The product changed shape on 31 Aug
 
@@ -76,8 +79,9 @@ month", and rolling is not built.
 ⚠️ **Settlement lands 2026-09-02 08:00 UTC = 16:00 MYT, Tuesday afternoon.** See
 Phase 4.
 
-**Nothing is blocked** except 5.7, which waits on the purchase path being real or
-the interface gaining a third state for "real quote, simulated fill".
+**Nothing is blocked.** 5.7 was the last one and cleared on 1 Sep: the interface
+gained its third state and the purchase path became real, and the two together
+were verified end to end against a live fill.
 
 **Scope:** Phase 8 is cut — see Phase 8. Phase 7 lending is unassessed against the
 corrected book.
@@ -176,7 +180,7 @@ corrected book.
 | 3.7 | **First real on-chain fill** | ✅ | tx `0x6420c71c…` block 50670079, 0.495926 USDC. See `docs/ONCHAIN-EVIDENCE.md` |
 | 3.8 | Record the result | ✅ | Row `active` with tx hash, option `0xa609b6fb…`, real premium 0.495926 (fee included) |
 | 3.9 | Handle failure paths | ✅ | Revert → `failed`, timeout → `pending_verification`, never retried. **Implemented, not yet exercised** — the one fill succeeded |
-| 3.10 | Reconciliation script | ⬜ | Not started. `getFullOptionInfo()` gives buyer/seller/size, which is most of it |
+| 3.10 | Reconciliation script | ✅ | `resolveUnverified()` in `src/thetanuts/reconcile.js`, section 3 of `scripts/reconcile.js`. Ran clean 1 Sep — no unresolved fills, no drift |
 
 **Definition of done:** a BaseScan link to our own transaction. **Save the hash — it's the proof the whole submission rests on.**
 
@@ -260,7 +264,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
 | 5.5 | Position dashboard | ✅ | `DashboardScreen.jsx` — status, floor, expiry, BaseScan link |
 | 5.6 | Custody disclosure | ✅ | `RealityDisclosure.jsx` — "Who holds the funds?", shown not buried (BR-32) |
-| 5.7 | Front-to-back integration verified | ⬜ | Frontend still on `VITE_USE_MOCK_API=true`. **Blocked until the purchase path is real or the UI gains a third state** |
+| 5.7 | Front-to-back integration verified | ✅ | Verified 1 Sep against a real fill, tx `0x64e37010…`. Quote to broadcast took 140.7s — at least two book re-signings — so the fill went through economic matching, not the signature fast path. Not yet written up in ONCHAIN-EVIDENCE.md — that file has five sections and this would be §6 |
 
 **Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.
 
@@ -299,8 +303,8 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 7.1 | `loans` table + migration | ✅ | Triggers enforce BR-39 and BR-48 — a ratio cannot be inserted |
 | 7.2 | Credit limit derived from strike | ✅ | `src/lending/credit.js` — strike × contracts in bigint, no configurable factor |
 | 7.3 | Disburse USDC on-chain | ✅ | tx `0x29165d16…`, 4.597700 USDC = 2300 × 0.001999. See ONCHAIN-EVIDENCE.md |
-| 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
-| 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
+| 7.4 | Repayment flow | ↩️ | **Back in scope 1 Sep.** Real USDC transfer from the borrower. Borrower holds 4.5977 and owes 4.599410 — short by the interest, and holds no ETH for gas |
+| 7.5 | No-liquidation demo | ⬜ | Not started, and no code exists for it. Two positions side by side, price fed to 350, one flags, one doesn't |
 
 **Definition of done:** a BaseScan link to a USDC disbursement whose size is provably derived from an on-chain put's strike.
 
@@ -323,10 +327,10 @@ question we would lose.
 |---|---|---|---|
 | 8.1 | `vaults` table + migration | ✅ | `yield_is_simulated` pinned true by CHECK; maturity must equal the call expiry |
 | 8.2 | Deposit split logic | ✅ | `splitDeposit()` solves backwards from the guarantee, so protection is exact |
-| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. Vanilla buy-side call, ~2-day expiry |
-| 8.4 | Simulated yield accrual | ⬜ | Labelled simulated **where the number appears** (BR-37) |
+| 8.3 | Buy a real call on Thetanuts | ✅ | tx `0x7930bc42…`, strike 2660, buyer side, 9347 raw contracts. See ONCHAIN-EVIDENCE.md §5 |
+| 8.4 | Simulated yield accrual | ✅ | `yieldIsSimulated` carried as data; `scripts/vault.js` labels it SIMULATED on the line the number is printed and again in the summary (BR-37). No frontend vault screen exists, so the CLI is where the number appears |
 | 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
-| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+| 8.6 | Maturity flow | 🔄 | **Resize done 1 Sep** — 3 USDC vault on a real call, tx `0xd7fec53c…`, participation 23.5422%. See ONCHAIN-EVIDENCE.md §6. Maturity code still to build; the transfer itself happens 3 Sep when the call expires |
 
 **Non-negotiable in the copy** — a judge will do the arithmetic:
 
