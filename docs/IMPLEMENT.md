@@ -303,7 +303,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 7.1 | `loans` table + migration | ✅ | Triggers enforce BR-39 and BR-48 — a ratio cannot be inserted |
 | 7.2 | Credit limit derived from strike | ✅ | `src/lending/credit.js` — strike × contracts in bigint, no configurable factor |
 | 7.3 | Disburse USDC on-chain | ✅ | tx `0x29165d16…`, 4.597700 USDC = 2300 × 0.001999. See ONCHAIN-EVIDENCE.md |
-| 7.4 | Repayment flow | ↩️ | **Back in scope 1 Sep.** Real USDC transfer from the borrower. Borrower holds 4.5977 and owes 4.599410 — short by the interest, and holds no ETH for gas |
+| 7.4 | Repayment flow | ✅ | Verify-and-record: the borrower signs, we verify on chain. tx `0x02c37705…`, 4.599411 owed. Seven checks; check 5 refused a wrong-direction transfer on first use. See ONCHAIN-EVIDENCE.md §4 |
 | 7.5 | No-liquidation demo | ⬜ | Not started, and no code exists for it. Two positions side by side, price fed to 350, one flags, one doesn't |
 
 **Definition of done:** a BaseScan link to a USDC disbursement whose size is provably derived from an on-chain put's strike.

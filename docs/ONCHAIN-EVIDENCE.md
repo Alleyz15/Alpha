@@ -241,6 +241,70 @@ so is better than inviting the question.
 Wallet after: **4.737411 USDC**.
 ---
 
+### The loan was repaid — 1 Sep 2026
+
+**The lending cycle is complete on chain: put bought, funds disbursed, loan
+repaid.** Three transactions telling one story.
+
+| | |
+|---|---|
+| **BaseScan** | https://basescan.org/tx/0x02c37705b14fd86072b76108f0181869680d1998684e5dcea57eb41e069a6a09 |
+| From | `0xc169c7c0…` the borrower |
+| To | `0x4fB77837…` the lender |
+| Owed | **4.599411 USDC** — 4.597700 principal + 0.001710 interest, 5%/yr over 2.7155 days |
+| Transferred | **9.198822 USDC** |
+
+#### Why the transfer is 9.198822 and the debt is 4.599411
+
+**The excess is a returned mis-transfer, not interest.** Reading the `from` field
+in the operator instruction as "send from here", the operator first sent 4.599411
+in the wrong direction, to `0xc1a97f98…`. The return transfer therefore carried
+both amounts: the repayment plus the money that should never have moved.
+
+Nothing was lost and no figure in the loan row is affected. The debt was and is
+4.599411; the row records that, and the verification checked the transfer against
+it rather than against the amount that happened to arrive.
+
+#### Two checks earned themselves on first use
+
+**The wrong-direction transfer was refused.** The mis-sent transaction was offered
+for confirmation first and check 5 rejected it: its `Transfer` log ran lender →
+borrower, not borrower → lender. The check exists because a hash proves a
+transaction happened, not that it was the right one — and it caught a real error
+the first time it was asked to.
+
+**"Covers what is owed" rather than "equals what is owed" was the right rule.** An
+overpayment completed the loan correctly. Equality would have refused a payment
+that was unambiguously sufficient, and the borrower would have been told a correct
+transfer was wrong.
+
+#### Who signed it
+
+The repayment was sent by the borrower, not by us. We hold one private key and
+deliberately do not hold a second: BR-18 says never commit or log a private key,
+and the surest way to honour that is not to have another one to protect. The code
+records what is owed, a human sends it, and the code verifies it on chain — so the
+row is written before the money moves, exactly as it is for a fill.
+
+#### A limitation this shares with the premium
+
+The borrower address is a second address we control; the prototype has no user
+funding path. The 0.00171 USDC of interest was funded by us, exactly as the
+premium was. In production the borrower holds their own funds.
+
+#### This loan was written under the OLD credit rule
+
+It was lent **4.5977 — the whole floor** — and then charged interest on top, so it
+came due owing 4.599411 against a guarantee of 4.597700. It was under-
+collateralised by exactly its own interest from the moment it was written.
+
+BR-39 was revised the same day so the limit reserves the interest it charges
+(`floor / (1 + rate × term/365)`), which for this put would have lent 4.595990 and
+made principal + interest land exactly on 4.597700. **The new rule prevents the
+next loan from having this problem. It does not fix this one, and this one is what
+is on chain.**
+
+---
 ## 6. The vault, resized so maturity can be real — 1 Sep 2026
 
 **The 100 USDC vault above cannot pay out.** Its maturity would transfer 100 USDC
