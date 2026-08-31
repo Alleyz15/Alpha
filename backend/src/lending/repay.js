@@ -25,9 +25,12 @@
 // recipient.
 
 import { ethers } from 'ethers';
-import { db, unwrap } from '../db/client.js';
-import { usdcAddress } from '../thetanuts/wallet.js';
-import { getWalletAddress } from '../thetanuts/signer.js';
+
+// The database client, the token address and the signer are imported INSIDE the
+// functions that use them. Each throws at module load without credentials, and
+// amountOwed() is pure arithmetic that needs none of them - a static import
+// would make the money calculation untestable without a live database and a
+// private key, which is how the part most worth testing ends up untested.
 
 const USDC_SCALE = 1_000_000n;
 const usdc = (raw) => Number(raw) / Number(USDC_SCALE);
@@ -93,6 +96,10 @@ export function amountOwed(loan) {
  * @returns {Promise<object>} the loan row and the transfer instruction
  */
 export async function requestRepayment(loanId) {
+  const { db, unwrap } = await import('../db/client.js');
+  const { usdcAddress } = await import('../thetanuts/wallet.js');
+  const { getWalletAddress } = await import('../thetanuts/signer.js');
+
   const loan = unwrap(
     await db.from('loans').select('*').eq('id', loanId).single(),
     'requestRepayment: reading the loan',
@@ -154,6 +161,10 @@ export async function requestRepayment(loanId) {
  * @returns {Promise<{ok:boolean, checks:object[], loan:object|null}>}
  */
 export async function confirmRepayment(loanId, txHash, { minConfirmations = 2 } = {}) {
+  const { db, unwrap } = await import('../db/client.js');
+  const { usdcAddress } = await import('../thetanuts/wallet.js');
+  const { getWalletAddress } = await import('../thetanuts/signer.js');
+
   const loan = unwrap(
     await db.from('loans').select('*').eq('id', loanId).single(),
     'confirmRepayment: reading the loan',
