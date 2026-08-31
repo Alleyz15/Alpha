@@ -242,7 +242,8 @@ try {
     units: HOLDING,
     balance: BALANCE,
     targetDate: TARGET_DAYS,
-    maxPremiumUsdc: MAX_PREMIUM,
+    // No maxPremiumUsdc: buildQuote does not apply the premium cap. The cap
+    // guards broadcasting, not pricing (BR-33) — see the note printed above.
     validitySeconds: Number(process.env.QUOTE_VALIDITY_SECONDS ?? 60),
   });
 
