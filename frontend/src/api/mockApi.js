@@ -6,6 +6,12 @@ const demoContext = {
   displayName: 'Demo User',
   balances: [{ asset: 'ETH', amount: 0.4 }],
   simulated: true,
+  reality: {
+    balance: 'simulated',
+    quote: 'live',
+    fill: 'operator',
+    settlement: 'live',
+  },
 };
 
 const positions = [];
@@ -43,8 +49,8 @@ function tier({
       tier: label,
       floorUsdc: floor,
       protectionPct: protection,
-      expiry: '2026-09-25T08:00:00.000Z',
-      daysToExpiry: 25.6,
+      expiry: '2026-09-02T08:00:00.000Z',
+      daysToExpiry: 2.4,
       expiryGapDays: 0.6,
     },
     size: {
@@ -100,12 +106,12 @@ export async function createQuote(request) {
     );
   }
 
-  if (request.mode === 'goal' && request.targetDate > '2026-09-25') {
+  if (request.mode === 'goal' && request.targetDate > '2026-09-02') {
     throw apiError(
       'NO_EXPIRY',
       'No expiry is available on or after the requested date.',
       {
-        longestAvailableDate: '2026-09-25T08:00:00.000Z',
+        longestAvailableDate: '2026-09-02T08:00:00.000Z',
         shortfallDays: 36.4,
       },
       404,
@@ -126,7 +132,7 @@ export async function createQuote(request) {
       units: request.units,
       targetDate: request.targetDate
         ? new Date(`${request.targetDate}T08:00:00.000Z`).toISOString()
-        : '2026-09-24T08:00:00.000Z',
+        : '2026-09-02T08:00:00.000Z',
     },
     tiers: [
       tier({ id: crypto.randomUUID(), label: 'highest', recommended: false, floor: 2300, protection: 8.3, protectedUnits: 0.1412, contractsRaw: '141200', boundBy: 'premiumCap', cost: 5, premiumPerContractUsdc: 35.410765, premiumPctOfSpot: 1.4118, maxLoss: 34.4, wholeHoldingLoss: 683.49, unprotectedUnits: 0.2588, unprotectedValueUsdc: 649.09, floorValueUsdc: 324.76, maxPayoutUsdc: 324.76 }),
@@ -158,20 +164,27 @@ export async function purchaseQuote({ quoteId, tierId }) {
     protectedAmount: selectedTier.size.protectedUnits,
     protectionFloorUsdc: selectedTier.actual.floorUsdc,
     expiry: selectedTier.actual.expiry,
-    premiumPaidUsdc: selectedTier.cost.premiumUsdc,
-    status: 'active',
+    premiumPaidUsdc: 0,
+    status: 'pending',
     payoutUsdc: null,
-    explorerUrl: 'https://basescan.org',
+    settlementPriceUsdc: null,
+    txHash: null,
+    optionAddress: null,
+    explorerUrl: null,
+    fill: 'operator',
+    simulated: true,
   };
 
   positions.unshift(position);
 
   return {
     positionId: position.positionId,
-    txHash: `0x${crypto.randomUUID().replaceAll('-', '').padEnd(64, '0')}`,
-    explorerUrl: position.explorerUrl,
-    optionAddress: '0x0000000000000000000000000000000000000000',
-    status: 'active',
+    txHash: null,
+    explorerUrl: null,
+    optionAddress: null,
+    status: 'pending_fill',
+    simulated: true,
+    fill: 'operator',
   };
 }
 

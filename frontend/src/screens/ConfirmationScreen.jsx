@@ -17,36 +17,39 @@ function useSecondsRemaining(expiresAt) {
   return seconds;
 }
 
-function PurchaseComplete({ purchase, tier, isMock, onViewDashboard }) {
+function PurchaseComplete({ purchase, tier, isMock, reality, onViewDashboard }) {
+  const hasOnchainTransaction = purchase.fill === 'onchain' && typeof purchase.txHash === 'string';
+
   return (
     <section className="completion-card" aria-labelledby="complete-title">
       <span className="success-mark"><ShieldIcon size={36} /></span>
       <RealityDisclosure
         variant="completion"
         isMock={isMock}
+        fill={purchase.fill}
         amount={tier.protectedAmount}
         floor={tier.floor}
         expiry={tier.expiry}
       />
 
-      <RealityDisclosure variant="transaction" isMock={isMock} explorerUrl={purchase.explorerUrl} />
+      <RealityDisclosure variant="transaction" isMock={isMock} reality={reality} fill={purchase.fill} explorerUrl={purchase.explorerUrl} />
 
       <div className="completion-actions">
         <button className="secondary-button" type="button" onClick={onViewDashboard}>View my protection</button>
       </div>
 
-      {!isMock && <small className="transaction-note">Transaction: {purchase.txHash.slice(0, 12)}…{purchase.txHash.slice(-8)}</small>}
+      {hasOnchainTransaction && <small className="transaction-note">Transaction: {purchase.txHash.slice(0, 12)}…{purchase.txHash.slice(-8)}</small>}
     </section>
   );
 }
 
-export default function ConfirmationScreen({ step, quote, tier, purchase, isMock, onBack, onComplete, onViewDashboard }) {
+export default function ConfirmationScreen({ step, quote, tier, purchase, isMock, reality, onBack, onComplete, onViewDashboard }) {
   const secondsRemaining = useSecondsRemaining(quote.expiresAt);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
 
   if (step === 'complete') {
-    return <PurchaseComplete purchase={purchase} tier={tier} isMock={isMock} onViewDashboard={onViewDashboard} />;
+    return <PurchaseComplete purchase={purchase} tier={tier} isMock={isMock} reality={reality} onViewDashboard={onViewDashboard} />;
   }
 
   const timerExpired = secondsRemaining === 0;
@@ -99,7 +102,7 @@ export default function ConfirmationScreen({ step, quote, tier, purchase, isMock
           </div>
         )}
 
-        <RealityDisclosure variant="confirmation" isMock={isMock} />
+        <RealityDisclosure variant="confirmation" isMock={isMock} reality={reality} />
 
         {error && <div className="error-message" role="alert"><strong>{error.title}</strong><span>{error.message}</span></div>}
 
@@ -107,10 +110,22 @@ export default function ConfirmationScreen({ step, quote, tier, purchase, isMock
           <button className="primary-button" type="button" onClick={onBack}>Get a fresh quote <ArrowIcon /></button>
         ) : (
           <button className="primary-button" type="button" onClick={confirmPurchase} disabled={status === 'loading'}>
-            {status === 'loading' ? 'Confirming on Base…' : `Confirm and pay ${tier.cost}`} {status !== 'loading' && <ArrowIcon />}
+            {status === 'loading'
+              ? 'Submitting request…'
+              : reality?.fill === 'automatic' && !isMock
+                ? `Confirm and pay ${tier.cost}`
+                : isMock
+                  ? 'Preview purchase request'
+                  : 'Submit purchase request'} {status !== 'loading' && <ArrowIcon />}
           </button>
         )}
-        <small className="authority-note">The backend re-checks availability and expiry before any purchase.</small>
+        <small className="authority-note">
+          {isMock
+            ? 'This preview creates a sample request only. Nothing will be sent to the blockchain.'
+            : reality?.fill === 'automatic'
+            ? 'The backend re-checks availability and expiry before sending any purchase.'
+            : 'The backend records this request first. The app’s operator executes it only after the safety checks pass.'}
+        </small>
       </section>
     </div>
   );

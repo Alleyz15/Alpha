@@ -93,9 +93,26 @@ export async function listExpiries(asset) {
  * @returns {Promise<object>} selection result, `expiry` is null if unreachable
  */
 export async function selectExpiry(asset, target) {
-  const targetDate = toTargetDate(target);
   const { spot, expiries } = await listExpiries(asset);
+  return chooseExpiry(spot, expiries, target);
+}
 
+/**
+ * The pure expiry decision, split out of selectExpiry so it can be tested
+ * against a fixture without touching the book. Behaviour is unchanged -
+ * selectExpiry now fetches, then delegates here.
+ *
+ * BR-6 is enforced here: the chosen expiry is never earlier than the target.
+ * When nothing reaches the target date this returns no expiry rather than
+ * quietly substituting a shorter one.
+ *
+ * @param {number} spot
+ * @param {Array} expiries - ascending by expiryUnix, as listExpiries returns
+ * @param {Date|string|number} target - date, ISO string, or days from now
+ * @returns {object} selection result, `expiry` is null if unreachable
+ */
+export function chooseExpiry(spot, expiries, target) {
+  const targetDate = toTargetDate(target);
   const targetUnix = targetDate.getTime() / 1000;
   const onOrAfter = expiries.filter((e) => e.expiryUnix >= targetUnix);
   const longest = expiries.at(-1) ?? null;
@@ -142,7 +159,7 @@ export async function selectExpiry(asset, target) {
  * @param {number} spot
  * @returns {Array} up to three tiers
  */
-function pickTiers(strikes, spot) {
+export function pickTiers(strikes, spot) {
   if (strikes.length === 0) return [];
 
   const middleIndex = Math.floor((strikes.length - 1) / 2);

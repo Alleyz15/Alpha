@@ -119,6 +119,7 @@ export function toQuoteViewModel(dto) {
 export function toPositionViewModel(position) {
   const statusCopy = {
     active: 'Active',
+    pending_fill: 'Waiting for execution',
     settled: 'Paid out',
     expired_worthless: 'Not needed',
     pending: 'Processing',

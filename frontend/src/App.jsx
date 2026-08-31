@@ -54,11 +54,11 @@ export default function App() {
     <div className="app-shell">
       <AppHeader activeView={activeView} onNavigate={navigate} demoContext={demoContext} />
 
-      <RealityDisclosure variant="banner" isMock={useMockApi} />
+      <RealityDisclosure variant="banner" isMock={useMockApi} reality={demoContext?.reality} />
 
       <main>
         {activeView === 'explore' && flow.step === 'quote' && (
-          <QuoteScreen demoContext={demoContext} isMock={useMockApi} onReview={reviewQuote} />
+          <QuoteScreen demoContext={demoContext} isMock={useMockApi} reality={demoContext?.reality} onReview={reviewQuote} />
         )}
 
         {activeView === 'explore' && flow.step !== 'quote' && (
@@ -68,6 +68,7 @@ export default function App() {
             tier={flow.tier}
             purchase={flow.purchase}
             isMock={useMockApi}
+            reality={demoContext?.reality}
             onBack={returnToQuote}
             onComplete={finishPurchase}
             onViewDashboard={() => navigate('dashboard')}
@@ -75,12 +76,12 @@ export default function App() {
         )}
 
         {activeView === 'dashboard' && (
-          <DashboardScreen positions={positions} state={positionsState} isMock={useMockApi} onExplore={() => navigate('explore')} />
+          <DashboardScreen positions={positions} state={positionsState} isMock={useMockApi} reality={demoContext?.reality} onExplore={() => navigate('explore')} />
         )}
       </main>
 
       <footer className="site-footer">
-        <RealityDisclosure variant="footer" isMock={useMockApi} />
+        <RealityDisclosure variant="footer" isMock={useMockApi} reality={demoContext?.reality} />
       </footer>
     </div>
   );

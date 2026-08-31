@@ -88,6 +88,7 @@ export async function insertPendingPosition({
  * @param {string} [opts.txHash]
  * @param {string} [opts.optionAddress]
  * @param {number} [opts.premiumPaid]
+ * @param {string} [opts.numContractsRaw] - actual on-chain contracts, 6dp string
  * @param {number} [opts.settlementPrice]
  * @param {number} [opts.payout]
  * @param {string} [opts.settledAt]
@@ -100,6 +101,7 @@ export async function transitionPosition(positionId, {
   txHash = null,
   optionAddress = null,
   premiumPaid = null,
+  numContractsRaw = null,
   settlementPrice = null,
   payout = null,
   settledAt = null,
@@ -114,6 +116,9 @@ export async function transitionPosition(positionId, {
       p_tx_hash: txHash ? txHash.toLowerCase() : null,
       p_option_address: optionAddress ? optionAddress.toLowerCase() : null,
       p_premium_paid: premiumPaid,
+      // The count that actually filled, so the row matches chain state (BR-36).
+      // 6dp string; null keeps whatever the row already holds.
+      p_num_contracts_raw: numContractsRaw === null ? null : String(numContractsRaw),
       p_settlement_price: settlementPrice,
       p_payout: payout,
       p_settled_at: settledAt,

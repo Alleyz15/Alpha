@@ -13,10 +13,74 @@ import { listExpiries, selectProtectionTiers } from './selection.js';
 import { sizePosition } from './sizing.js';
 import { getSpotPrice } from './market.js';
 import { getBalance } from '../db/balances.js';
+import { client } from './client.js';
+import { toPayoutContracts, payoutToUsdc } from './decimals.js';
 
 /** USDC has 6 decimals; rounding there keeps float noise out of the payload. */
 const usdc = (n) => Math.round(n * 1e6) / 1e6;
 const pct = (n) => Math.round(n * 1e4) / 1e4;
+
+/**
+ * Outcome at a few representative settlement prices (task 1.8, US-4).
+ *
+ * Pure client-side via utils.calculatePayoutAtPrice - no order is placed and no
+ * chain call is made. The contract count is rescaled to the payout helper's 18
+ * decimals at the boundary (toPayoutContracts); passing the order's own 6dp
+ * value straight in is a 10^12 error that returns a plausible number and does
+ * not throw.
+ *
+ * Each row describes the PROTECTED portion only: the value of the covered units
+ * at that price, the payout the protection adds, and the net after the premium.
+ * Above the floor the payout is zero and the user simply keeps the asset; at or
+ * below the floor, value + payout is flat at the floor - the shape that makes a
+ * put insurance rather than a directional bet. The frontend turns these numbers
+ * into the good/bad scenario view (BR-3: no jargon in the wording).
+ *
+ * @param {object} chosen - a tier from selectProtectionTiers(); chosen.order is
+ *   the OrderWithSignature, so chosen.order.order is the struct the helper wants
+ * @param {object} size - the sizePosition() result for this tier
+ * @param {number} spot
+ * @returns {Array<{label:string, priceUsdc:number, holdingValueUsdc:number, payoutUsdc:number, netUsdc:number}>}
+ */
+function buildScenarios(chosen, size, spot) {
+  if (size.contractsRaw <= 0n) return [];
+
+  const contracts18 = toPayoutContracts(size.contractsRaw);
+
+  // Representative prices, highest first: a rise (protection unused), unchanged,
+  // exactly the floor (the boundary where payout is still zero), and a fall
+  // below the floor (where the protection pays).
+  const prices = [
+    { label: 'up', priceUsdc: spot * 1.10 },
+    { label: 'flat', priceUsdc: spot },
+    { label: 'atFloor', priceUsdc: chosen.strike },
+    // A fall of 20% from spot, but never above the floor — so the crash case
+    // still shows the protection paying even if the floor itself is deep. With
+    // a fixed spot*0.80 a deep floor could sit below the "down" price and read
+    // as a zero payout, which would misrepresent the protection (finding #6).
+    { label: 'down', priceUsdc: Math.min(spot * 0.80, chosen.strike * 0.95) },
+  ];
+
+  return prices.map(({ label, priceUsdc }) => {
+    // Settlement price is 8 decimals, same scale as strikePrice (see decimals.js).
+    const price8 = BigInt(Math.round(priceUsdc * 1e8));
+    const payoutUsdc = payoutToUsdc(
+      client.utils.calculatePayoutAtPrice(chosen.order.order, contracts18, price8),
+    );
+    const holdingValueUsdc = priceUsdc * size.contracts;
+
+    return {
+      label,
+      priceUsdc: usdc(priceUsdc),
+      // Value of the protected units alone at this price, before any payout.
+      holdingValueUsdc: usdc(holdingValueUsdc),
+      // What the protection pays here: zero above the floor.
+      payoutUsdc: usdc(payoutUsdc),
+      // What the user ends with on the protected portion, net of the premium.
+      netUsdc: usdc(holdingValueUsdc + payoutUsdc - size.premiumUsdc),
+    };
+  });
+}
 
 /**
  * A quote could not be produced. Carries a machine-readable `code` so the API
@@ -120,6 +184,11 @@ function buildTier(chosen, selection, units, { tierId } = {}) {
       floorValueUsdc: usdc(size.contracts * chosen.floorUsd),
       maxPayoutUsdc: usdc(size.maxPayoutUsdc),
     },
+
+    // US-4 / task 1.8 - what the user ends with at a few representative prices,
+    // computed from the real order. Above the floor the payout is zero; at or
+    // below it the payout tops the protected units back up to the floor.
+    scenarios: buildScenarios(chosen, size, spot),
 
     // BR-45 / BR-46 as data, not copy. Settlement pays USDC, never fiat, and
     // these are European options - nothing pays out before expiry however far
