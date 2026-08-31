@@ -416,6 +416,62 @@ bug was caught.
 `getBuyablePutOrders()` filters to one strike. Do not relax it without changing
 what the interface promises.
 
+### The book re-signs wholesale every ~60 seconds
+
+**Nobody would guess this, and anyone touching `findLiveOrder` needs it.**
+
+Every order on the book is re-signed at the same moment, on roughly a 60-second
+timer. Not staggered per maker — **100% of signatures replaced simultaneously.**
+
+Measured 1 Sep 2026:
+
+```
+REFRESH at t=41.2s  — 100% of signatures replaced
+REFRESH at t=101.2s — 100% of signatures replaced
+interval: 59.9s
+```
+
+The signal was unmistakable. Sampling 320 orders every 5 seconds, **every single
+signature lived exactly 35.645 seconds**, identical to three decimal places. A
+distribution of independent lifetimes cannot look like that; one scheduled event
+can.
+
+**The same orders come back.** Across one refresh, 311 of 311 economically
+identical orders persisted — same maker, strike, expiry, type and side — with a
+new signature and usually a slightly different price:
+
+```
+persisted: 311 of 311    disappeared: 0
+price unchanged: 6       price moved: 305
+move: min 0.003% | median 0.515% | max 105.346%
+```
+
+**Prices are static inside a cycle and step at the refresh:**
+
+```
+elapsed   median   p90     max      % over 5% tolerance
+10s        0.00    0.00    0.00        0%
+20s        0.00    0.00    0.00        0%
+31s        0.76   13.94  133.37       11%
+92s        7.34   17.45   82.50       78%
+```
+
+#### What this means in code
+
+- **Never match a stored order by signature alone.** A quote more than ~60s old
+  will never find its signature, and a quote of average age has a coin-flip
+  chance. Two integration fills in a row were refused on exactly this.
+- `findLiveOrder()` tries the signature first, then falls back to matching on
+  **maker + strike + expiry + type + side — all five, or it refuses.** A partial
+  match is never approximated.
+- **`QUOTE_VALIDITY_SECONDS` must stay well inside 60.** It is 20: the window in
+  which the quoted price is exactly, not approximately, right. It was 60, which
+  exactly equalled the refresh period and therefore promised the one window that
+  cannot be guaranteed.
+- Scripts that quote and fill in one process (`scripts/fill.js`, ~6s end to end)
+  never hit this. Any flow with a human in the middle does.
+
+
 ### Order object shape
 
 ```js

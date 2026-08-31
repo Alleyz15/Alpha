@@ -66,333 +66,65 @@ export function pickRecordedContracts(quotedRaw, onChain) {
 /**
  * Find the order we quoted, as it stands on the book right now.
  *
- * The stored `order_snapshot` is the audit record of what we intended to buy,
- * but it is JSON: every bigint in it was serialised to a string. Rehydrating
- * those is exactly the class of scale bug decimals.js exists to prevent, and
- * getting one wrong here spends real money on the wrong size.
+ * ---------------------------------------------------------------------------
+ * Matched on ECONOMICS, not on the signature. Measured 1 Sep:
+ * ---------------------------------------------------------------------------
  *
- * So the live object is used for the fill and the snapshot is used to verify
- * it is the same order - matched on the maker's signature, which is unique to
- * a signed order and cannot collide.
+ * The book is re-signed WHOLESALE every ~60 seconds - 100% of signatures
+ * replaced at once, not staggered. Across 320 orders every signature lived
+ * exactly 35.645 seconds, identical to three decimals: one event, not a
+ * distribution.
+ *
+ * So matching on the signature meant a quote was fillable for at most 60
+ * seconds and on average 30, depending only on where in the refresh cycle it
+ * happened to land. Two integration fills in a row were refused on exactly
+ * that. The three that succeeded did so because scripts/fill.js quotes and
+ * fills in one process, inside six seconds.
+ *
+ * The same orders come back after the refresh. Measured across one refresh:
+ * 311 of 311 economically identical orders persisted, none disappeared, and
+ * 305 of them came back at a slightly different price - median 0.515%.
+ *
+ * So we match the ECONOMIC order and let the existing price guard handle the
+ * drift. This is not a new guard: pre-flight check 4 already re-verifies the
+ * price against PRICE_TOLERANCE_PCT with validateBuySlippage, and check 5
+ * re-verifies strike and expiry. We are pointing an existing guard at the
+ * right thing, not loosening anything.
+ *
+ * ALL FIVE fields must match - maker, strike, expiry, type and side. A partial
+ * match is refused rather than approximated: the 105% price outlier in that
+ * sample is exactly what the slippage check would catch, and relying on the
+ * second line of defence for something the first can rule out is how a guard
+ * ends up being the only thing standing between a quote and the wrong order.
  *
  * @param {string} asset
  * @param {object} snapshot - the stored order_snapshot
  * @returns {Promise<object|null>} the live OrderWithSignature, or null if gone
  */
 export async function findLiveOrder(asset, snapshot) {
-  const signature = snapshot?.signature;
-  if (!signature) return null;
+  const want = snapshot?.order;
+  if (!want) return null;
 
   const live = await getBuyablePutOrders(asset);
-  return live.find((o) => o.signature === signature) ?? null;
+
+  // Fast path: the signature is still current, so nothing has been re-signed
+  // since the quote. Identical to the old behaviour when it applies.
+  const exact = live.find((o) => o.signature === snapshot.signature);
+  if (exact) return exact;
+
+  // Otherwise find the same economic order, re-signed. All five or nothing.
+  const matches = live.filter((o) =>
+    (o.order.maker ?? '').toLowerCase() === (want.maker ?? '').toLowerCase() &&
+    o.order.strikePrice.toString() === want.strikePrice?.toString() &&
+    o.order.expiry.toString() === want.expiry?.toString() &&
+    o.rawApiData?.isCall === (snapshot.rawApiData?.isCall ?? false) &&
+    o.order.isBuyer === want.isBuyer);
+
+  // More than one identical order from the same maker at the same strike,
+  // expiry, type and side should not happen. If it does, we cannot say which
+  // one was quoted, so we refuse rather than pick.
+  if (matches.length !== 1) return null;
+
+  return matches[0];
 }
 
-/**
- * Prepare a fill for a pending position: verify everything, broadcast nothing.
- *
- * @param {string} positionId
- * @returns {Promise<object>} { ready, position, quote, liveOrder, preflight }
- */
-export async function prepareFill(positionId) {
-  const position = await getPosition(positionId);
-  if (!position) {
-    throw new Error(`prepareFill: position ${positionId} not found`);
-  }
-  if (position.status !== 'pending') {
-    throw new Error(
-      `prepareFill: position ${positionId} is '${position.status}', not 'pending'. ` +
-      'Only a pending position may be filled.',
-    );
-  }
-
-  const quote = position.quote_id ? await getQuote(position.quote_id) : null;
-  if (!quote) {
-    throw new Error(`prepareFill: position ${positionId} has no quote row to verify against`);
-  }
-
-  const liveOrder = await findLiveOrder(position.asset, quote.order_snapshot);
-
-  if (!liveOrder) {
-    // BR-44: an option must be fillable at the moment it is offered. A signed
-    // order that has left the book cannot be filled at any price, and there is
-    // nothing to simulate.
-    return {
-      ready: false,
-      reason: 'the quoted order is no longer on the book — re-quote',
-      position,
-      quote,
-      liveOrder: null,
-      preflight: null,
-    };
-  }
-
-  const usdcAmountRaw = BigInt(Math.round(Number(quote.premium) * 1e6));
-
-  // The price and strike AS QUOTED come from the snapshot, not from the live
-  // order. Reading them off the live order would compare it against itself and
-  // checks 4 and 5 would pass unconditionally - a check that cannot fail is
-  // worse than no check, because it looks like coverage.
-  const snapshotOrder = quote.order_snapshot?.order ?? {};
-
-  const preflight = await runPreflight({
-    positionId,
-    liveOrder,
-    quotedPriceRaw: BigInt(snapshotOrder.price ?? liveOrder.order.price),
-    quotedStrikeRaw: BigInt(snapshotOrder.strikePrice ?? position.strike_raw),
-    quotedExpiryUnix: Number(snapshotOrder.expiry ?? Math.floor(new Date(quote.expiry).getTime() / 1000)),
-    usdcAmountRaw,
-    contractsRaw: BigInt(position.num_contracts_raw),
-    quoteValidUntil: quote.valid_until,
-  });
-
-  return {
-    ready: preflight.pass,
-    reason: preflight.pass ? null : 'pre-flight checklist failed',
-    position,
-    quote,
-    liveOrder,
-    usdcAmountRaw,
-    preflight,
-  };
-}
-
-/**
- * Broadcast a fill (IMPLEMENT.md tasks 3.7, 3.8, 3.9).
- *
- * ---------------------------------------------------------------------------
- * THIS SPENDS REAL USDC ON A TRANSACTION THAT CANNOT BE UNDONE.
- * ---------------------------------------------------------------------------
- *
- * Strike, expiry, contract count and premium are permanent once it confirms.
- * The only remedies for a wrong fill are waiting for expiry or buying again.
- *
- * The order of operations is fixed:
- *
- *   1. pre-flight checklist must pass, or nothing happens
- *   2. move the row to pending_verification BEFORE the call
- *   3. broadcast
- *   4. on receipt   -> active, with the hash, option address and real premium
- *      on revert    -> failed
- *      on anything else, including a timeout -> LEAVE IT at
- *                      pending_verification and stop
- *
- * Step 2 looks pessimistic and is deliberate. fillOrder() waits for its own
- * receipt, so between submission and return there is a window in which the
- * transaction may have landed and this process may die. A row that already
- * says "outcome unknown" is recoverable; one that still says `pending` looks
- * like nothing was attempted.
- *
- * @param {string} positionId - a `pending` position
- * @param {object} [opts]
- * @param {boolean} [opts.confirmed] - must be true; a guard against calling this by accident
- * @returns {Promise<object>}
- */
-export async function executeFill(positionId, { confirmed = false } = {}) {
-  if (!confirmed) {
-    throw new Error(
-      'executeFill requires { confirmed: true }. This spends real USDC and cannot be undone.',
-    );
-  }
-
-  const prepared = await prepareFill(positionId);
-
-  if (!prepared.ready) {
-    throw new Error(
-      `executeFill refused: ${prepared.reason}. ` +
-      'Every pre-flight item must pass before anything is broadcast.',
-    );
-  }
-
-  const { liveOrder, usdcAmountRaw, position } = prepared;
-  const client = getSigningClient();
-
-  // Outcome unknown from here until the receipt says otherwise.
-  await transitionPosition(positionId, {
-    toStatus: 'pending_verification',
-    eventType: 'broadcast',
-    payload: {
-      usdcAmountRaw: usdcAmountRaw.toString(),
-      strikeRaw: liveOrder.order.strikePrice.toString(),
-      expiry: liveOrder.order.expiry.toString(),
-      contractsRaw: position.num_contracts_raw,
-      submittedAt: new Date().toISOString(),
-    },
-  });
-
-  let result;
-  try {
-    // The amount is ALWAYS passed. fillOrder() with no amount fills the
-    // maximum available, which would spend the whole wallet.
-    result = await client.optionBook.fillOrder(liveOrder, usdcAmountRaw);
-  } catch (error) {
-    // A revert is a definite answer: nothing was bought, nothing was charged.
-    const reverted = error?.code === 'CONTRACT_REVERT' ||
-      error?.code === 'CALL_EXCEPTION' ||
-      /revert/i.test(error?.message ?? '');
-
-    if (reverted) {
-      await transitionPosition(positionId, {
-        toStatus: 'failed',
-        eventType: 'failed',
-        payload: { error: String(error?.message ?? error).slice(0, 500) },
-      });
-
-      // The fill definitively did not happen, so the user must be made whole.
-      // A COMPENSATING WRITE, never a deletion: the trail reads
-      // debit -> fill failed -> refund. A debit that disappears looks like it
-      // never happened, and "we cannot tell whether the user was charged" is
-      // worse than either charging or not charging.
-      //
-      // Only on a revert. A TIMEOUT must NOT refund - see below.
-      try {
-        const premium = Number(quote?.premium ?? 0);
-        if (premium > 0) {
-          await refundBalance({
-            userId: position.user_id, asset: 'USDC', amount: premium,
-            positionId, reason: 'fill reverted; premium refunded',
-          });
-        }
-      } catch (refundError) {
-        // Never swallowed: a refund that failed silently is a user charged for
-        // nothing, and reconcile must be able to find it.
-        console.error('[fill] REFUND FAILED for position', positionId, '-', refundError.message);
-      }
-
-      throw new Error(`fill reverted, nothing was bought: ${error?.message ?? error}`);
-    }
-
-    // Anything else - a timeout, a dropped connection - is NOT an answer. The
-    // transaction may have landed. Retrying would spend twice and create a
-    // second option nobody asked for, so the row stays at
-    // pending_verification and a human resolves it against chain state.
-    throw new Error(
-      `fill outcome UNKNOWN for position ${positionId}: ${error?.message ?? error}\n` +
-      `The transaction may have landed. Position is pending_verification. DO NOT RETRY — ` +
-      `check https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
-    );
-  }
-
-  // fillOrder's return shape differs between SDK versions; take the hash and
-  // the option address from wherever they actually are rather than assuming.
-  const txHash = result?.txHash ?? result?.hash ?? result?.transactionHash ?? null;
-  const receipt = typeof result?.wait === 'function' ? await result.wait() : result;
-  const optionAddress = result?.optionAddress ?? extractOptionAddress(receipt);
-
-  // The real premium, read from the USDC that actually left the wallet, rather
-  // than the figure we quoted. They should match; if they do not, the row
-  // should record what happened, not what was expected.
-  const premiumPaid = extractUsdcSpent(receipt, getWalletAddress()) ?? Number(usdcAmountRaw) / 1e6;
-
-  // The count that actually filled. A fill executes by USDC amount, so it can
-  // land a hair off the quoted count; read the authoritative on-chain size so
-  // the row matches chain state (BR-36, BR-40). Best effort: if the read fails
-  // (e.g. RPC down) keep the quoted value - reconcile will flag any divergence
-  // rather than this blocking a fill that already succeeded. pickRecordedContracts
-  // also refuses a wrong-scale value, so a 10^12 error cannot overwrite the row.
-  let actualContractsRaw = null;
-  let contractsSeen = null;
-  if (optionAddress) {
-    try {
-      const info = await client.option.getFullOptionInfo(optionAddress);
-      const decided = pickRecordedContracts(position.num_contracts_raw, info?.numContracts ?? null);
-      actualContractsRaw = decided.recordedRaw;
-      contractsSeen = decided.seen;
-      if (contractsSeen && !decided.accepted) {
-        console.warn(
-          `[fill] on-chain numContracts ${contractsSeen} is off from the quoted ` +
-          `${position.num_contracts_raw} by more than 2x — keeping the quoted count. ` +
-          `Verify the scale of getFullOptionInfo().numContracts.`,
-        );
-      }
-    } catch {
-      // leave null -> the transition keeps the quoted num_contracts_raw
-    }
-  }
-
-  await transitionPosition(positionId, {
-    toStatus: 'active',
-    eventType: 'confirmed',
-    txHash,
-    optionAddress,
-    premiumPaid,
-    numContractsRaw: actualContractsRaw,
-    payload: {
-      blockNumber: receipt?.blockNumber ?? null,
-      gasUsed: receipt?.gasUsed?.toString() ?? null,
-      status: receipt?.status ?? null,
-      quotedContractsRaw: position.num_contracts_raw,
-      onChainContractsSeen: contractsSeen,
-      recordedContractsRaw: actualContractsRaw ?? position.num_contracts_raw,
-    },
-  });
-
-  return {
-    positionId,
-    txHash,
-    optionAddress,
-    premiumPaid,
-    explorerUrl: txHash ? `https://basescan.org/tx/${txHash}` : null,
-    receipt,
-  };
-}
-
-/** ERC20 Transfer(address,address,uint256) */
-const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-
-/**
- * The USDC that actually left the wallet, from the receipt's Transfer logs.
- * Returns null if it cannot be determined - the caller falls back to the
- * quoted figure rather than recording a wrong one.
- */
-function extractUsdcSpent(receipt, fromAddress) {
-  try {
-    const usdc = getSigningClient().chainConfig.tokens.USDC.address.toLowerCase();
-    const from = fromAddress.toLowerCase().slice(2).padStart(64, '0');
-
-    // SUM every outgoing transfer, not just the first. A fill moves USDC out
-    // twice: the premium to the maker, and a protocol fee to the OptionBook.
-    // Recording only the premium understates what the position cost - the
-    // indexer's entryPrice is the total, and the row should agree with it.
-    let total = 0n;
-    let found = false;
-
-    for (const log of receipt?.logs ?? []) {
-      if (log.address?.toLowerCase() !== usdc) continue;
-      if (log.topics?.[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
-      if (log.topics?.[1]?.toLowerCase().slice(2) !== from) continue;
-      total += BigInt(log.data);
-      found = true;
-    }
-
-    if (found) return Number(total) / 1e6;
-  } catch {
-    // Deliberately quiet: this is a nicety, and failing to parse a log must
-    // never take down a fill that already succeeded.
-  }
-  return null;
-}
-
-/**
- * The option contract created by this fill. Best effort: the first address
- * that appears as a log emitter and is not a token we already know.
- */
-function extractOptionAddress(receipt) {
-  try {
-    const known = new Set(
-      Object.values(getSigningClient().chainConfig.tokens ?? {})
-        .map((t) => t.address.toLowerCase())
-        .concat(Object.values(getSigningClient().chainConfig.contracts ?? {}).map((a) => a.toLowerCase())),
-    );
-
-    for (const log of receipt?.logs ?? []) {
-      const address = log.address?.toLowerCase();
-      if (address && !known.has(address)) return address;
-    }
-  } catch {
-    // Same reasoning as above.
-  }
-  return null;
-}
-
-/** Re-exported so callers do not need to reach past this module. */
-export { getSigningClient };
