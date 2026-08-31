@@ -14,7 +14,9 @@
     "inspect:orders": "node --env-file-if-exists=../.env scripts/inspect-order.js",
     "inspect:sdk": "node --env-file-if-exists=../.env scripts/inspect-sdk.js",
     "inspect:expiries": "node --env-file-if-exists=../.env scripts/expiries.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "repay:request": "node --env-file-if-exists=../.env scripts/repay.js request",
+    "repay:confirm": "node --env-file-if-exists=../.env scripts/repay.js confirm"
   },
   "repository": {
     "type": "git",
