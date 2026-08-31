@@ -183,21 +183,29 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 4 — Settlement ⬜
+## Phase 4 — Settlement 🔄
 
 **Goal:** reflect on-chain settlement in our database. Read-only — settlement is automatic (requirements.md UC-3).
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 4.1 | Query settlement status | ⬜ | `getOptionInfo().settled` read correctly |
-| 4.2 | Read the payout | ⬜ | `calculatePayout` view call returns the amount |
-| 4.3 | Scheduler loop | ⬜ | Finds expired positions, updates status (BR-11) |
-| 4.4 | Failed-settlement detection | ⬜ | Unsettled past threshold → `needs_review` (BR-27) |
-| 4.5 | Catch-up on restart | ⬜ | Processes overdue positions first |
+| 4.1 | Query settlement status | ✅ | `option.isSettled()` — **not** `getOptionInfo().settled`, which does not exist. `getFullOptionInfo()` returns expiry, settled, buyer and size in one call |
+| 4.2 | Read the payout | ✅ | `calculatePayout()` verified against the real position: $2,000 → 44.79968 USDC |
+| 4.3 | Scheduler loop | ✅ | `src/scheduler/` — hourly (BR-11), read-only client so it structurally cannot spend |
+| 4.4 | Failed-settlement detection | 🔄 | Time threshold (`SETTLEMENT_GRACE_HOURS`, default 6). **Event-based detection is impossible on the Alchemy free tier** — see below |
+| 4.5 | Catch-up on restart | ✅ | Startup sweep, oldest expiry first |
 
 **Definition of done:** a position bought in Phase 3 reaches a terminal status automatically.
 
-> ⚠️ **Timing:** the shortest expiry is 1 day. To demo a real settlement, **the position must be bought at least a day before demo day.** Buy a short-dated one by 3 Sep at the latest, or the settlement path will only ever be shown as a simulation.
+> ⚠️ **OUR POSITION EXPIRES 2026-09-02 08:00 UTC = 16:00 MYT, Tuesday afternoon.**
+>
+> If the loop is not running as a daemon by then, **someone runs `node scripts/settle.js --confirm` by hand that Tuesday afternoon.** "2 Sep" gets remembered as "sometime Tuesday"; 16:00 MYT does not.
+>
+> No second purchase is needed — this position settles four days before the pitch.
+>
+> **After the sweep, save the settled row and the BaseScan state to `docs/ONCHAIN-EVIDENCE.md`.** A position that completed the full lifecycle — bought, expired, settled, recorded — is the strongest artefact this project will produce, and it exists for exactly one moment.
+
+> ⚠️ **BR-27 cannot be implemented as written.** It specifies detecting failed settlement via `OptionSettlementFailed` events, but Alchemy's free tier caps `eth_getLogs` at a **9-block range** (~18 seconds of history). Scanning from our fill to head already needs ~500 requests and grows. `isSettled()` is a plain contract read and is unaffected, so primary detection works; only the failure path falls back to a time threshold. Upgrading Alchemy to PAYG would restore the rule as written.
 
 ---
 

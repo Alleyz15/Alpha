@@ -47,3 +47,34 @@ premium. The indexer agrees: `"side": "buyer"`, `"buyer": 0x4fB77837…`,
 | BaseScan | https://basescan.org/tx/0xec836267a62d5699eaf9ce382252bb8efcdad41d9680b4462ce0ddc4171c75d2 |
 | Block | 50669494 |
 | What | Approved exactly 3 USDC to the OptionBook. Never MaxUint256 (BR-12) |
+
+---
+
+## 3. Settlement — TO BE FILLED IN 2 Sep 2026, after 16:00 MYT
+
+The position above expires **2026-09-02 08:00 UTC = 16:00 Malaysia time**.
+
+Run the sweep that afternoon (or have the daemon running):
+
+```
+cd backend && node --env-file-if-exists=../.env scripts/settle.js --confirm
+```
+
+Then record here, and do not edit afterwards:
+
+- final status — `settled` or `expired_worthless`
+- settlement price the protocol used, and which source reported it
+- payout in USDC
+- the full event trail: created → broadcast → confirmed → settled
+- the option contract's state on BaseScan
+
+**Why this matters more than the purchase.** A position that completed the whole
+lifecycle — bought on-chain, held to expiry, settled by the protocol, recorded in
+our database — is the strongest artefact this project will produce. It answers
+"does it work" with a chain of evidence rather than a claim. It exists for exactly
+one moment; if nobody writes it down that afternoon, the demo shows a screenshot
+of a position that is merely active.
+
+**If the payout is zero** (ETH finished above $2,320) that is a *success*, not a
+failure: the protection was not needed. Record it as such — US-7 exists because a
+user who sees "expired worthless" without explanation assumes something broke.
