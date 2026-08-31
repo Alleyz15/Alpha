@@ -28,7 +28,10 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
           {positions.map((position) => (
             <article className="position-card" key={position.positionId}>
               <div className="asset-token">Ξ</div>
-              <div className="position-title"><span>Ethereum</span><strong>{position.amountLabel} protected</strong></div>
+              <div className="position-title">
+                <span>Ethereum</span>
+                <strong>{position.amountLabel} {position.fill === 'onchain' ? 'protected' : 'protection requested'}</strong>
+              </div>
               <div className="position-metric"><small>Protection floor</small><strong>{position.floorLabel}</strong></div>
               <div className="position-metric"><small>End date</small><strong>{position.expiryLabel}</strong></div>
               <div className="position-metric">
