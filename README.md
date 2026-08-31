@@ -156,7 +156,7 @@ Stated plainly, because they're real:
 
 | Name | Role | LinkedIn |
 |---|---|---|
-| Alvin Wong Feng Tian| Backend — SDK integration, database, settlement | https://www.linkedin.com/in/alvin-wong-feng-tian-a89bba225/ |
+| Alvin Wong Feng Tian | Backend | https://www.linkedin.com/in/alvin-wong-feng-tian-a89bba225/ |
 | Ho Qi Yuan | Frontend | https://www.linkedin.com/in/ho-qi-yuan-447100400/ |
 | Damian Heng Yong An | Backend | https://www.linkedin.com/in/damian-heng-3a1314281/ |
 | Tan Tee Khai | Frontend | https://www.linkedin.com/in/tan-tee-khai-b7187a39a/ |
