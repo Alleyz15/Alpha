@@ -21,6 +21,7 @@ import { buildQuoteSet } from '../src/thetanuts/quote.js';
 import { insertPurchasedTier } from '../src/db/quotes.js';
 import { insertPendingPosition, getPosition, listPositionEvents } from '../src/db/positions.js';
 import { getDemoUser } from '../src/api/demoUser.js';
+import { db } from '../src/db/client.js';
 import { getWalletBalances } from '../src/thetanuts/wallet.js';
 import { readAllowance } from '../src/thetanuts/allowance.js';
 import { getWalletAddressChecksummed } from '../src/thetanuts/signer.js';
@@ -80,29 +81,64 @@ const position = await insertPendingPosition({
 console.log(`\n  quote row     ${quoteRow.id}`);
 console.log(`  position row  ${position.id}  (${position.status})`);
 
+// ---------------------------------------------------------------------------
+// Cleanup for runs that never broadcast
+// ---------------------------------------------------------------------------
+// A row is written before every attempt (BR-14), including attempts the
+// checklist then rejects and dry runs that were never going to send anything.
+// Those rows would sit at `pending` forever: the dashboard shows them as
+// "Processing", which is wrong - they are not in progress, they will never
+// resolve - and Phase 4's scheduler would have to handle expired positions
+// with no option address, a case that should not exist.
+//
+// The guard that matters: this only ever runs while nothing has been
+// broadcast. Once a transaction is in flight the row must survive whatever
+// happens next, because it is the only trace of an attempt that may have
+// landed. Deleting it then would be the exact silent gap BR-14 exists to
+// prevent.
+let broadcastAttempted = false;
+
+async function discardUnbroadcastRows(why) {
+  if (broadcastAttempted) {
+    console.log('\n  Rows KEPT: a transaction was already in flight and the record must survive.');
+    return;
+  }
+  await db.from('position_events').delete().eq('position_id', position.id);
+  await db.from('positions').delete().eq('id', position.id);
+  await db.from('quotes').delete().eq('id', quoteRow.id);
+  console.log(`  rows discarded (${why}) — nothing was broadcast`);
+}
+
 console.log('\n--- pre-flight checklist ---\n');
 const prepared = await prepareFill(position.id);
 
 if (!prepared.preflight) {
   console.log(`  BLOCKED: ${prepared.reason}`);
+  await discardUnbroadcastRows('blocked before the checklist');
   process.exit(1);
 }
 
 console.log(formatPreflight(prepared.preflight));
 
 if (!prepared.ready) {
-  console.log('\n  Nothing was broadcast.\n');
+  console.log('\n  Nothing was broadcast.');
+  await discardUnbroadcastRows('pre-flight failed');
   process.exit(1);
 }
 
 if (!confirmed) {
   console.log('\n  DRY RUN — every check passed but --confirm was not given.');
-  console.log(`  Re-run with --confirm to spend ${tier.cost.premiumUsdc.toFixed(6)} USDC. This cannot be undone.\n`);
+  console.log(`  Re-run with --confirm to spend ${tier.cost.premiumUsdc.toFixed(6)} USDC. This cannot be undone.`);
+  await discardUnbroadcastRows('dry run');
+  console.log();
   process.exit(0);
 }
 
 console.log('\n--- broadcasting ---\n');
 console.log('  sending fillOrder... do not interrupt.');
+
+// From this line on the row is permanent, whatever happens.
+broadcastAttempted = true;
 
 let result;
 try {
