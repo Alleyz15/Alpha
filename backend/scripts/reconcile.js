@@ -4,8 +4,10 @@
 //
 // ---------------------------------------------------------------------------
 // Read-only. Rebuilds every position fact from chain and diffs it against the
-// database. Sends no transaction. It reads the wallet ADDRESS to check buyer
-// identity, but it never signs and never spends.
+// database. Sends no transaction, and needs no private key: set
+// THETANUTS_WALLET_ADDRESS (the burner's public address) to run it as a pure
+// audit. If that is unset it falls back to deriving the address from the key.
+// Either way it only reads — nothing is signed and nothing is spent.
 // ---------------------------------------------------------------------------
 //
 // Two questions it answers:
@@ -29,11 +31,27 @@
 // itself is the specific contract for one strike and expiry, so a matching
 // address already pins the strike.
 
+import { ethers } from 'ethers';
 import { client } from '../src/thetanuts/client.js';
 import { db } from '../src/db/client.js';
 import { getWalletAddress } from '../src/thetanuts/signer.js';
 
-const wallet = getWalletAddress(); // lowercase, from the key; nothing is signed
+// The wallet whose positions we reconcile. Prefer THETANUTS_WALLET_ADDRESS so
+// this audit runs read-only without the private key; otherwise derive it from
+// the key. The address is public — nothing is signed either way.
+function resolveWallet() {
+  const fromEnv = process.env.THETANUTS_WALLET_ADDRESS?.trim();
+  if (fromEnv) {
+    try {
+      return ethers.getAddress(fromEnv).toLowerCase();  // validate + normalise
+    } catch {
+      throw new Error(`THETANUTS_WALLET_ADDRESS is not a valid address: ${fromEnv}`);
+    }
+  }
+  return getWalletAddress();  // needs THETANUTS_PRIVATE_KEY
+}
+
+const wallet = resolveWallet();
 
 const line = (label, pass, note = '') =>
   console.log(`    ${pass ? 'ok  ' : 'MISMATCH'}  ${label.padEnd(20)}${note}`);
