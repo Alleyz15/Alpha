@@ -181,13 +181,13 @@ US-7 ("not needed this time"), not a failure.
 > settled-state check that degrades gracefully). The direct-contract settled check
 > still needs a valid RPC key.
 >
-> **Finding (open):** reconcile caught a real discrepancy on the live position —
-> `num_contracts_raw` is `140000` in the DB but `139999` on chain. A fill executes
-> by USDC amount, so the actual contract count lands one 6dp unit off the quoted
-> count, and `executeFill` records `premium_paid` but not the actual contracts.
-> Fix (proposed, needs a migration adding `p_num_contracts_raw` to
-> `transition_position` + an `executeFill` change, testable only with a real fill):
-> record the on-chain contract count after confirmation.
+> **Finding (fixed 31 Aug):** reconcile caught a real discrepancy — DB
+> `num_contracts_raw` `140000` vs `139999` on chain (a fill executes by USDC
+> amount, so it lands a 6dp unit off the quoted count). **Resolved:** migration
+> `add_num_contracts_to_transition_position` lets the sanctioned mutator write the
+> field; `executeFill` now records the on-chain `getFullOptionInfo().numContracts`
+> after confirmation; the live position was corrected to `139999`; reconcile is
+> clean. The `executeFill` read itself awaits a real fill to exercise.
 
 **Goal:** rebuild every position fact from chain and diff it against the database.
 
@@ -317,3 +317,4 @@ Record each completed step here so the doc reflects reality.
 | 2026-08-31 | 4 | Scenario preview per tier — **verified live** |
 | 2026-08-31 | 5 | Offline tests: `decimals`+`selection`+`quoteStore`+`errors` (`npm test`, 24/24) |
 | 2026-08-31 | Gate 0 | deps installed, `.env` set, read-only checks green; RPC key returns 401 (needs a valid Alchemy key) |
+| 2026-08-31 | fix | `num_contracts_raw` fix: migration + `executeFill` records on-chain count; live position corrected; reconcile clean |
