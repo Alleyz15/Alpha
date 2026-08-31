@@ -175,9 +175,19 @@ US-7 ("not needed this time"), not a failure.
 
 ## Step 3 — Reconciliation script (3.10) 🔄 🟠 trust artefact + test · BR-36
 
-> **Status:** `scripts/reconcile.js` written and committed. Blocked from a live run
-> only by `THETANUTS_PRIVATE_KEY` (it derives the wallet address from the key);
-> fails loud and clean until a valid key is set.
+> **Status:** `scripts/reconcile.js` written, committed, and **verified live** via
+> the Thetanuts indexer (works without the private key — set
+> `THETANUTS_WALLET_ADDRESS` — and without the RPC, which is an optional
+> settled-state check that degrades gracefully). The direct-contract settled check
+> still needs a valid RPC key.
+>
+> **Finding (open):** reconcile caught a real discrepancy on the live position —
+> `num_contracts_raw` is `140000` in the DB but `139999` on chain. A fill executes
+> by USDC amount, so the actual contract count lands one 6dp unit off the quoted
+> count, and `executeFill` records `premium_paid` but not the actual contracts.
+> Fix (proposed, needs a migration adding `p_num_contracts_raw` to
+> `transition_position` + an `executeFill` change, testable only with a real fill):
+> record the on-chain contract count after confirmation.
 
 **Goal:** rebuild every position fact from chain and diff it against the database.
 
@@ -223,9 +233,10 @@ floor = 0, below floor = `(floor − price) × contracts`), JSON-safe, no BigInt
 ## Step 5 — Exercise the failure paths (3.9) 🔄 🟡 confidence
 
 > **Offline half done (31 Aug):** `BUILD_PLAN §10` automated checks landed and pass
-> (`test/decimals.test.js` — the three decimal traps; `test/selection.test.js` —
-> BR-6 expiry + BR-41 tiers). Suite is `npm test`, 13/13. The live-revert half
-> below still needs a real broadcast.
+> — `npm test`, **24/24** across four modules: `decimals` (the three money traps),
+> `selection` (BR-6 expiry + BR-41 tiers), `quoteStore` (BR-8 validity window),
+> `errors` (API envelope + the no-internal-leak security property). The live-revert
+> half below still needs a real broadcast.
 
 **Goal:** confirm the revert→`failed` and timeout→`pending_verification` branches
 behave. They are implemented in `executeFill` but never triggered — the one fill
@@ -302,7 +313,7 @@ Record each completed step here so the doc reflects reality.
 | Date | Step | What landed |
 |---|---|---|
 | 2026-08-31 | (pre) | Operator-fill bridge `scripts/fill-position.js` |
-| 2026-08-31 | 3 | `scripts/reconcile.js` (DB↔chain, BR-36) — written, awaits a valid key |
+| 2026-08-31 | 3 | `scripts/reconcile.js` (DB↔chain, BR-36) — indexer-primary, **verified live**; caught a real 140000-vs-139999 discrepancy |
 | 2026-08-31 | 4 | Scenario preview per tier — **verified live** |
-| 2026-08-31 | 5 | Offline tests: `decimals` + `selection` (`npm test`, 13/13) |
-| 2026-08-31 | Gate 0 | deps installed, `.env` set, read-only checks green |
+| 2026-08-31 | 5 | Offline tests: `decimals`+`selection`+`quoteStore`+`errors` (`npm test`, 24/24) |
+| 2026-08-31 | Gate 0 | deps installed, `.env` set, read-only checks green; RPC key returns 401 (needs a valid Alchemy key) |
