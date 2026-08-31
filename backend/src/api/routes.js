@@ -9,10 +9,11 @@ import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
 import { stressLoanById } from '../lending/stress.js';
 import { insertPurchasedTier } from '../db/quotes.js';
 import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
-import { debitBalance } from '../db/balances.js';
+import { debitBalance, listBalanceEventsForPositions } from '../db/balances.js';
 import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
+import { strikeView, paymentView, sumPayments } from './positionView.js';
 
 /**
  * GET /api/demo-context
@@ -250,13 +251,30 @@ export async function getPositions() {
   const user = await getDemoUser();
   const rows = await listPositionsByUser(user.id);
 
+  // One query for every position, rather than one per row. The money trail is
+  // the only place a refund is recorded - positions.status says 'failed', which
+  // is not the same as saying the user got their money back.
+  const payments = await listPaymentsForPositions(rows.map((p) => p.id));
+
   return {
     positions: rows.map((p) => ({
       positionId: p.id,
       asset: p.asset,
       // 6 decimals: one contract protects one unit of the underlying.
       protectedAmount: Number(p.num_contracts_raw) / 1e6,
-      protectionFloorUsdc: Number(p.strike),
+
+      // --- put or call, and what the strike MEANS ------------------------
+      //
+      // A put strike is a floor: the price below which the holder is
+      // protected. A call strike is a threshold: the price above which they
+      // share the gain. Same number, opposite meaning.
+      //
+      // So the fields are mutually exclusive and each is null when it does not
+      // apply. The dashboard rendered a vault call as "Protection floor $2,680"
+      // - a floor above spot - because there was one field and it was always
+      // populated. A null cannot be rendered as the wrong label.
+      ...strikeView(p.option_type, p.strike),
+
       expiry: p.expiry,
       premiumPaidUsdc: p.premium_paid === null ? 0 : Number(p.premium_paid),
       status: p.status,
@@ -275,8 +293,39 @@ export async function getPositions() {
       // 'operator' is not.
       fill: p.tx_hash ? 'onchain' : 'operator',
       simulated: p.tx_hash === null,
+
+      // --- what happened to the user's money -----------------------------
+      //
+      // 'failed' says the purchase did not happen. It does not say whether the
+      // user was charged, or refunded, and the interface had nothing to render
+      // but "Payment status unavailable". A refunded position should be able to
+      // say so - it is the difference between "we lost your order" and "we lost
+      // your order and gave your money back".
+      ...paymentView(payments.get(p.id), p),
     })),
   };
+}
+
+/**
+ * The money trail for a set of positions, keyed by position id.
+ *
+ * One query for all of them rather than one per row. The totals are turned into
+ * a status by paymentView() in positionView.js, which is pure and tested.
+ *
+ * @param {string[]} positionIds
+ * @returns {Promise<Map<string, object>>}
+ */
+async function listPaymentsForPositions(positionIds) {
+  const out = new Map();
+  if (positionIds.length === 0) return out;
+
+  const events = await listBalanceEventsForPositions(positionIds);
+
+  for (const id of positionIds) {
+    out.set(id, sumPayments(events.filter((e) => e.position_id === id)));
+  }
+
+  return out;
 }
 
 /**

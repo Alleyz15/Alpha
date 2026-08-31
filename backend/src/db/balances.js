@@ -143,3 +143,26 @@ export async function findStandingDebits() {
 
   return { held, refundDue };
 }
+
+/**
+ * Balance events for a set of positions, in one query.
+ *
+ * The money trail is the only place a refund is recorded. `positions.status`
+ * says 'failed', which is not the same as saying the user got their money back
+ * - and an interface with only the status has nothing to render but "payment
+ * status unavailable".
+ *
+ * @param {string[]} positionIds
+ * @returns {Promise<object[]>}
+ */
+export async function listBalanceEventsForPositions(positionIds) {
+  if (!Array.isArray(positionIds) || positionIds.length === 0) return [];
+
+  const { data, error } = await db
+    .from('balance_events')
+    .select('position_id, event_type, amount, asset')
+    .in('position_id', positionIds);
+
+  if (error) throw new Error(`listBalanceEventsForPositions: ${error.message}`);
+  return data ?? [];
+}

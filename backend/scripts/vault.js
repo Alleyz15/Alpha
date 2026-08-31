@@ -98,6 +98,9 @@ const position = await insertPendingPosition({
   strikeRaw: String(q.call.raw.order.strikePrice),
   expiry: q.expiry.toISOString(),
   numContractsRaw: contractsRaw.toString(),
+  // A CALL, not a put. Without this the dashboard renders its strike as a
+  // protection floor above spot, which reads as a bug to anyone who looks.
+  optionType: 'call',
 });
 console.log(`  position row  ${position.id}  (pending)`);
 
