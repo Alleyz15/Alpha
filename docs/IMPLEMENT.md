@@ -106,7 +106,7 @@ corrected book.
 
 ---
 
-## Phase 1 — Quote engine 🔄
+## Phase 1 — Quote engine ✅
 
 **Goal:** given an asset, an amount and a protection level, return a real quote from the live book. Read-only — no wallet, no transactions.
 
@@ -120,8 +120,8 @@ corrected book.
 | 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
 | 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters. The premium cap is for the fill path only, not quoting (BR-33) |
 | 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
-| 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5), USDC not fiat (BR-45) |
-| 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` is not in the quote path — only in the decimals demo |
+| 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5). NO_EXPIRY carries `longestAvailableDate`. Frontend still needs a date-picker cap |
+| 1.8 | Scenario preview | ✅ | `buildScenarios()` in `quote.js` — up/flat/atFloor/down via `calculatePayoutAtPrice`, rescaled 6dp→18dp at the boundary |
 
 **Definition of done:** `node quote.js` prints a complete, correct quote for ETH using live data.
 
@@ -130,6 +130,15 @@ corrected book.
 ---
 
 ## Phase 2 — Database ✅
+
+> **User payment added 1 Sep.** `balances` now carries USDC alongside the asset
+> holdings, and buying protection debits it. `balance_events` is append-only:
+> a refund is a compensating write, never a deletion, so the trail reads
+> `debit → fill failed → refund`. `debit_balance()` locks the row so the check
+> and the decrement are one operation. A timeout leaves the debit **held** —
+> the balance-side word for `pending_verification`, deliberately not a second
+> vocabulary — and `npm run reconcile` surfaces both held and refund-due.
+
 
 **Goal:** persist users, quotes and positions. See DATABASE.md for the schema.
 
@@ -222,7 +231,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 4.1 | Query settlement status | ✅ | `option.isSettled()` — **not** `getOptionInfo().settled`, which does not exist. `getFullOptionInfo()` returns expiry, settled, buyer and size in one call |
 | 4.2 | Read the payout | ✅ | `calculatePayout()` verified against the real position: $2,000 → 44.79968 USDC |
 | 4.3 | Scheduler loop | ✅ | `src/scheduler/` — hourly (BR-11), read-only client so it structurally cannot spend |
-| 4.4 | Failed-settlement detection | 🔄 | Time threshold (`SETTLEMENT_GRACE_HOURS`, default 6). **Event-based detection is impossible on the Alchemy free tier** — see below |
+| 4.4 | Failed-settlement detection | ✅ | Time threshold `SETTLEMENT_GRACE_HOURS` (default 6) → `needs_review`. Event path is impossible on the free tier (9-block `eth_getLogs` cap) |
 | 4.5 | Catch-up on restart | ✅ | Startup sweep, oldest expiry first |
 
 **Definition of done:** a position bought in Phase 3 reaches a terminal status automatically.
@@ -277,7 +286,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 7 — Options-powered lending ⬜
+## Phase 7 — Options-powered lending 🔄
 
 **Depends on Phases 1–4.** The put that acts as a collateral floor is bought and settled by the same code the core product uses, so that code must work first. This is a dependency, not a priority ranking.
 
@@ -287,9 +296,9 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 7.1 | `loans` table + migration | ⬜ | Per DATABASE.md conventions |
-| 7.2 | Credit limit derived from strike | ⬜ | `credit_limit = strike × num_contracts`, read from the filled put. No haircut, no ratio (BR-39) |
-| 7.3 | Disburse USDC on-chain | ⬜ | Real transfer to the user's address, tx hash recorded |
+| 7.1 | `loans` table + migration | ✅ | Triggers enforce BR-39 and BR-48 — a ratio cannot be inserted |
+| 7.2 | Credit limit derived from strike | ✅ | `src/lending/credit.js` — strike × contracts in bigint, no configurable factor |
+| 7.3 | Disburse USDC on-chain | ✅ | tx `0x29165d16…`, 4.597700 USDC = 2300 × 0.001999. See ONCHAIN-EVIDENCE.md |
 | 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
 | 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
 
@@ -312,11 +321,11 @@ question we would lose.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
-| 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
+| 8.1 | `vaults` table + migration | ✅ | `yield_is_simulated` pinned true by CHECK; maturity must equal the call expiry |
+| 8.2 | Deposit split logic | ✅ | `splitDeposit()` solves backwards from the guarantee, so protection is exact |
 | 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. Vanilla buy-side call, ~2-day expiry |
 | 8.4 | Simulated yield accrual | ⬜ | Labelled simulated **where the number appears** (BR-37) |
-| 8.5 | Participation rate displayed | ⬜ | From the real premium paid, never hardcoded (BR-38) |
+| 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
 | 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
 
 **Non-negotiable in the copy** — a judge will do the arithmetic:

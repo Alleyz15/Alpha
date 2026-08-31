@@ -34,3 +34,112 @@ export async function getBalance(userId, asset) {
     `getBalance(${userId}, ${asset})`,
   );
 }
+
+/**
+ * Charge a user for a purchase. Atomic: the check and the decrement happen
+ * together or not at all.
+ *
+ * Debit BEFORE the fill, for the same reason BR-14 writes the position row
+ * before broadcasting. A fill that spends against a balance we never reserved
+ * is unrecoverable; a debit with no fill is visible and reversible.
+ *
+ * @param {object} args
+ * @returns {Promise<number>} the balance remaining
+ * @throws {Error} code INSUFFICIENT_BALANCE when the user cannot cover it
+ */
+export async function debitBalance({ userId, asset, amount, positionId = null, reason = null }) {
+  const { data, error } = await db.rpc('debit_balance', {
+    p_user_id: userId,
+    p_asset: asset,
+    p_amount: amount,
+    p_position_id: positionId,
+    p_reason: reason,
+  });
+
+  if (error) {
+    const err = new Error(error.message);
+    // The database raises INSUFFICIENT_BALANCE; surface it as a code the API
+    // layer can map without parsing prose.
+    err.code = /INSUFFICIENT_BALANCE/.test(error.message) ? 'INSUFFICIENT_BALANCE' : error.code;
+    throw err;
+  }
+  return Number(data);
+}
+
+/**
+ * Make a user whole after a purchase that did not happen.
+ *
+ * A COMPENSATING WRITE, never a deletion. The trail must read
+ * debit -> refund, because a debit that disappears looks like it never
+ * happened, and "we cannot tell whether the user was charged" is worse than
+ * either charging or not charging.
+ *
+ * Refuses a second refund for the same position - a compensating write that
+ * can run twice is a way to mint balance.
+ */
+export async function refundBalance({ userId, asset, amount, positionId = null, reason = null }) {
+  const { data, error } = await db.rpc('refund_balance', {
+    p_user_id: userId,
+    p_asset: asset,
+    p_amount: amount,
+    p_position_id: positionId,
+    p_reason: reason,
+  });
+  if (error) throw new Error(`refundBalance: ${error.message}`);
+  return Number(data);
+}
+
+/**
+ * The money trail for one user, newest first.
+ */
+export async function listBalanceEvents(userId, asset = null, limit = 50) {
+  let q = db.from('balance_events').select('*').eq('user_id', userId);
+  if (asset) q = q.eq('asset', asset);
+  return unwrap(await q.order('created_at', { ascending: false }).limit(limit), 'listBalanceEvents');
+}
+
+/**
+ * Debits whose fill never confirmed.
+ *
+ * The operator model means the debit lands at purchase while the fill happens
+ * minutes later by hand, so this window is real and deliberate. It is not
+ * engineered around; it is surfaced, by the same command that surfaces every
+ * other unresolved state.
+ *
+ *   position pending / pending_verification -> payment HELD, correctly
+ *   position failed, no refund yet          -> REFUND DUE
+ *
+ * "held" is the balance-side word for pending_verification's "we do not know".
+ * Deliberately not a second vocabulary.
+ *
+ * @returns {Promise<{held: object[], refundDue: object[]}>}
+ */
+export async function findStandingDebits() {
+  const { data, error } = await db
+    .from('balance_events')
+    .select('*, positions!inner(id, status)')
+    .eq('event_type', 'debit')
+    .not('position_id', 'is', null);
+
+  if (error) throw new Error(`findStandingDebits: ${error.message}`);
+
+  const refunded = new Set(
+    unwrap(await db.from('balance_events').select('position_id').eq('event_type', 'refund'),
+      'findStandingDebits: refunds')
+      .map((r) => r.position_id),
+  );
+
+  const held = [];
+  const refundDue = [];
+
+  for (const row of data ?? []) {
+    const status = row.positions?.status;
+    if (refunded.has(row.position_id)) continue;
+    if (status === 'failed') refundDue.push({ ...row, positionStatus: status });
+    else if (status === 'pending' || status === 'pending_verification') {
+      held.push({ ...row, positionStatus: status });
+    }
+  }
+
+  return { held, refundDue };
+}
