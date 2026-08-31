@@ -627,7 +627,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Eight instances now, one family.** The shape:
+**Eleven instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -643,6 +643,9 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `api:check` balances | said nothing | 1.395637 USDC of drift |
 | commit `63d7fcc` | added economic matching and a terminal state | also cut `fill.js` from 398 lines to 130 |
 | `QUOTE_VALIDITY_SECONDS` | a configured 20-second window | never read; both call sites hardcoded 60 |
+| `NOT_FOUND` API code | a 404 for a missing loan | not in the status table, so it surfaced as `UPSTREAM_ERROR` |
+| the API router | routes matched by path | exact-match only, so the agreed `/:id/` endpoint could not exist |
+| `stress.js` / `repay.js` | pure arithmetic, testable | imported the DB client at load, so the tests could not import them |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -711,6 +714,53 @@ changing the number in `.env` produced no error and no effect.
 - **Make one command print the value it is actually using.** Pre-flight check 3
   reports both windows, so a wrong number shows up in every run rather than
   being inferred from a file nobody re-reads.
+
+#### Three found by running the code rather than reading it
+
+All three came from the same twenty minutes of exercising one new endpoint, and
+none would have been found by reading the diff.
+
+**`NOT_FOUND` was not in the API status table.** `toErrorResponse` maps any
+unlisted code to `UPSTREAM_ERROR`, so asking for a loan that does not exist
+reported that the service had broken. The handler raised `NOT_FOUND` correctly
+and something downstream changed it, which is why reading the handler proved
+nothing. Two attempts to fix it by matching the error message also failed:
+PostgREST puts `0 rows` in a `details` field, and the message says only that the
+result could not be coerced. The identifying mark is `error.code === 'PGRST116'`.
+
+**The router matched exact paths only.** `/api/loans/:loanId/stress` had already
+been agreed and written into the note for the frontend developer, and could not
+have existed. A route may now carry a `pattern` instead of a `path`.
+
+**A pure calculation could not be imported without credentials.** `stress.js`
+and `repay.js` imported the Supabase client and the signer at module load, both
+of which throw when `.env` is absent - and `npm test` does not load `.env`. The
+money arithmetic was therefore impossible to test at all.
+
+> **Untestable arithmetic is where the 100x errors live.** This project has
+> already had two scale bugs - 6dp versus 18dp contracts, and the payout
+> helpers. The defence against a third is a test, and a test needs an import.
+
+Fix: import the credentialed modules INSIDE the functions that use them, so the
+money maths stays a pure function of its arguments.
+
+**What the audit found.** Eighteen modules still need credentials at import, and
+for `src/db/*`, `src/api/*` and `src/scheduler/*` that is correct - they exist to
+talk to the database. What matters is that none of them is arithmetic. Every
+calculation module now imports cleanly:
+
+```
+credit.js  stress.js  repay.js  vault.js  decimals.js  selection.js  sizing.js
+```
+
+`quote.js` is on the credentialed list, but its pure parts already live in
+`selection.js` and `sizing.js`, which are clean and tested.
+
+**Re-run the audit** after adding a module that does arithmetic:
+
+```bash
+for f in $(find src -name '*.js'); do node -e "import('./$f').catch(e=>/is not set/.test(e.message)&&console.log('$f'))"; done
+```
 
 **What to do:**
 

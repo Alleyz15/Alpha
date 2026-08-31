@@ -6,6 +6,7 @@
 // rule with two answers.
 
 import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
+import { stressLoanById } from '../lending/stress.js';
 import { insertPurchasedTier } from '../db/quotes.js';
 import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
 import { debitBalance } from '../db/balances.js';
@@ -276,4 +277,46 @@ export async function getPositions() {
       simulated: p.tx_hash === null,
     })),
   };
+}
+
+/**
+ * GET /api/loans/:loanId/stress?price=1800
+ *
+ * The no-liquidation comparison (7.5). Feeds a hypothetical price through both
+ * sides - a conventional loan against the same ETH, and ours - and reports
+ * whether each would be liquidated.
+ *
+ * The disclosure that no lending protocol is integrated travels in the payload,
+ * not in the interface. Same principle as the reality block: a truth the screen
+ * must tell should not depend on the screen remembering to tell it.
+ */
+export async function getLoanStress(loanId, priceParam, ruleParam) {
+  if (priceParam === null || priceParam === undefined || priceParam === '') {
+    throw new ApiError('INVALID_REQUEST', 'A price is required, e.g. ?price=1800.');
+  }
+
+  const price = Number(priceParam);
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new ApiError('INVALID_REQUEST', `price must be a positive number, got '${priceParam}'.`);
+  }
+
+  const rule = ruleParam ?? 'as-disbursed';
+  if (!['as-disbursed', 'current'].includes(rule)) {
+    throw new ApiError('INVALID_REQUEST',
+      `rule must be 'as-disbursed' or 'current', got '${ruleParam}'.`);
+  }
+
+  try {
+    return await stressLoanById(loanId, price, rule);
+  } catch (error) {
+    // PostgREST reports a missing single() row as code PGRST116 - the message
+    // only says the result could not be coerced to one object, and the "0 rows"
+    // detail is on a different field. Matching the message alone therefore does
+    // not catch it, and it surfaces as UPSTREAM_ERROR: telling the caller the
+    // service broke when in fact they asked for something that isn't there.
+    if (error?.code === 'PGRST116' || /0 rows|no rows|not found/i.test(error?.message ?? '')) {
+      throw new ApiError('NOT_FOUND', `No loan ${loanId}.`);
+    }
+    throw error;
+  }
 }

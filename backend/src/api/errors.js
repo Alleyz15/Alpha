@@ -11,6 +11,10 @@ const STATUS_BY_CODE = {
   BALANCE_EXCEEDED: 400,
   NO_EXPIRY: 404,
   NO_TIERS: 404,
+  // A named thing that does not exist. Unlisted codes fall through to
+  // UPSTREAM_ERROR, which would tell the caller the service broke when in fact
+  // they asked for something that is not there.
+  NOT_FOUND: 404,
   INVALID_REQUEST: 400,
   UPSTREAM_ERROR: 502,
 };

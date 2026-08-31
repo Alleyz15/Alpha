@@ -360,6 +360,66 @@ Editing an applied file means your machine and the server silently diverge — a
 
 > ⚠️ **Supabase caveat:** changing tables through the web dashboard does **not** create a migration file. If anyone edits the schema by clicking around, the migration folder and the real database diverge and the whole system stops being trustworthy. **All schema changes go through migration files.** Tell the team this before they discover the table editor.
 
+### The directory drifted from the database, 30 Aug – 1 Sep 2026
+
+**It happened, it has been fixed, and the cause is not the dashboard.**
+
+On 1 Sep the live database had **ten** applied migrations and this directory had
+**eight**. The two with no file at all were `create_vaults` and
+`balance_events_and_debits` — the tables behind Phase 8 and the user balances,
+both written to all day. Five of the eight files that did exist carried version
+stamps that did not match what had been applied.
+
+**Cause.** Migrations applied through the Supabase MCP tool (`apply_migration`)
+are stamped by the server with its own timestamp and do **not** write a file into
+this directory. It is the same failure mode as the dashboard caveat above, but it
+does not look like it: you are writing SQL, in a migration, on purpose. Nothing
+warns you that the file is missing.
+
+**Why it mattered.** CLAUDE.md calls this directory the real schema, and the
+README tells a judge to run the migrations and get a working setup. Neither was
+true — a fresh clone could not have rebuilt this database.
+
+**How it was fixed.** The applied database was treated as the truth and the files
+made to match it, not the other way round. Both missing files were reconstructed
+from dumped definitions — `pg_get_constraintdef`, `pg_indexes`,
+`pg_get_functiondef`, `pg_get_triggerdef` — rather than rewritten from memory,
+and stamped with the version that was actually applied so a replay is a no-op.
+The five mismatched files were renamed to their applied stamps.
+
+**If you apply a migration through MCP, write the file yourself in the same
+change, using the version the server reports back.** `list_migrations` gives the
+applied versions; the filename must match one of them exactly.
+
+#### Checking it has not drifted again
+
+Enumerate every object in the live `public` schema and confirm each appears in
+this directory:
+
+```sql
+select 'table' as kind, tablename as name from pg_tables where schemaname='public'
+union all select 'function', proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'
+union all select 'index', indexname from pg_indexes where schemaname='public'
+union all select 'trigger', tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid where not t.tgisinternal
+union all select 'constraint', conname from pg_constraint where connamespace='public'::regnamespace
+order by kind, name;
+```
+
+Two things will look like drift and are not:
+
+- **Auto-named constraints.** An inline `check (amount >= 0)` is named
+  `balances_amount_check` by Postgres, so the name never appears in the file even
+  though the constraint does. Check the definition, not the name.
+- **`rls_auto_enable` / the `ensure_rls` event trigger.** Supabase platform
+  infrastructure that enables RLS on any new public table. Not ours, and a fresh
+  project has it too.
+
+This is a **reconciliation**, not a rebuild. It proves nothing in the database is
+missing from the directory; it does not prove the directory alone builds the
+database. That needs a fresh Postgres — a Supabase branch, or a local instance —
+and neither exists on this machine.
+
+
 ---
 
 ## Open questions for review
