@@ -52,8 +52,8 @@ Option buyers have capped losses and open-ended upside. Sellers have capped gain
 | Chain | Base mainnet · chainId **8453** |
 | Protocol | Thetanuts OptionBook |
 | Collateral | USDC |
-| Example transaction | [transaction link] |
-| Option contract | [address] |
+| Example transaction | 0x6420c71c0ec21eec902df711086c33a23559102d2fd1ead17a9436865be10de0 |
+| Option contract | 0xa609b6fbcf89dfb9bc671cfaa519d4ad63404329 |
 
 Thetanuts exists only on mainnet — there is no testnet. Every transaction here is real, executed in small amounts from a dedicated wallet.
 
@@ -156,7 +156,7 @@ Stated plainly, because they're real:
 
 | Name | Role | LinkedIn |
 |---|---|---|
-| Alvin | Backend — SDK integration, database, settlement | [url] |
+| Alvin | Backend — SDK integration, database, settlement | https://www.linkedin.com/in/alvin-wong-feng-tian-a89bba225/ |
 | [name] | Frontend | [url] |
 | [name] | [role] | [url] |
 
@@ -164,7 +164,7 @@ Stated plainly, because they're real:
 
 | Tool | Purpose |
 |---|---|
-| [tool] | [purpose] |
+| Claude | Backend implementation |
 
 ## Documentation
 
