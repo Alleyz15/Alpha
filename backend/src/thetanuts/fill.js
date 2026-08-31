@@ -25,6 +25,44 @@ import { getPosition, transitionPosition } from '../db/positions.js';
 import { getQuote } from '../db/quotes.js';
 
 /**
+ * Decide which contract count to record after a fill.
+ *
+ * getFullOptionInfo().numContracts is assumed to be 6 decimals like
+ * num_contracts_raw, but that scale is NOT independently verified. A fill
+ * executes by USDC amount, so the actual count lands within a hair of the quoted
+ * count; a value off by more than a small factor is a 10^12-style scale error,
+ * not a fill difference. Such a value is refused in favour of the quoted count,
+ * so a wrong-scale read can never silently overwrite the row - the exact trap
+ * decimals.js exists to prevent.
+ *
+ * @param {string} quotedRaw - num_contracts_raw as quoted, 6dp string
+ * @param {bigint|string|number|null} onChain - getFullOptionInfo().numContracts
+ * @returns {{ recordedRaw: string|null, seen: string|null, accepted: boolean }}
+ *   recordedRaw is what to pass to transitionPosition; null keeps the row's value
+ */
+export function pickRecordedContracts(quotedRaw, onChain) {
+  if (onChain == null) return { recordedRaw: null, seen: null, accepted: false };
+
+  let candidate;
+  try {
+    candidate = BigInt(onChain.toString());
+  } catch {
+    return { recordedRaw: null, seen: String(onChain), accepted: false };
+  }
+
+  const quoted = BigInt(quotedRaw);
+  // Accept only within [quoted/2, quoted*2]. A real fill is ~exactly the quote;
+  // a scale error is orders of magnitude out, so this band separates them.
+  const withinScale = quoted > 0n && candidate * 2n >= quoted && candidate <= quoted * 2n;
+
+  return {
+    recordedRaw: withinScale ? candidate.toString() : null,
+    seen: candidate.toString(),
+    accepted: withinScale,
+  };
+}
+
+/**
  * Find the order we quoted, as it stands on the book right now.
  *
  * The stored `order_snapshot` is the audit record of what we intended to buy,
@@ -226,12 +264,23 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
   // land a hair off the quoted count; read the authoritative on-chain size so
   // the row matches chain state (BR-36, BR-40). Best effort: if the read fails
   // (e.g. RPC down) keep the quoted value - reconcile will flag any divergence
-  // rather than this blocking a fill that already succeeded.
+  // rather than this blocking a fill that already succeeded. pickRecordedContracts
+  // also refuses a wrong-scale value, so a 10^12 error cannot overwrite the row.
   let actualContractsRaw = null;
+  let contractsSeen = null;
   if (optionAddress) {
     try {
       const info = await client.option.getFullOptionInfo(optionAddress);
-      if (info?.numContracts != null) actualContractsRaw = info.numContracts.toString();
+      const decided = pickRecordedContracts(position.num_contracts_raw, info?.numContracts ?? null);
+      actualContractsRaw = decided.recordedRaw;
+      contractsSeen = decided.seen;
+      if (contractsSeen && !decided.accepted) {
+        console.warn(
+          `[fill] on-chain numContracts ${contractsSeen} is off from the quoted ` +
+          `${position.num_contracts_raw} by more than 2x — keeping the quoted count. ` +
+          `Verify the scale of getFullOptionInfo().numContracts.`,
+        );
+      }
     } catch {
       // leave null -> the transition keeps the quoted num_contracts_raw
     }
@@ -249,7 +298,8 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
       gasUsed: receipt?.gasUsed?.toString() ?? null,
       status: receipt?.status ?? null,
       quotedContractsRaw: position.num_contracts_raw,
-      actualContractsRaw,
+      onChainContractsSeen: contractsSeen,
+      recordedContractsRaw: actualContractsRaw ?? position.num_contracts_raw,
     },
   });
 
