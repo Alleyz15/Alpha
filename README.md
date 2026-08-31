@@ -35,6 +35,23 @@ Two ways in, one mechanism underneath:
 
 Both buy a put on Thetanuts and hold it to expiry. Settlement is automatic; the result appears on your dashboard.
 
+### Two things the same put makes possible
+
+**Borrow without the risk of being sold out.** A conventional lender discounts your
+collateral and liquidates you when the price falls, because it has no floor. We
+have one, so the credit limit *is* the floor — `strike × contracts`, derived from
+the option, minus the interest the loan charges over its term. Not a
+loan-to-value ratio, and not configurable. Remove the option and we would lend
+less and keep the right to liquidate.
+
+**Keep your deposit, share the upside.** The yield a deposit would earn buys a
+call instead of being paid out. The deposit is returned in full at maturity, plus
+a share of any rise. The share is computed from the premium actually paid, never
+set by us — quoted three times in one afternoon at the same size it came out at
+24.17%, 22.99% and 23.54%, because the market moved.
+
+Both are built and both have run on chain. See transactions 3–5 and 8 below.
+
 ## Why it's on-chain
 
 The protection is a real position on a live protocol — not a database entry backed by a promise. Every position is fully collateralised on-chain, and every purchase produces a transaction anyone can verify.
@@ -52,10 +69,35 @@ Option buyers have capped losses and open-ended upside. Sellers have capped gain
 | Chain | Base mainnet · chainId **8453** |
 | Protocol | Thetanuts OptionBook |
 | Collateral | USDC |
-| Example transaction | 0x6420c71c0ec21eec902df711086c33a23559102d2fd1ead17a9436865be10de0 |
-| Option contract | 0xa609b6fbcf89dfb9bc671cfaa519d4ad63404329 |
+| Wallet | [`0x4fB77837…`](https://basescan.org/address/0x4fB77837bf2A0B86D167627Ded2E894f92F15127) |
 
-Thetanuts exists only on mainnet — there is no testnet. Every transaction here is real, executed in small amounts from a dedicated wallet.
+Thetanuts exists only on mainnet — there is no testnet. Every transaction below is real, executed in small amounts from a dedicated wallet.
+
+**Eight transactions, and what each one proves:**
+
+| # | Transaction | What it proves |
+|---|---|---|
+| 1 | [`0x6420c71c`](https://basescan.org/tx/0x6420c71c0ec21eec902df711086c33a23559102d2fd1ead17a9436865be10de0) | Protection bought. ETH put, $2,320 floor, we hold the buyer side |
+| 2 | [`0xec836267`](https://basescan.org/tx/0xec836267a62d5699eaf9ce382252bb8efcdad41d9680b4462ce0ddc4171c75d2) | USDC approved for an exact amount, never `MaxUint256` |
+| 3 | [`0x637242ca`](https://basescan.org/tx/0x637242cabaf89a69cea5d240da3ef4ab78b380df1292f87b6df8a58a33a0fd94) | The put that backs the loan. $2,300 floor |
+| 4 | [`0x29165d16`](https://basescan.org/tx/0x29165d16cb9ad2a38f7fa875c0d436464cd9a91090e3f6699074be134fa0201b) | 4.5977 USDC lent — a credit limit derived from that strike, not from a ratio |
+| 5 | [`0x7930bc42`](https://basescan.org/tx/0x7930bc428fbca01749f7d4afae3bceec44123107dd5049cbd075f44196cb47b0) | A real **call**, funding the upside share of a principal-protected deposit |
+| 6 | [`0x64e37010`](https://basescan.org/tx/0x64e37010da92270f3ffea4148c50a1b5f57fa831f7a0fbeefcc72332aa07e7ce) | Browser to chain. 140.7s from quote to broadcast, through the order-matching path |
+| 7 | [`0xd7fec53c`](https://basescan.org/tx/0xd7fec53c5595750aff0ed994b6ded292b93c93a12185d8856ce0ef4cc0be70ac) | The deposit resized so its maturity can actually be paid |
+| 8 | [`0x02c37705`](https://basescan.org/tx/0x02c37705b14fd86072b76108f0181869680d1998684e5dcea57eb41e069a6a09) | Loan repaid. Put → lend → repay, complete on chain |
+
+**Option contracts we hold:**
+
+| Contract | Position |
+|---|---|
+| [`0xa609b6fb`](https://basescan.org/address/0xa609b6fbcf89dfb9bc671cfaa519d4ad63404329) | ETH put, $2,320 floor, expires 2 Sep |
+| [`0xaa773723`](https://basescan.org/address/0xaa77372360c2414198080dc837df680674b6e7e1) | ETH put, $2,300 floor, expires 3 Sep — backs the loan |
+| [`0x110cfc45`](https://basescan.org/address/0x110cfc45ed90f5c9e9264e286977ce8906c1de29) | ETH put, $2,340 floor, expires 3 Sep |
+| [`0x46348380`](https://basescan.org/address/0x4634838086ed31e432db1cefa4e3ab19ef60159f) | ETH call, $2,660, expires 3 Sep |
+| [`0x12520cfb`](https://basescan.org/address/0x12520cfb58433ae7375d7c9371fdfc5a808c023b) | ETH call, $2,680, expires 3 Sep |
+
+Full detail, including two failed attempts and what they taught us:
+[`docs/ONCHAIN-EVIDENCE.md`](docs/ONCHAIN-EVIDENCE.md)
 
 ## Demo
 
@@ -96,6 +138,23 @@ npm run dev               # http://localhost:5173
 
 The frontend reads the same root `.env` through `envDir` in `vite.config.js`.
 
+**`.env.example` ships with `VITE_USE_MOCK_API=true`**, so a fresh clone runs
+against fixtures and needs no database or RPC endpoint. To drive the real
+backend, set it to `false` and start the API in a third terminal:
+
+```bash
+cd backend
+npm run api               # http://localhost:3000
+```
+
+Verify the backend without spending anything:
+
+```bash
+npm test                  # 62 tests, no credentials needed
+npm run db:check          # database connectivity and schema
+npm run preflight         # the full purchase checklist — broadcasts nothing
+```
+
 Environment details and troubleshooting: [`docs/SETUP.md`](docs/SETUP.md)
 
 ---
@@ -124,12 +183,37 @@ Thetanuts SDK surface used:
 | Outcome scenarios | `utils.calculatePayoutAtPrice()` |
 | Simulate before broadcasting | `optionBook.callStaticFillOrder()` |
 | Execute | `optionBook.fillOrder()` |
-| Settlement status | `option.getOptionInfo().settled` |
-| Settlement amount | `option.calculatePayout()` |
+| Settlement status | `option.getFullOptionInfo()` |
+| Settlement amount | `option.calculatePayout(address, price)` |
+| Settlement price | `option.getFullOptionInfo()`, then TWAP as a fallback |
 
 Built with Node 24, the Thetanuts SDK, ethers v6, Supabase, Vite and anime.js.
 
 ---
+
+## What is real, and what is simulated
+
+Stated in one place so nobody has to infer it.
+
+| | |
+|---|---|
+| Quotes | **Real.** Priced from the live Thetanuts order book, every time |
+| Option purchases | **Real.** Eight transactions on Base mainnet, verifiable above |
+| Settlement | **Real.** Read from chain after expiry |
+| Credit limit | **Real.** Derived from the strike of a put we actually hold |
+| Loan disbursement and repayment | **Real.** USDC moved on chain, both directions |
+| The call funding the deposit | **Real.** Bought on the book |
+| **Your balance** | **Simulated.** Seeded in the database. Nothing is deposited |
+| **The deposit yield** | **Simulated.** No yield source exists |
+
+**There is no deposit path, and that is deliberate.** Taking custody of a
+stranger's money needs regulatory standing a hackathon project does not have, so
+balances are seeded rather than funded. The consequence is that every real
+transaction above was paid for by us, from a wallet we control — the premium, the
+loan principal, and the interest alike.
+
+The interface says which is which at the point each number appears, rather than
+in a disclaimer nobody reads.
 
 ## Limitations
 
