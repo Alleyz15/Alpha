@@ -158,3 +158,24 @@ repayment            NOT built. Roadmap.
 ```
 
 Wallet after: **4.773852 USDC**, 0.00444069 ETH.
+
+---
+
+## Settlement runs — two afternoons, local time
+
+**Read these in MYT.** Whoever runs them is reading a local clock, and "2 Sep" gets
+remembered as "sometime Wednesday".
+
+| When (MYT) | What settles | Command |
+|---|---|---|
+| **Wed 2 Sep, 16:00** | The protection position `ccdcbf28…`, $2,320 floor | `cd backend && node --env-file-if-exists=../.env scripts/settle.js --confirm` |
+| **Thu 3 Sep, 16:00** | The loan `740a417d…` and its backing put `efa8d071…`, $2,300 floor | same command |
+
+(08:00 UTC on both days.)
+
+Two separate afternoons is deliberate and better than one: each artefact gets its
+own run and its own record, rather than three things landing inside an hour.
+
+After each run, record the outcome in the section above it. **A zero payout is a
+success, not a failure** — it means the price finished above the floor and the
+protection was not needed (US-7). Record it that way, or it reads as a fault.

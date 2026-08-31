@@ -67,24 +67,31 @@ import { resolveAsset } from './assets.js';
  * @returns {Promise<object[]>} fillable put orders, possibly empty
  */
 export async function getBuyablePutOrders(asset) {
+  return getBuyableOrders(asset, { isCall: false });
+}
+
+/**
+ * Live vanilla CALL orders on one asset that WE can buy.
+ *
+ * Same three filters as puts - asset by price feed, our side, single strike -
+ * differing only in isCall. Phase 8 buys the upside leg of a principal-protected
+ * deposit, and it must be a call we BUY (BR-1), never one we write.
+ *
+ * @param {string} asset
+ * @returns {Promise<object[]>}
+ */
+export async function getBuyableCallOrders(asset) {
+  return getBuyableOrders(asset, { isCall: true });
+}
+
+/** Shared filter. See getBuyablePutOrders for why each clause exists. */
+async function getBuyableOrders(asset, { isCall }) {
   const { priceFeed } = resolveAsset(asset);
   const orders = await client.api.fetchOrders();
 
   return orders.filter((o) =>
     (o.rawApiData?.priceFeed || '').toLowerCase() === priceFeed &&
-    o.rawApiData?.isCall === false &&
+    o.rawApiData?.isCall === isCall &&
     o.order?.isBuyer === true &&
-    // 4. Vanilla only - exactly one strike.
-    //
-    // The book also carries two-strike spreads and three-strike butterflies,
-    // and they are NOT this product. A put spread pays out only BETWEEN its
-    // strikes, so its maximum payout is the spread width rather than the
-    // strike: telling a user "your floor is $2,100" while holding one would be
-    // false, and BR-6 exists to stop exactly that kind of misdescription.
-    //
-    // It also happens that only the vanilla implementation
-    // (0x7355EB92...) simulates successfully for us; the multi-strike ones
-    // revert. But the reason to exclude them is that they are the wrong
-    // product, not that they fail.
     (o.rawApiData?.strikes?.length ?? 1) === 1);
 }

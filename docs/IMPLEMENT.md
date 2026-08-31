@@ -299,37 +299,53 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 8 — Principal-protected vault ❌ CUT
+## Phase 8 — Two-day principal protection 🔄
 
-**Cut 31 Aug**, after measuring rather than assuming.
+**Cut on 31 Aug, reinstated the same day.** The analysis that led to the cut still
+stands and is recorded below; the team decided it ships anyway, with a real
+on-chain call like everything else.
 
-Vanilla buy-side ETH **calls** exist, so the instrument is available:
+**What it is, named honestly:** *two-day principal protection with a small share of
+the upside.* Not a savings vault — over two days there is nothing for principal
+protection to protect against, and calling it savings would invite an arithmetic
+question we would lose.
+
+| # | Task | Status | Acceptance |
+|---|---|---|---|
+| 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
+| 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
+| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. Vanilla buy-side call, ~2-day expiry |
+| 8.4 | Simulated yield accrual | ⬜ | Labelled simulated **where the number appears** (BR-37) |
+| 8.5 | Participation rate displayed | ⬜ | From the real premium paid, never hardcoded (BR-38) |
+| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+
+**Non-negotiable in the copy** — a judge will do the arithmetic:
+
+- participation rate computed from the **real premium paid**, never hardcoded (BR-38)
+- the yield portion labelled **simulated at the point the number appears** (BR-37)
+- the **two-day tenor stated**, not implied
+- **not** retitled "principal-protected savings"
+
+### The arithmetic, and why it was nearly cut
+
+Measured 31 Aug rather than assumed. Vanilla buy-side ETH calls exist:
 
 ```
-2026-08-31 (+0.3d)  3 strikes 2420-2460   premium $0.97-9.38/unit
-2026-09-01 (+1.3d)  7 strikes 2420-2540   premium $2.29-29.08/unit
 2026-09-02 (+2.3d)  9 strikes 2420-2580   premium $3.47-39.71/unit
 ```
 
-**The reason to cut is not the participation rate.** Worked at the longest tenor,
-a $100 deposit at 5%/yr over 2.3 days sets aside $99.97 and spends **$0.03** on a
-call, which buys ~$21 of exposure — a participation rate of about **21%**, higher
-than the 4–7% previously feared.
+A $100 deposit at 5%/yr over 2.3 days sets aside $99.97 and spends **$0.03** on a
+call, which buys ~$21 of exposure — **participation ~21%**, higher than the 4–7%
+once feared.
 
-**The reason to cut is that there is nothing to protect the principal from.** Over
-2.3 days the yield being given up is three cents. "Principal-protected" describes a
-product where money grows safely over a meaningful period while keeping some
-upside; over two days there is no time for anything to grow, and the guarantee
-protects against a risk that does not exist at that horizon. It would be a
-correct-looking number attached to a product that means nothing — and a judge who
-does the arithmetic sees a three-cent yield portion dressed up as structured
-finance.
+**The honest problem is the other half.** Over 2.3 days the yield given up is three
+cents. The guarantee protects against a risk that barely exists at that horizon, so
+the number is correct and the product it describes is thin. That is why the copy
+constraints above are not optional: state the tenor, label the simulation, and
+derive the rate from what was actually paid.
 
-Building it would also cost time that Phase 5 integration and rehearsal need, five
-days from freeze.
-
-**If the book ever carries long-dated vanilla calls again, revisit.** The formulas
-in `requirements.md` BR-38 are correct; only the tenor makes them meaningless.
+**Definition of done:** a BaseScan link to a real call purchase, with the interface
+stating the participation rate and labelling the simulated yield.
 
 ---
 
