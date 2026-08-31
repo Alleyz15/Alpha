@@ -177,7 +177,12 @@ export async function disburse({ positionId, recipient, principalRaw, confirmed 
     // A revert is a definite answer: nothing moved.
     const reverted = /revert|insufficient/i.test(error?.message ?? '');
     if (reverted) {
-      await db.from('loans').update({ status: 'defaulted' }).eq('id', loan.id);
+      // Checked: an unchecked update here would leave a loan marked active
+      // against a transfer that never happened, and say nothing about it.
+      const marked = await db.from('loans').update({ status: 'defaulted' }).eq('id', loan.id);
+      if (marked.error) {
+        console.error('[disburse] FAILED to mark loan', loan.id, 'defaulted:', marked.error.message);
+      }
       throw new Error(`disbursement reverted, nothing was sent: ${error?.message ?? error}`);
     }
     // Anything else is NOT an answer. The transfer may have landed; retrying
