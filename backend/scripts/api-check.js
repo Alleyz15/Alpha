@@ -61,6 +61,10 @@ try {
       (b) => typeof b.asset === 'string' && typeof b.amount === 'number'),
     JSON.stringify(ctx.body?.balances));
   check('simulated is true (BR-51)', ctx.body?.simulated === true);
+  check('reality block present with four stages',
+    ctx.body?.reality?.balance === 'simulated' && ctx.body?.reality?.quote === 'live' &&
+    ['operator', 'automatic'].includes(ctx.body?.reality?.fill) && ctx.body?.reality?.settlement === 'live',
+    JSON.stringify(ctx.body?.reality));
 
   const holding = ctx.body.balances.find((b) => b.asset === 'ETH')?.amount ?? 0;
   // Deliberately not 0.4. Phase 3 fills at a fraction of a holding, and the
@@ -103,8 +107,11 @@ try {
     q.tiers.map((t) => t.actual.tier).join(', '));
   check('no signed order leaks into the payload', q.tiers.every((t) => !('order' in t)));
 
+  // Derived, not hardcoded. Vanilla puts now stop at ~2.4 days, so a fixed
+  // date goes stale within a day and the failure looks like a code bug.
+  const reachable = new Date(Date.now() + 20 * 3600_000).toISOString().slice(0, 10);
   const goal = await call('POST', '/api/quote', {
-    asset: 'ETH', units, mode: 'goal', targetValueUsdc: 80, targetDate: '2026-09-20',
+    asset: 'ETH', units, mode: 'goal', targetValueUsdc: 80, targetDate: reachable,
   });
   check('goal mode works (1.7)', goal.status === 200,
     goal.status === 200 ? `requestedStrike ${goal.body.requested.requestedStrikeUsdc}` : JSON.stringify(goal.body));
@@ -162,6 +169,7 @@ try {
   check('explorerUrl is null', bought.body?.explorerUrl === null);
   check('status is pending_fill', bought.body?.status === 'pending_fill', bought.body?.status);
   check('simulated is true (BR-51)', bought.body?.simulated === true);
+  check('fill is operator, not onchain', bought.body?.fill === 'operator', bought.body?.fill);
 
   const positionId = bought.body.positionId;
   created.positions.push(positionId);
@@ -208,6 +216,17 @@ try {
     ['pending', 'pending_verification', 'active', 'failed', 'settled', 'expired_worthless', 'needs_review']
       .includes(p.status), p.status);
   check('explorerUrl is null until there is a transaction', p.explorerUrl === null);
+  check('unfilled position reports fill=operator', p.fill === 'operator', p.fill);
+  check('txHash and optionAddress are exposed as fields',
+    'txHash' in p && 'optionAddress' in p);
+
+  // The real position must report fill=onchain - the interface may only
+  // promise "verify on BaseScan" for one of these.
+  const real = positions.body.positions.find((x) => x.txHash);
+  if (real) {
+    check('filled position reports fill=onchain', real.fill === 'onchain', real.fill);
+    check('filled position exposes its hash', typeof real.txHash === 'string' && real.txHash.startsWith('0x'));
+  }
 } finally {
   for (const id of created.positions) {
     await db.from('position_events').delete().eq('position_id', id);

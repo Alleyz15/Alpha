@@ -173,7 +173,12 @@ node --env-file-if-exists=../.env scripts/preflight-check.js 0.05 middle
 
 `UNITS` then `TIER` (`highest` | `middle` | `lowest`), plus `--keep` to leave the test rows behind.
 
-> ⚠️ **Check 9 (`callStaticFillOrder`) fails until an approval exists.** With allowance at 0 the simulation reverts with `Panic due to OVERFLOW(17)`, which says nothing about allowances — expect it, and don't read it as a broken order.
+> ⚠️ **A `Panic due to OVERFLOW(17)` from check 9 does NOT mean what it says.**
+> It is the contract's way of refusing an order we are not allowed to take. We
+> lost hours to it: the first guess was a missing allowance, which was wrong —
+> the approval went through and the revert was identical. The real cause was the
+> inverted side filter. If you see it now, the order is one we should not have
+> selected, not one that needs an approval.
 
 **The approval is a separate script**, because a check that silently sends a transaction is one nobody can run freely:
 
@@ -326,24 +331,90 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 
 > ⚠️ **The table above is the RAW book. It is not what we can buy.** Once puts, below-spot strikes and the buy side (BR-1) are filtered, the picture is much smaller — see below. An earlier version of this note claimed 27-day and 62-day options "exist with real liquidity" and that a 30-day product was feasible. **Both claims are false of the buyable book.**
 
-### Raw book vs buyable book (BR-52)
+### What we can actually buy (corrected 31 Aug)
 
-Checked 31 Aug 2026. Of ~330 raw orders, these are the ones we can actually fill — puts, struck below spot, where the maker is the seller:
+> ⚠️ **Everything this section said before 31 Aug was wrong**, including a table
+> claiming "SOL/XRP/BNB/AVAX have zero fillable puts" that was cited as evidence of
+> BR-1 working in code. It was a bug. What follows is measured against the chain by
+> simulating every order.
 
-| Expiry | Days out | ETH strikes | BTC strikes | Floors available |
-|---|---|---|---|---|
-| 2026-09-04 | +4.7 | 4 | 4 | 3–9% (ETH), 2–6% (BTC) |
-| 2026-09-11 | +11.7 | 6 | 7 | 5–15% (ETH), 3–11% (BTC) |
-| **2026-09-25** | **+25.7** | **9** | **9** | **7–23% (ETH), 5–19% (BTC)** |
-| ~~2026-10-30~~ | ~~+62~~ | **0** | **0** | — |
+Three filters decide whether an order is ours to fill:
 
-**There are no buyable puts beyond ~26 days.** The +62 day expiry carries 22 raw orders but none survive the filter. Consequences:
+| Filter | Rule | Why |
+|---|---|---|
+| Side | `order.isBuyer === true` | We must be the **buyer** (BR-1) |
+| Type | `rawApiData.isCall === false` | Downside protection is a put |
+| Legs | exactly **one** strike | Vanilla only — see below |
 
-- **A 30-day protection product is not deliverable.** BR-6 forbids an expiry earlier than the user's target date, so a 30-day request returns nothing — the longest available is 25.7 days, 4.3 days short. Quote 25 days, not 30.
-- **Only ETH and BTC are tradable at all.** SOL, XRP, BNB and AVAX have puts on the book but zero on the buy side.
-- **Phase 8's vault cannot use a 62-day call.** It is repositioned as 26-day principal protection with a 4–7% participation rate.
+**Fillable vanilla puts below spot, by asset:**
 
-Always measure the *buyable* book. The raw count is roughly double and is a misleading number to plan against.
+| Asset | Buy-side puts | Vanilla | Simulated OK |
+|---|---|---|---|
+| ETH | 27 | 17 | 6/6 |
+| BTC | 32 | 16 | 6/6 |
+| SOL | 14 | 12 | 6/6 |
+| BNB | 13 | 10 | 6/6 |
+| AVAX | 9 | 9 | 2/6 |
+| XRP | 10 | 10 | **0/6** |
+
+**Four assets work well**, not two. XRP reverts at every size; AVAX is intermittent.
+
+**Tenor and depth — the numbers that define the product:**
+
+```
+expiry      (+days)  1-strike  2-strike  3-strike
+2026-08-31    +0.4d      22        8         2
+2026-09-01    +1.4d      37        4         0
+2026-09-02    +2.4d      15        3         0
+2026-09-25   +25.4d       0        3         2
+2026-10-30   +60.4d       0        7         2
+```
+
+**Vanilla puts stop at 2.4 days.** The long-dated orders are all multi-leg. And
+floors are shallow: ETH −0.4% to −6.1%, BTC −0.5% to −4.4%, SOL −0.7% to −7.5%.
+
+A 20% floor over 30 days is not available and never was.
+
+### Why the inverted filter survived eight tasks
+
+This is worth recording so nobody re-derives it.
+
+**Market makers sell near-the-money and buy deep out-of-the-money.** So the deep
+strikes — the 20%-down floors the product was designed around — carry
+`isBuyer === false`: the maker wants to *buy* those, and filling one would make us
+the seller.
+
+The broken filter selected exactly those orders. It surfaced a book that looked
+ideal — deep floors, long tenors, 26- and 60-day expiries — and every one of them
+was unfillable. The quote engine priced them, the tier logic ranked them, and the
+API served them for eight tasks, because nothing in a read-only path ever asks the
+chain whether an order can actually be filled.
+
+**It only surfaced when we tried to spend money.** `callStaticFillOrder` reverted
+with `Panic(0x11)`, an arithmetic overflow that says nothing about sides or
+permissions.
+
+The lesson for anything similar: a filter that selects what we *cannot* do looks
+identical to one that selects what we *can*, until something external disagrees.
+Simulate early.
+
+### Vanilla vs multi-leg — not interchangeable
+
+The book carries three products, and only the first is ours:
+
+| Implementation | Strikes | Product | Max payout |
+|---|---|---|---|
+| `0x7355EB92…` | 1 | vanilla put | `strike × contracts` |
+| `0x02Fe0d96…` | 2 | spread | the **spread width** |
+| `0x4fd2C6D2…` | 3 | butterfly | narrower still |
+
+A put spread pays out only *between* its strikes. Describing one to a user as
+"your floor is $2,100" would be false (BR-6) — its real maximum payout might be
+$2.50 where a vanilla put's would be $105. That exact discrepancy is how the second
+bug was caught.
+
+`getBuyablePutOrders()` filters to one strike. Do not relax it without changing
+what the interface promises.
 
 ### Order object shape
 
