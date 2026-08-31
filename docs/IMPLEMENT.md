@@ -106,7 +106,7 @@ corrected book.
 
 ---
 
-## Phase 1 — Quote engine 🔄
+## Phase 1 — Quote engine ✅
 
 **Goal:** given an asset, an amount and a protection level, return a real quote from the live book. Read-only — no wallet, no transactions.
 
@@ -120,8 +120,8 @@ corrected book.
 | 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
 | 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters. The premium cap is for the fill path only, not quoting (BR-33) |
 | 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
-| 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5), USDC not fiat (BR-45) |
-| 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` is not in the quote path — only in the decimals demo |
+| 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5). NO_EXPIRY carries `longestAvailableDate`. Frontend still needs a date-picker cap |
+| 1.8 | Scenario preview | ✅ | `buildScenarios()` in `quote.js` — up/flat/atFloor/down via `calculatePayoutAtPrice`, rescaled 6dp→18dp at the boundary |
 
 **Definition of done:** `node quote.js` prints a complete, correct quote for ETH using live data.
 
@@ -130,6 +130,15 @@ corrected book.
 ---
 
 ## Phase 2 — Database ✅
+
+> **User payment added 1 Sep.** `balances` now carries USDC alongside the asset
+> holdings, and buying protection debits it. `balance_events` is append-only:
+> a refund is a compensating write, never a deletion, so the trail reads
+> `debit → fill failed → refund`. `debit_balance()` locks the row so the check
+> and the decrement are one operation. A timeout leaves the debit **held** —
+> the balance-side word for `pending_verification`, deliberately not a second
+> vocabulary — and `npm run reconcile` surfaces both held and refund-due.
+
 
 **Goal:** persist users, quotes and positions. See DATABASE.md for the schema.
 
@@ -222,7 +231,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 4.1 | Query settlement status | ✅ | `option.isSettled()` — **not** `getOptionInfo().settled`, which does not exist. `getFullOptionInfo()` returns expiry, settled, buyer and size in one call |
 | 4.2 | Read the payout | ✅ | `calculatePayout()` verified against the real position: $2,000 → 44.79968 USDC |
 | 4.3 | Scheduler loop | ✅ | `src/scheduler/` — hourly (BR-11), read-only client so it structurally cannot spend |
-| 4.4 | Failed-settlement detection | 🔄 | Time threshold (`SETTLEMENT_GRACE_HOURS`, default 6). **Event-based detection is impossible on the Alchemy free tier** — see below |
+| 4.4 | Failed-settlement detection | ✅ | Time threshold `SETTLEMENT_GRACE_HOURS` (default 6) → `needs_review`. Event path is impossible on the free tier (9-block `eth_getLogs` cap) |
 | 4.5 | Catch-up on restart | ✅ | Startup sweep, oldest expiry first |
 
 **Definition of done:** a position bought in Phase 3 reaches a terminal status automatically.
@@ -277,7 +286,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 7 — Options-powered lending ⬜
+## Phase 7 — Options-powered lending 🔄
 
 **Depends on Phases 1–4.** The put that acts as a collateral floor is bought and settled by the same code the core product uses, so that code must work first. This is a dependency, not a priority ranking.
 
@@ -287,9 +296,9 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 7.1 | `loans` table + migration | ⬜ | Per DATABASE.md conventions |
-| 7.2 | Credit limit derived from strike | ⬜ | `credit_limit = strike × num_contracts`, read from the filled put. No haircut, no ratio (BR-39) |
-| 7.3 | Disburse USDC on-chain | ⬜ | Real transfer to the user's address, tx hash recorded |
+| 7.1 | `loans` table + migration | ✅ | Triggers enforce BR-39 and BR-48 — a ratio cannot be inserted |
+| 7.2 | Credit limit derived from strike | ✅ | `src/lending/credit.js` — strike × contracts in bigint, no configurable factor |
+| 7.3 | Disburse USDC on-chain | ✅ | tx `0x29165d16…`, 4.597700 USDC = 2300 × 0.001999. See ONCHAIN-EVIDENCE.md |
 | 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
 | 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
 
@@ -299,37 +308,53 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 8 — Principal-protected vault ❌ CUT
+## Phase 8 — Two-day principal protection 🔄
 
-**Cut 31 Aug**, after measuring rather than assuming.
+**Cut on 31 Aug, reinstated the same day.** The analysis that led to the cut still
+stands and is recorded below; the team decided it ships anyway, with a real
+on-chain call like everything else.
 
-Vanilla buy-side ETH **calls** exist, so the instrument is available:
+**What it is, named honestly:** *two-day principal protection with a small share of
+the upside.* Not a savings vault — over two days there is nothing for principal
+protection to protect against, and calling it savings would invite an arithmetic
+question we would lose.
+
+| # | Task | Status | Acceptance |
+|---|---|---|---|
+| 8.1 | `vaults` table + migration | ✅ | `yield_is_simulated` pinned true by CHECK; maturity must equal the call expiry |
+| 8.2 | Deposit split logic | ✅ | `splitDeposit()` solves backwards from the guarantee, so protection is exact |
+| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. Vanilla buy-side call, ~2-day expiry |
+| 8.4 | Simulated yield accrual | ⬜ | Labelled simulated **where the number appears** (BR-37) |
+| 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
+| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+
+**Non-negotiable in the copy** — a judge will do the arithmetic:
+
+- participation rate computed from the **real premium paid**, never hardcoded (BR-38)
+- the yield portion labelled **simulated at the point the number appears** (BR-37)
+- the **two-day tenor stated**, not implied
+- **not** retitled "principal-protected savings"
+
+### The arithmetic, and why it was nearly cut
+
+Measured 31 Aug rather than assumed. Vanilla buy-side ETH calls exist:
 
 ```
-2026-08-31 (+0.3d)  3 strikes 2420-2460   premium $0.97-9.38/unit
-2026-09-01 (+1.3d)  7 strikes 2420-2540   premium $2.29-29.08/unit
 2026-09-02 (+2.3d)  9 strikes 2420-2580   premium $3.47-39.71/unit
 ```
 
-**The reason to cut is not the participation rate.** Worked at the longest tenor,
-a $100 deposit at 5%/yr over 2.3 days sets aside $99.97 and spends **$0.03** on a
-call, which buys ~$21 of exposure — a participation rate of about **21%**, higher
-than the 4–7% previously feared.
+A $100 deposit at 5%/yr over 2.3 days sets aside $99.97 and spends **$0.03** on a
+call, which buys ~$21 of exposure — **participation ~21%**, higher than the 4–7%
+once feared.
 
-**The reason to cut is that there is nothing to protect the principal from.** Over
-2.3 days the yield being given up is three cents. "Principal-protected" describes a
-product where money grows safely over a meaningful period while keeping some
-upside; over two days there is no time for anything to grow, and the guarantee
-protects against a risk that does not exist at that horizon. It would be a
-correct-looking number attached to a product that means nothing — and a judge who
-does the arithmetic sees a three-cent yield portion dressed up as structured
-finance.
+**The honest problem is the other half.** Over 2.3 days the yield given up is three
+cents. The guarantee protects against a risk that barely exists at that horizon, so
+the number is correct and the product it describes is thin. That is why the copy
+constraints above are not optional: state the tenor, label the simulation, and
+derive the rate from what was actually paid.
 
-Building it would also cost time that Phase 5 integration and rehearsal need, five
-days from freeze.
-
-**If the book ever carries long-dated vanilla calls again, revisit.** The formulas
-in `requirements.md` BR-38 are correct; only the tenor makes them meaningless.
+**Definition of done:** a BaseScan link to a real call purchase, with the interface
+stating the participation rate and labelling the simulated yield.
 
 ---
 

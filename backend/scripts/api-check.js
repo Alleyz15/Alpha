@@ -61,6 +61,8 @@ try {
       (b) => typeof b.asset === 'string' && typeof b.amount === 'number'),
     JSON.stringify(ctx.body?.balances));
   check('simulated is true (BR-51)', ctx.body?.simulated === true);
+  check('demo-context returns a USDC balance',
+    typeof ctx.body?.usdcBalance === 'number' && ctx.body.usdcBalance >= 0, String(ctx.body?.usdcBalance));
   check('reality block present with four stages',
     ctx.body?.reality?.balance === 'simulated' && ctx.body?.reality?.quote === 'live' &&
     ['operator', 'automatic'].includes(ctx.body?.reality?.fill) && ctx.body?.reality?.settlement === 'live',
@@ -169,6 +171,15 @@ try {
   check('explorerUrl is null', bought.body?.explorerUrl === null);
   check('status is pending_fill', bought.body?.status === 'pending_fill', bought.body?.status);
   check('simulated is true (BR-51)', bought.body?.simulated === true);
+  check('payment is HELD, not paid', bought.body?.paymentStatus === 'held', bought.body?.paymentStatus);
+  check('purchase reports the premium charged', typeof bought.body?.premiumUsdc === 'number', String(bought.body?.premiumUsdc));
+
+  // The debit must be real: the balance moves by exactly the premium.
+  const ctxAfter = await call('GET', '/api/demo-context');
+  const charged = ctx.body.usdcBalance - ctxAfter.body.usdcBalance;
+  check('USDC balance debited by exactly the premium',
+    Math.abs(charged - bought.body.premiumUsdc) < 0.000001,
+    charged.toFixed(6) + ' charged vs premium ' + bought.body.premiumUsdc);
   check('fill is operator, not onchain', bought.body?.fill === 'operator', bought.body?.fill);
 
   const positionId = bought.body.positionId;
