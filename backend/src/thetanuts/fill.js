@@ -222,16 +222,34 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
   // should record what happened, not what was expected.
   const premiumPaid = extractUsdcSpent(receipt, getWalletAddress()) ?? Number(usdcAmountRaw) / 1e6;
 
+  // The count that actually filled. A fill executes by USDC amount, so it can
+  // land a hair off the quoted count; read the authoritative on-chain size so
+  // the row matches chain state (BR-36, BR-40). Best effort: if the read fails
+  // (e.g. RPC down) keep the quoted value - reconcile will flag any divergence
+  // rather than this blocking a fill that already succeeded.
+  let actualContractsRaw = null;
+  if (optionAddress) {
+    try {
+      const info = await client.option.getFullOptionInfo(optionAddress);
+      if (info?.numContracts != null) actualContractsRaw = info.numContracts.toString();
+    } catch {
+      // leave null -> the transition keeps the quoted num_contracts_raw
+    }
+  }
+
   await transitionPosition(positionId, {
     toStatus: 'active',
     eventType: 'confirmed',
     txHash,
     optionAddress,
     premiumPaid,
+    numContractsRaw: actualContractsRaw,
     payload: {
       blockNumber: receipt?.blockNumber ?? null,
       gasUsed: receipt?.gasUsed?.toString() ?? null,
       status: receipt?.status ?? null,
+      quotedContractsRaw: position.num_contracts_raw,
+      actualContractsRaw,
     },
   });
 
