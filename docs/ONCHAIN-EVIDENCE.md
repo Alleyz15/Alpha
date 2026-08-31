@@ -179,3 +179,63 @@ own run and its own record, rather than three things landing inside an hour.
 After each run, record the outcome in the section above it. **A zero payout is a
 success, not a failure** — it means the price finished above the floor and the
 protection was not needed (US-7). Record it that way, or it reads as a fault.
+
+---
+
+## 5. Two-day principal protection — 1 Sep 2026
+
+**A real call, bought on Base, funding the upside share of a principal-protected
+deposit.** The participation rate on screen is computed from the premium actually
+paid — a judge who recalculates it gets the same number.
+
+| | |
+|---|---|
+| **BaseScan** | https://basescan.org/tx/0x7930bc428fbca01749f7d4afae3bceec44123107dd5049cbd075f44196cb47b0 |
+| Block | 50701555 |
+| Option contract | `0x4634838086ed31e432db1cefa4e3ab19ef60159f` |
+| Type | Vanilla **call** — we hold the buyer side (optionType 256) |
+| Strike | $2,660 |
+| Expiry | 2026-09-03 08:00 UTC (16:00 MYT) |
+| Contracts | **0.009347** |
+| Total paid | **0.036441 USDC** — 0.031886 premium + 0.004555 protocol fee |
+| Vault row | `2dbc767a-1090-4e00-96c3-3552829ec8dc` |
+| Position row | `7a7d1153-ff3b-42b4-a7e9-7ef7353959f6` |
+
+### The participation rate, recomputed from the chain
+
+```
+premium per contract = 0.036441 / 0.009347       = $3.89868407
+exposure             = 0.009347 x $2,471.01 spot = $23.096530
+PARTICIPATION        = 23.096530 / 100           = 23.0965%
+```
+
+Every input is on chain: `numContracts` and `strike` from the option contract, the
+USDC total from the transaction's transfer logs. Nothing is configured — there is
+no participation rate in the environment or in code, only in `participationFor()`
+as a division (BR-38).
+
+The row was quoted at **23.0986%** and corrected to **23.0965%** after the fill:
+the order filled 0.009347 contracts rather than the 0.009348 quoted, and the true
+cost includes the protocol fee. Same principle as the loan's 2000 → 1999
+correction — the stored number is the one the chain supports.
+
+### What is real and what is not
+
+```
+the call             real, on Base mainnet, buyer side
+the participation    derived from the real premium paid
+the 99.963559 USDC   SIMULATED. No yield source exists (BR-37). It moves nowhere.
+the 2.7-day term     real — the longest vanilla call the book carries
+maturity flow        NOT built. Roadmap.
+```
+
+**Only 0.036441 USDC actually left the wallet.** The "deposit" is a simulated
+figure; the option portion is the sole real spend.
+
+**Called what it is.** Two-day principal protection with a small share of the
+upside — not a savings vault. Over 2.7 days the yield given up on 100 USDC is
+about three cents, so the guarantee protects against a risk that barely exists at
+that horizon. The arithmetic is honest and the product it describes is thin; saying
+so is better than inviting the question.
+
+Wallet after: **4.737411 USDC**.
