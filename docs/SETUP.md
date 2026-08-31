@@ -416,6 +416,62 @@ bug was caught.
 `getBuyablePutOrders()` filters to one strike. Do not relax it without changing
 what the interface promises.
 
+### The book re-signs wholesale every ~60 seconds
+
+**Nobody would guess this, and anyone touching `findLiveOrder` needs it.**
+
+Every order on the book is re-signed at the same moment, on roughly a 60-second
+timer. Not staggered per maker — **100% of signatures replaced simultaneously.**
+
+Measured 1 Sep 2026:
+
+```
+REFRESH at t=41.2s  — 100% of signatures replaced
+REFRESH at t=101.2s — 100% of signatures replaced
+interval: 59.9s
+```
+
+The signal was unmistakable. Sampling 320 orders every 5 seconds, **every single
+signature lived exactly 35.645 seconds**, identical to three decimal places. A
+distribution of independent lifetimes cannot look like that; one scheduled event
+can.
+
+**The same orders come back.** Across one refresh, 311 of 311 economically
+identical orders persisted — same maker, strike, expiry, type and side — with a
+new signature and usually a slightly different price:
+
+```
+persisted: 311 of 311    disappeared: 0
+price unchanged: 6       price moved: 305
+move: min 0.003% | median 0.515% | max 105.346%
+```
+
+**Prices are static inside a cycle and step at the refresh:**
+
+```
+elapsed   median   p90     max      % over 5% tolerance
+10s        0.00    0.00    0.00        0%
+20s        0.00    0.00    0.00        0%
+31s        0.76   13.94  133.37       11%
+92s        7.34   17.45   82.50       78%
+```
+
+#### What this means in code
+
+- **Never match a stored order by signature alone.** A quote more than ~60s old
+  will never find its signature, and a quote of average age has a coin-flip
+  chance. Two integration fills in a row were refused on exactly this.
+- `findLiveOrder()` tries the signature first, then falls back to matching on
+  **maker + strike + expiry + type + side — all five, or it refuses.** A partial
+  match is never approximated.
+- **`QUOTE_VALIDITY_SECONDS` must stay well inside 60.** It is 20: the window in
+  which the quoted price is exactly, not approximately, right. It was 60, which
+  exactly equalled the refresh period and therefore promised the one window that
+  cannot be guaranteed.
+- Scripts that quote and fill in one process (`scripts/fill.js`, ~6s end to end)
+  never hit this. Any flow with a human in the middle does.
+
+
 ### Order object shape
 
 ```js
@@ -571,7 +627,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Six instances now, one family.** The shape:
+**Eight instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -585,11 +641,76 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `reconcile` settled-state check | printed `ok` | the RPC read had failed |
 | `api:check` cleanup | `test rows removed` | an FK blocked every delete |
 | `api:check` balances | said nothing | 1.395637 USDC of drift |
+| commit `63d7fcc` | added economic matching and a terminal state | also cut `fill.js` from 398 lines to 130 |
+| `QUOTE_VALIDITY_SECONDS` | a configured 20-second window | never read; both call sites hardcoded 60 |
 
-The last two were the same bug: twelve `await db.from(...).delete()` calls across
+The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+The two newest are different in kind, and worth naming separately.
+
+#### The commit that described a change it did not make
+
+`63d7fcc` said it added economic order matching and a terminal state for refused
+fills. It added the first. It also truncated `fill.js` from 398 lines to 130,
+deleting `prepareFill()` and `executeFill()`, and `failRefusedFill()` — the
+terminal state the message describes — was never written at all. The entire
+on-chain write path was gone, and three scripts died at parse time.
+
+It was verified with `api:check` and `reconcile`. Both passed. Both were always
+going to pass, because neither imports `fill.js`.
+
+> **A verification that cannot observe the change it is verifying is not a
+> verification.** The other instances were operations reporting success they did
+> not achieve. This was a *commit message* reporting a change it did not make,
+> confirmed by a test that could not see the file.
+
+The same failure in another costume: `fill.js`'s own header still read "There is
+no executeFill() yet, on purpose" long after task 3.7 added one. A header that
+misdescribes what a file does is a commit message that misdescribes what it
+changed, left in place.
+
+**What to do:**
+
+- **Run the command that exercises the file you changed**, not the suite that is
+  cheap to run. For a change to the fill path, `npm run preflight` is the
+  verification and `api:check` is not.
+- **`npm test` now fails when a module cannot parse OR imports a name its target
+  does not export.** The second is the one that matters here: the truncated file
+  parsed perfectly, and the real error was a linking failure. See
+  `backend/test/modules-link.test.js`, which was verified by putting the
+  truncated file back and watching it fail.
+- **Check the commit after making it.**
+  `git show HEAD:path | grep "^export"` takes five seconds and catches a
+  truncation that a diffstat reading "392 insertions" does not.
+
+#### The configuration value that was never read
+
+`QUOTE_VALIDITY_SECONDS` sat in `.env` from Phase 1 and had no effect. Both
+`buildQuote()` and `buildQuoteSet()` defaulted to a hardcoded
+`validitySeconds = 60` and neither read the environment.
+
+This cost more than it looks. We spent an afternoon measuring that 60 seconds
+promises exactly the window the book cannot guarantee — the book re-signs
+wholesale every ~60s — and concluded the value had to come down to 20. The rule
+was right and the measurement was right. Nothing was enforcing either, and
+changing the number in `.env` produced no error and no effect.
+
+> **A value that looks configured and is not is worse than one that is plainly
+> hardcoded.** A hardcoded number is visibly a decision. A dead environment
+> variable is an invitation to tune something that does not move.
+
+**What to do:**
+
+- **Grep `.env.example` against the source.** Every name in it should appear in a
+  `process.env` read somewhere, or it is decoration.
+- **Read configuration at call time, not at module load**, so the value applies
+  after `--env-file` and a test can override it.
+- **Make one command print the value it is actually using.** Pre-flight check 3
+  reports both windows, so a wrong number shows up in every run rather than
+  being inferred from a file nobody re-reads.
 
 **What to do:**
 

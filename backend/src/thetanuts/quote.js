@@ -254,12 +254,33 @@ function buildTier(chosen, selection, units, { tierId } = {}) {
  * @returns {Promise<object>} JSON-safe quote DTO
  * @throws {QuoteRefusedError}
  */
+/**
+ * How long a quote stays displayable (BR-8a).
+ *
+ * Read from the environment at call time, not captured at module load, so the
+ * configured value is the one that applies. It sat in .env unread while both
+ * call sites defaulted to a hardcoded 60: the rule was right, the measurement
+ * behind it was right, and nothing enforced either. A value that looks
+ * configured and is not is worse than one that is plainly hardcoded, because
+ * changing it produces no error and no effect.
+ *
+ * This is BR-8a only - what the USER is shown. The separate window an operator
+ * has to execute a purchase the user already confirmed is BR-8b,
+ * FILL_AUTHORISATION_MINUTES, enforced by pre-flight check 3.
+ *
+ * @returns {number} seconds
+ */
+function defaultValiditySeconds() {
+  const configured = Number(process.env.QUOTE_VALIDITY_SECONDS);
+  return Number.isFinite(configured) && configured > 0 ? configured : 20;
+}
+
 export async function buildQuote(asset, {
   units,
   balance,
   targetDate = 25,
   tier = 'middle',
-  validitySeconds = 60,
+  validitySeconds = defaultValiditySeconds(),
 } = {}) {
   if (!Number.isFinite(units) || units <= 0) {
     throw new RangeError(`buildQuote: units must be a positive number, got ${units}`);
@@ -464,7 +485,7 @@ export async function buildQuoteSet(asset, {
   protectionPct,
   targetValueUsdc,
   targetDate,
-  validitySeconds = 60,
+  validitySeconds = defaultValiditySeconds(),
 } = {}) {
   if (!Number.isFinite(units) || units <= 0) {
     throw new QuoteRefusedError('INVALID_REQUEST', `units must be a positive number, got ${units}`, { units });
