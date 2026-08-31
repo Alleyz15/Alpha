@@ -26,6 +26,11 @@ You describe what you're worried about, in your own words:
 
 Alpha works out the rest and buys the protection on-chain. The interface never shows a strike, an expiry, or a Greek letter. It shows what it costs, where your floor is, and the most you can lose.
 
+Alpha takes the request and buys the closest protection the market actually
+offers. Right now that means a floor around 6% below spot over two to three days
+— the order book carries nothing deeper or longer. **The interface shows the real
+floor, never the requested one.**
+
 Two ways in, one mechanism underneath:
 
 | What you tell us | What we derive |
@@ -247,9 +252,15 @@ Stated plainly, because they're real:
 
 ## AI tools used
 
-| Tool | Purpose |
-|---|---|
-| Claude | Backend implementation |
+| Who | Tool | Purpose |
+|---|---|---|
+| Alvin Wong Feng Tian | Claude | Backend implementation, documentation, and the on-chain operator scripts |
+| Ho Qi Yuan | **TODO — to be completed before submission** | |
+| Damian Heng Yong An | **TODO — to be completed before submission** | |
+| Tan Tee Khai | **TODO — to be completed before submission** | |
+
+Every line of AI-assisted work was reviewed by the developer named beside it
+before it was merged. No code reached `main` without a pull request.
 
 ## Documentation
 

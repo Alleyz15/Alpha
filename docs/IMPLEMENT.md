@@ -232,7 +232,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 4.1 | Query settlement status | ✅ | `option.isSettled()` — **not** `getOptionInfo().settled`, which does not exist. `getFullOptionInfo()` returns expiry, settled, buyer and size in one call |
+| 4.1 | Query settlement status | ✅ | `getFullOptionInfo(addr).isSettled` — a FIELD, not a method. Neither `getOptionInfo().settled` nor `option.isSettled()` exists. One call returns expiry, settled, buyer and size |
 | 4.2 | Read the payout | ✅ | `calculatePayout()` verified against the real position: $2,000 → 44.79968 USDC |
 | 4.3 | Scheduler loop | ✅ | `src/scheduler/` — hourly (BR-11), read-only client so it structurally cannot spend |
 | 4.4 | Failed-settlement detection | ✅ | Time threshold `SETTLEMENT_GRACE_HOURS` (default 6) → `needs_review`. Event path is impossible on the free tier (9-block `eth_getLogs` cap) |
@@ -264,7 +264,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
 | 5.5 | Position dashboard | ✅ | `DashboardScreen.jsx` — status, floor, expiry, BaseScan link |
 | 5.6 | Custody disclosure | ✅ | `RealityDisclosure.jsx` — "Who holds the funds?", shown not buried (BR-32) |
-| 5.7 | Front-to-back integration verified | ✅ | Verified 1 Sep against a real fill, tx `0x64e37010…`. Quote to broadcast took 140.7s — at least two book re-signings — so the fill went through economic matching, not the signature fast path. Not yet written up in ONCHAIN-EVIDENCE.md — that file has five sections and this would be §6 |
+| 5.7 | Front-to-back integration verified | ✅ | Verified 1 Sep against a real fill, tx `0x64e37010…`. Quote to broadcast took 140.7s — at least two book re-signings — so the fill went through economic matching, not the signature fast path. See ONCHAIN-EVIDENCE.md §6 |
 
 **Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.
 
@@ -330,7 +330,7 @@ question we would lose.
 | 8.3 | Buy a real call on Thetanuts | ✅ | tx `0x7930bc42…`, strike 2660, buyer side, 9347 raw contracts. See ONCHAIN-EVIDENCE.md §5 |
 | 8.4 | Simulated yield accrual | ✅ | `yieldIsSimulated` carried as data; `scripts/vault.js` labels it SIMULATED on the line the number is printed and again in the summary (BR-37). No frontend vault screen exists, so the CLI is where the number appears |
 | 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
-| 8.6 | Maturity flow | 🔄 | **Resize done 1 Sep** — 3 USDC vault on a real call, tx `0xd7fec53c…`, participation 23.5422%. See ONCHAIN-EVIDENCE.md §6. Maturity code still to build; the transfer itself happens 3 Sep when the call expires |
+| 8.6 | Maturity flow | 🔄 | **Resize done 1 Sep** — 3 USDC vault on a real call, tx `0xd7fec53c…`, participation 23.5422%. See ONCHAIN-EVIDENCE.md §7. Maturity code still to build; the transfer itself happens 3 Sep when the call expires |
 
 **Non-negotiable in the copy** — a judge will do the arithmetic:
 
