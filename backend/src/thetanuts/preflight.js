@@ -62,7 +62,8 @@ const item = (id, label, pass, detail) => ({ id, label, pass, detail });
  * @param {number} intent.quotedExpiryUnix
  * @param {bigint} intent.usdcAmountRaw - USDC to spend, 6dp
  * @param {bigint} intent.contractsRaw - contracts expected, 6dp
- * @param {Date|string} intent.quoteValidUntil - BR-8
+ * @param {Date|string} intent.quoteValidUntil - what the user was shown (BR-8a)
+ * @param {Date|string} [intent.quoteCreatedAt] - when quoted; the fill window runs from here (BR-8b)
  * @returns {Promise<{pass: boolean, checks: object[], funds: object, simulation: object|null}>}
  */
 export async function runPreflight({
@@ -74,6 +75,7 @@ export async function runPreflight({
   usdcAmountRaw,
   contractsRaw,
   quoteValidUntil,
+  quoteCreatedAt = null,
 }) {
   const client = getSigningClient();
   const checks = [];
@@ -114,14 +116,40 @@ export async function runPreflight({
     `holds ${funds.eth.toFixed(8)} ETH, needs ~${funds.gasNeededEth.toFixed(8)} ETH`,
   ));
 
-  // --- 3. quote still fresh (BR-8) -----------------------------------------
-  const validUntil = new Date(quoteValidUntil);
-  const fresh = Date.now() < validUntil.getTime();
+  // --- 3. within the FILL AUTHORISATION window (BR-8b) ----------------------
+  //
+  // Two windows, answering two different questions:
+  //
+  //   QUOTE_VALIDITY_SECONDS (20s)     is what we are SHOWING this user still
+  //                                    true? Binds the user's decision.
+  //   FILL_AUTHORISATION_MINUTES (10)  is the price we EXECUTE at still what
+  //                                    they agreed to? Binds the operator.
+  //
+  // This check is the second. A user who confirmed a $2,320 floor at 0.87 USDC
+  // is protected by the fill landing within tolerance of THAT PRICE, not by it
+  // landing within twenty seconds. The clock was only ever a proxy for price
+  // movement, used because we had no way to compare prices at fill time.
+  //
+  // We do now - check 4 re-matches the order and re-verifies the price - so the
+  // proxy is retired in favour of the thing it approximated.
+  //
+  // THE FILL WINDOW IS ONLY DEFENSIBLE BECAUSE THE PRICE CHECK IS REAL. If
+  // check 4 were ever weakened, the clock would have to come back.
+  const authMinutes = Number(process.env.FILL_AUTHORISATION_MINUTES ?? 10);
+  const quotedAt = quoteCreatedAt ? new Date(quoteCreatedAt) : new Date(quoteValidUntil);
+  const authDeadline = new Date(quotedAt.getTime() + authMinutes * 60_000);
+  const shownUntil = new Date(quoteValidUntil);
+
+  const withinAuth = Date.now() < authDeadline.getTime();
+  const ageSeconds = (Date.now() - quotedAt.getTime()) / 1000;
+
   checks.push(item(
     3,
-    'quote is within its validity window',
-    fresh,
-    fresh ? `valid until ${validUntil.toISOString()}` : `expired at ${validUntil.toISOString()}`,
+    'within the fill authorisation window',
+    withinAuth,
+    `quoted ${ageSeconds.toFixed(0)}s ago; authorised for ${authMinutes}min ` +
+    `(shown to the user as valid for ${Math.round((shownUntil - quotedAt) / 1000)}s)` +
+    (withinAuth ? '' : ` — expired at ${authDeadline.toISOString()}`),
   ));
 
   // --- 4. price within tolerance (BR-9) ------------------------------------
