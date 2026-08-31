@@ -31,8 +31,16 @@ import { DECIMALS, toPayoutContracts, payoutToUsdc } from './decimals.js';
 const USDC_SCALE = 10n ** BigInt(DECIMALS.USDC);            // 1e6
 const PRICE_SCALE = 10n ** BigInt(DECIMALS.PRICE);          // 1e8
 
-/** Human number -> 6dp bigint, without floating point drift in the last digits. */
-const toContractsRaw = (units) => BigInt(Math.floor(units * Number(USDC_SCALE)));
+/**
+ * Human unit count -> 6dp contract raw (bigint).
+ *
+ * Math.round, NOT Math.floor: `units * 1e6` in floating point can land a hair
+ * below the true integer (0.29 * 1e6 === 289999.99999999997), and flooring that
+ * silently drops a 6dp unit - so protecting 0.29 would size 0.289999. Rounding
+ * absorbs the float error and gives the exact count for any input at 6dp or
+ * finer. This is money; the last unit matters.
+ */
+export const unitsToContractsRaw = (units) => BigInt(Math.round(units * Number(USDC_SCALE)));
 
 /**
  * Premium for a contract quantity, in raw USDC (6 decimals).
@@ -86,7 +94,7 @@ export function sizePosition(orderWithSig, { units, maxPremiumUsdc, minContracts
   const priceRaw = orderWithSig.order.price;
   const strikeRaw = orderWithSig.order.strikePrice;
 
-  const requestedRaw = toContractsRaw(units);
+  const requestedRaw = unitsToContractsRaw(units);
   const byCollateralRaw = maxContractsFor(orderWithSig);
   const byPremiumCapRaw = maxPremiumUsdc === undefined
     ? null
