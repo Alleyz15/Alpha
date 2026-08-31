@@ -4,19 +4,10 @@ import { toApiErrorViewModel, toQuoteViewModel } from '../adapters/quoteViewMode
 import { ArrowIcon, ShieldIcon } from '../components/Icons.jsx';
 import RealityDisclosure from '../components/RealityDisclosure.jsx';
 
-function defaultTargetDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + 21);
-  return date.toISOString().slice(0, 10);
-}
-
-export default function QuoteScreen({ demoContext, isMock, onReview }) {
+export default function QuoteScreen({ demoContext, isMock, reality, onReview }) {
   const balance = demoContext?.balances?.find((item) => item.asset === 'ETH');
-  const [mode, setMode] = useState('percentage');
   const [units, setUnits] = useState('0.4');
   const [protectionPct, setProtectionPct] = useState('20');
-  const [targetValueUsdc, setTargetValueUsdc] = useState('800');
-  const [targetDate, setTargetDate] = useState(defaultTargetDate);
   const [quote, setQuote] = useState(null);
   const [selectedTierId, setSelectedTierId] = useState(null);
   const [status, setStatus] = useState('idle');
@@ -36,10 +27,8 @@ export default function QuoteScreen({ demoContext, isMock, onReview }) {
     const request = {
       asset: 'ETH',
       units: Number(units),
-      mode,
-      ...(mode === 'percentage'
-        ? { protectionPct: Number(protectionPct) }
-        : { targetValueUsdc: Number(targetValueUsdc), targetDate }),
+      mode: 'percentage',
+      protectionPct: Number(protectionPct),
     };
 
     try {
@@ -57,14 +46,14 @@ export default function QuoteScreen({ demoContext, isMock, onReview }) {
   return (
     <div className="page-grid quote-page">
       <section className="intro-panel">
-        <RealityDisclosure variant="quoteEyebrow" isMock={isMock} />
+        <RealityDisclosure variant="quoteEyebrow" isMock={isMock} reality={reality} />
         <h1>Keep the upside.<br />Set a floor for the downside.</h1>
         <p className="intro-copy">Choose what you hold and what matters to you. We turn it into clear protection choices.</p>
 
         <div className="trust-list">
           <div><span className="trust-icon"><ShieldIcon /></span><p><strong>Loss is limited</strong><small>You see the maximum before confirming.</small></p></div>
           <div><span className="trust-number">01</span><p><strong>One clear action</strong><small>No wallet setup is needed for this demo.</small></p></div>
-          <div><span className="trust-number">↗</span><p><strong>Verifiable on Base</strong><RealityDisclosure variant="verification" isMock={isMock} /></p></div>
+          <div><span className="trust-number">↗</span><p><strong>Verifiable on Base</strong><RealityDisclosure variant="verification" isMock={isMock} reality={reality} /></p></div>
         </div>
       </section>
 
@@ -78,16 +67,6 @@ export default function QuoteScreen({ demoContext, isMock, onReview }) {
         </div>
 
         <form className="quote-form" onSubmit={submit}>
-          <fieldset className="mode-switch">
-            <legend>What do you want to protect?</legend>
-            <button className={mode === 'percentage' ? 'active' : ''} type="button" onClick={() => setMode('percentage')}>
-              Limit a price drop
-            </button>
-            <button className={mode === 'goal' ? 'active' : ''} type="button" onClick={() => setMode('goal')}>
-              Reach a future goal
-            </button>
-          </fieldset>
-
           <div className="field-row">
             <label>
               <span>Asset</span>
@@ -99,24 +78,11 @@ export default function QuoteScreen({ demoContext, isMock, onReview }) {
             </label>
           </div>
 
-          {mode === 'percentage' ? (
-            <label>
-              <span>Try to protect me after a drop of</span>
-              <div className="input-suffix"><input type="number" min="1" max="99" step="1" value={protectionPct} onChange={(event) => setProtectionPct(event.target.value)} required /><b>%</b></div>
-              <small>We will show the closest protection levels actually available.</small>
-            </label>
-          ) : (
-            <div className="field-row">
-              <label>
-                <span>Value I need</span>
-                <div className="input-suffix"><input type="number" min="1" step="1" value={targetValueUsdc} onChange={(event) => setTargetValueUsdc(event.target.value)} required /><b>USDC</b></div>
-              </label>
-              <label>
-                <span>Date I need it</span>
-                <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} required />
-              </label>
-            </div>
-          )}
+          <label>
+            <span>Try to protect me after a drop of</span>
+            <div className="input-suffix"><input type="number" min="1" max="99" step="1" value={protectionPct} onChange={(event) => setProtectionPct(event.target.value)} required /><b>%</b></div>
+            <small>We will show the closest protection levels actually available.</small>
+          </label>
 
           <button className="primary-button" type="submit" disabled={status === 'loading'}>
             {status === 'loading' ? 'Checking available choices…' : 'See protection choices'}
@@ -124,7 +90,7 @@ export default function QuoteScreen({ demoContext, isMock, onReview }) {
           </button>
         </form>
 
-        <RealityDisclosure variant="explore" isMock={isMock} balance={balance ? `${balance.amount} ${balance.asset}` : 'demo ETH balance'} />
+        <RealityDisclosure variant="explore" isMock={isMock} reality={reality} balance={balance ? `${balance.amount} ${balance.asset}` : 'demo ETH balance'} />
 
         {error && <div className="error-message" role="alert"><strong>{error.title}</strong><span>{error.message}</span></div>}
 
