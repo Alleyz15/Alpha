@@ -569,6 +569,44 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ## Gotchas we already hit
 
+### Operations that fail silently, and report success they did not achieve
+
+**Six instances now, one family.** The shape:
+
+> **An operation that can fail silently will eventually report success it did not
+> achieve.** Every instance so far was caught by someone checking the result
+> against reality, never by reading the output that claimed it worked.
+
+| Where | Claimed | Actually |
+|---|---|---|
+| `ensureExactAllowance` | `0.000000 -> 0.000000` | the approval had succeeded |
+| disbursement closing balance | `9.371552 (was 9.371552)` | 4.5977 USDC had left |
+| post-fill contract read | recorded 2000 contracts | the chain said 1999 |
+| `reconcile` settled-state check | printed `ok` | the RPC read had failed |
+| `api:check` cleanup | `test rows removed` | an FK blocked every delete |
+| `api:check` balances | said nothing | 1.395637 USDC of drift |
+
+The last two were the same bug: twelve `await db.from(...).delete()` calls across
+four scripts, none checking `error`. When `balance_events` gained an
+`ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
+printing success.
+
+**What to do:**
+
+- **Check every write's `error`.** Supabase returns it rather than throwing, so a
+  bare `await db.from(x).delete()` swallows failures by default.
+- **Verify the outcome; do not infer it from the absence of a throw.**
+  `verifyDiscarded()` re-queries the database, and `confirmedRead()` polls and
+  returns `{ value, confirmed }`.
+- **Never weaken a constraint for test convenience.** `ON DELETE RESTRICT` was
+  correct — a financial event must not vanish because the row it referenced was
+  deleted. The cleanup respects it instead: refund, delete the events, then
+  delete the position.
+- **A check that changes what it measures is not a check.** `api:check` now
+  refunds through the same compensating path a failed fill uses, and asserts the
+  rows are actually gone.
+
+
 ### Read-your-own-write: decisions made against state that has already moved
 
 **This has bitten three times in one day.** It is one bug wearing three costumes,

@@ -10,6 +10,7 @@
 // locked out. Without it that check is skipped and says so.
 
 import { db } from '../src/db/client.js';
+import { discardTestRows } from '../src/db/testCleanup.js';
 import { listUsers, listBalances } from '../src/db/index.js';
 import {
   insertQuote,

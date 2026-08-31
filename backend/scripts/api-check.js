@@ -11,6 +11,7 @@
 import { startApi, stopApi } from '../src/api/server.js';
 import { getDemoUser } from '../src/api/demoUser.js';
 import { db } from '../src/db/client.js';
+import { discardTestRows, verifyDiscarded } from '../src/db/testCleanup.js';
 
 const server = await startApi(0);
 const base = `http://localhost:${server.address().port}`;
@@ -239,14 +240,30 @@ try {
     check('filled position exposes its hash', typeof real.txHash === 'string' && real.txHash.startsWith('0x'));
   }
 } finally {
-  for (const id of created.positions) {
-    await db.from('position_events').delete().eq('position_id', id);
-    await db.from('positions').delete().eq('id', id);
+  // Refund first, then delete, and CHECK the result. This block used to print
+  // "test rows removed" while removing nothing: balance_events references
+  // positions with ON DELETE RESTRICT, the deletes failed, and the error was
+  // never inspected. The debits stood and the demo balance drifted.
+  let refundedTotal = 0;
+  let allClean = true;
+
+  for (let i = 0; i < created.positions.length; i++) {
+    const positionId = created.positions[i];
+    const quoteId = created.quotes[i] ?? null;
+    const r = await discardTestRows({ positionId, quoteId });
+    refundedTotal += r.refunded;
+    // Verified against the database, not inferred from the absence of a throw.
+    const v = await verifyDiscarded({ positionId, quoteId });
+    if (!v.clean) allClean = false;
   }
-  for (const id of created.quotes) {
-    if (id) await db.from('quotes').delete().eq('id', id);
+  for (const quoteId of created.quotes.slice(created.positions.length)) {
+    if (quoteId) await discardTestRows({ quoteId });
   }
-  console.log('\n  test rows removed');
+
+  console.log('');
+  console.log('  test rows removed: ' + (allClean ? 'verified' : 'FAILED - rows remain'));
+  console.log('  balance restored:  ' + refundedTotal.toFixed(6) + ' USDC refunded');
+  if (!allClean) failures++;
   await stopApi(server);
 }
 
