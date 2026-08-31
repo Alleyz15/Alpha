@@ -1,7 +1,7 @@
 import { ShieldIcon } from '../components/Icons.jsx';
 import RealityDisclosure from '../components/RealityDisclosure.jsx';
 
-export default function DashboardScreen({ positions, state, isMock, onExplore }) {
+export default function DashboardScreen({ positions, state, isMock, reality, onExplore }) {
   return (
     <section className="dashboard-page" aria-labelledby="dashboard-title">
       <div className="dashboard-heading">
@@ -9,7 +9,7 @@ export default function DashboardScreen({ positions, state, isMock, onExplore })
         <button className="primary-button compact" type="button" onClick={onExplore}>Add protection</button>
       </div>
 
-      <RealityDisclosure variant="dashboard" isMock={isMock} />
+      <RealityDisclosure variant="dashboard" isMock={isMock} reality={reality} />
 
       {state === 'loading' && <div className="empty-state">Loading your protection…</div>}
       {state === 'error' && <div className="error-message">We could not load your protection right now.</div>}
@@ -31,9 +31,12 @@ export default function DashboardScreen({ positions, state, isMock, onExplore })
               <div className="position-title"><span>Ethereum</span><strong>{position.amountLabel} protected</strong></div>
               <div className="position-metric"><small>Protection floor</small><strong>{position.floorLabel}</strong></div>
               <div className="position-metric"><small>End date</small><strong>{position.expiryLabel}</strong></div>
-              <div className="position-metric"><small>Cost paid</small><strong>{position.premiumLabel}</strong></div>
+              <div className="position-metric">
+                <small>{position.fill === 'onchain' ? 'Cost paid' : 'Payment status'}</small>
+                <strong>{position.fill === 'onchain' ? position.premiumLabel : 'Not paid yet'}</strong>
+              </div>
               <RealityDisclosure variant="positionStatus" isMock={isMock} statusLabel={position.statusLabel} />
-              <RealityDisclosure variant="transaction" isMock={isMock} explorerUrl={position.explorerUrl} compact />
+              <RealityDisclosure variant="transaction" isMock={isMock} reality={reality} fill={position.fill} explorerUrl={position.explorerUrl} compact />
             </article>
           ))}
         </div>

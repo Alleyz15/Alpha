@@ -158,9 +158,11 @@ select:disabled { opacity: 1; }
 .transaction-reality { font-size: 12px; }
 .transaction-reality.mock { margin-top: 24px; padding: 11px 14px; border-radius: 10px; background: #fff3d5; color: #765a18; font-weight: 800; }
 .transaction-reality.real:not(.compact) { display: flex; flex-direction: column; align-items: center; gap: 9px; margin-top: 24px; color: var(--muted); }
+.transaction-reality.operator:not(.compact) { margin-top: 24px; padding: 12px 14px; border-radius: 10px; background: #eef7f2; color: var(--green-dark); font-weight: 800; }
 .transaction-reality.compact { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-width: 160px; color: var(--muted); line-height: 1.3; }
 .position-card .transaction-reality.compact { flex-direction: row; }
 .transaction-reality.compact.mock { margin-top: 0; padding: 0; background: none; color: #806526; }
+.transaction-reality.compact.operator { color: #53655f; font-weight: 700; }
 .dashboard-page { padding: 70px 0 100px; }
 .dashboard-heading { align-items: center; }
 .dashboard-heading h1 { margin: 8px 0; font-size: clamp(40px, 6vw, 62px); }
