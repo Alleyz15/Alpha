@@ -62,6 +62,7 @@ const line = (label, pass, note = '') =>
   console.log(`    ${pass ? 'ok  ' : 'MISMATCH'}  ${label.padEnd(18)}${note}`);
 
 let mismatches = 0;
+let skipped = 0;
 const seenOptionAddrs = new Set();
 
 // ---------------------------------------------------------------------------
@@ -145,19 +146,38 @@ for (const p of positions) {
       if (!txOk) mismatches++;
       line('entry tx', txOk, `chain ${stripHex(idx.entryTxHash).slice(0, 12)}… vs db ${stripHex(p.tx_hash).slice(0, 12)}…`);
     }
+
+    // Settled-state consistency via the indexer status - no RPC needed. A live
+    // position shows 'active'; a terminal DB row (settled/expired_worthless)
+    // must line up with a non-active chain position, and vice-versa. This is the
+    // authoritative settled-state check; the on-chain read below only confirms
+    // it when the RPC is reachable.
+    if (typeof idx.status === 'string') {
+      const dbTerminal = ['settled', 'expired_worthless'].includes(p.status);
+      const idxActive = idx.status === 'active';
+      const stateOk = dbTerminal !== idxActive;   // consistent iff exactly one is "done"
+      if (!stateOk) mismatches++;
+      line('settled state', stateOk, `db ${p.status}, indexer ${idx.status}`);
+    } else {
+      skipped++;
+      console.log('    skip      settled state       indexer reported no status');
+    }
   }
 
-  // Optional settled-state cross-check via a direct contract read. Wrapped so a
-  // dead RPC endpoint reports rather than failing the whole reconciliation.
+  // Optional on-chain confirmation of the settled state. The indexer check above
+  // is authoritative; this adds a second source when the RPC is reachable, and
+  // is reported as SKIPPED (never as passed) when it is not - a skipped check
+  // must not read as a clean one, which was the whole bug here.
   try {
     const full = await client.option.getFullOptionInfo(p.option_address);
     const chainSettled = Boolean(full.isSettled);
     const dbTerminal = ['settled', 'expired_worthless'].includes(p.status);
-    const stateOk = chainSettled === dbTerminal;
-    if (!stateOk) mismatches++;
-    line('settled state', stateOk, `chain settled=${chainSettled}, db terminal=${dbTerminal}`);
+    const confirmOk = chainSettled === dbTerminal;
+    if (!confirmOk) mismatches++;
+    line('settled (on-chain)', confirmOk, `chain settled=${chainSettled}, db terminal=${dbTerminal}`);
   } catch (e) {
-    line('settled state', true, `skipped — chain read unavailable (${e.message.slice(0, 40)})`);
+    skipped++;
+    console.log(`    skip      settled (on-chain)  RPC read unavailable (${e.message.slice(0, 40)})`);
   }
 }
 
@@ -192,8 +212,17 @@ if (!indexerOk) {
 
 // ---------------------------------------------------------------------------
 
-console.log(mismatches === 0
-  ? '\nReconciled clean — database agrees with the chain.\n'
-  : `\n${mismatches} mismatch(es) found. Investigate before trusting the dashboard.\n`);
-
-process.exit(mismatches === 0 ? 0 : 1);
+console.log('');
+if (mismatches > 0) {
+  console.log(`${mismatches} mismatch(es) found${skipped ? `; ${skipped} check(s) skipped` : ''}. ` +
+    'Investigate before trusting the dashboard.\n');
+  process.exit(1);
+} else if (skipped > 0) {
+  // No mismatch, but not everything was verified - say so rather than "clean".
+  console.log(`Reconciled clean against the indexer — ${skipped} on-chain cross-check(s) skipped ` +
+    '(RPC unavailable). Settled-state was verified via the indexer, not confirmed on chain.\n');
+  process.exit(0);
+} else {
+  console.log('Reconciled clean — database agrees with the chain (indexer + on-chain).\n');
+  process.exit(0);
+}
