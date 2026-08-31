@@ -14,7 +14,7 @@
     "inspect:orders": "node --env-file-if-exists=../.env scripts/inspect-order.js",
     "inspect:sdk": "node --env-file-if-exists=../.env scripts/inspect-sdk.js",
     "inspect:expiries": "node --env-file-if-exists=../.env scripts/expiries.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js"
   },
   "repository": {
     "type": "git",
