@@ -900,6 +900,14 @@
   margin-top: var(--space-4);
   color: var(--text-faint);
   font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.welcome-market-card > footer .alpha-button {
+  flex: 0 0 auto;
 }
 
 .welcome-market__note {

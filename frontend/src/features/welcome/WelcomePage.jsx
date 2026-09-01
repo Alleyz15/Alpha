@@ -123,7 +123,7 @@ function IdentityRotator() {
   );
 }
 
-function MarketCard({ asset }) {
+function MarketCard({ asset, onProtect }) {
   const unavailableMessage = asset.malformed
     ? asset.unavailableReason
     : asset.unavailableReason || 'No protection is being offered for this asset right now.';
@@ -143,12 +143,22 @@ function MarketCard({ asset }) {
         <div><dt>Protection</dt><dd data-market-value>{asset.availabilityLabel}</dd></div>
       </dl>
       {!asset.protectionAvailable && <p className="welcome-market-card__reason">{unavailableMessage}</p>}
-      <footer>{asset.priceLabel === '—' ? 'Live price temporarily unavailable' : asset.updatedAtLabel}</footer>
+      <footer>
+        <span>{asset.priceLabel === '—' ? 'Live price temporarily unavailable' : asset.updatedAtLabel}</span>
+        <button
+          className="alpha-button alpha-button--ghost alpha-button--small"
+          type="button"
+          disabled={!asset.protectionAvailable || asset.priceLabel === '—'}
+          onClick={() => onProtect(asset.symbol)}
+        >
+          Protect {asset.symbol}
+        </button>
+      </footer>
     </article>
   );
 }
 
-function WelcomeHeader() {
+function WelcomeHeader({ onDashboard }) {
   return (
     <header className="welcome-header">
       <a className="welcome-brand" href="/" aria-label="Alpha home">
@@ -161,14 +171,14 @@ function WelcomeHeader() {
         <a href="#live-market">Live market</a>
         <a href="#product-reality">Product reality</a>
       </nav>
-      <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={() => scrollTo('live-market')}>
-        See live availability
+      <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onDashboard}>
+        My protection
       </button>
     </header>
   );
 }
 
-export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) {
+export default function WelcomePage({ apiClient, marketPollInterval = 30_000, onProtect = () => {}, onDashboard = () => {} }) {
   const rootRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
@@ -178,10 +188,15 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
     if (market?.updatedAt) pulseMarketSnapshot(rootRef);
   }, [market?.updatedAt]);
 
+  const selectedAsset = market?.assets.find((asset) => asset.symbol === selectedSymbol);
+  const selectedAssetAvailable = Boolean(
+    selectedAsset?.protectionAvailable && selectedAsset.priceLabel !== '—',
+  );
+
   return (
     <div className="welcome-page" ref={rootRef}>
       <div className="welcome-ambient" aria-hidden="true" />
-      <WelcomeHeader />
+      <WelcomeHeader onDashboard={onDashboard} />
 
       <main>
         <section className="welcome-hero" aria-labelledby="welcome-title">
@@ -193,8 +208,13 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
             </h1>
             <p className="welcome-hero__intro">Alpha turns live market protection into clear choices: how much is covered, your price floor, the amount paid, and the end date.</p>
             <div className="welcome-hero__actions">
-              <button className="alpha-button alpha-button--primary alpha-button--large" type="button" onClick={() => scrollTo('live-market')}>
-                See live availability <ArrowIcon />
+              <button
+                className="alpha-button alpha-button--primary alpha-button--large"
+                type="button"
+                disabled={!selectedAssetAvailable}
+                onClick={() => onProtect(selectedSymbol)}
+              >
+                {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Checking live availability'} <ArrowIcon />
               </button>
               <button className="alpha-button alpha-button--ghost alpha-button--large" type="button" onClick={() => scrollTo('how-it-works')}>
                 How Alpha works
@@ -271,7 +291,7 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
           {state === 'loading' && <div className="welcome-market-state" role="status"><span className="welcome-market-state__spinner" /><strong>Checking live market availability…</strong></div>}
           {market && (
             <div className="welcome-market__grid">
-              {market.assets.map((asset) => <MarketCard key={asset.symbol} asset={asset} />)}
+              {market.assets.map((asset) => <MarketCard key={asset.symbol} asset={asset} onProtect={onProtect} />)}
             </div>
           )}
           <p className="welcome-market__note"><span aria-hidden="true">◌</span> Protection duration and availability can change as the live market changes.</p>
@@ -329,7 +349,14 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
             <h2 id="cta-title">Know your floor before the market tests it</h2>
             <p>See which supported assets currently have protection available. No sample choices and no hidden trading language.</p>
           </div>
-          <button className="alpha-button alpha-button--primary alpha-button--large" type="button" onClick={() => scrollTo('live-market')}>View live market <ArrowIcon /></button>
+          <button
+            className="alpha-button alpha-button--primary alpha-button--large"
+            type="button"
+            disabled={!selectedAssetAvailable}
+            onClick={() => onProtect(selectedSymbol)}
+          >
+            {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Protection unavailable'} <ArrowIcon />
+          </button>
         </section>
       </main>
 

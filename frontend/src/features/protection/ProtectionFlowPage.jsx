@@ -14,15 +14,15 @@ function UnsupportedAsset({ symbol, onExit }) {
         <Card variant="glass" className="protection-route-error">
           <span className="protection-eyebrow">Unsupported asset</span>
           <h1>Alpha cannot configure protection for “{symbol}”.</h1>
-          <p>This checkout currently accepts ETH, BTC, BNB, or SOL. Return to the asset page and choose one of those supported assets.</p>
-          <Button onClick={onExit}>Back to asset</Button>
+          <p>This checkout currently accepts ETH, BTC, BNB, or SOL. Return to Welcome and choose one of those supported assets.</p>
+          <Button onClick={onExit}>Back to Welcome</Button>
         </Card>
       </div>
     </main>
   );
 }
 
-function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval }) {
+function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, marketPollInterval }) {
   const [step, setStep] = useState('Configure');
   const [form, setForm] = useState({ units: '', protectionPct: '10', targetDate: '' });
   const [errors, setErrors] = useState({});
@@ -240,6 +240,7 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval
             tier={selectedTier}
             purchase={purchase}
             onExit={onExit}
+            onViewDashboard={onViewDashboard}
           />
         )}
       </div>
@@ -250,7 +251,8 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval
 export default function ProtectionFlowPage({
   symbol,
   apiClient,
-  onExit = () => window.history.back(),
+  onExit = () => window.location.assign('/'),
+  onViewDashboard = () => window.location.assign('/dashboard'),
   marketPollInterval = 30_000,
 }) {
   if (!isSupportedAsset(symbol)) {
@@ -262,6 +264,7 @@ export default function ProtectionFlowPage({
       symbol={symbol}
       apiClient={apiClient}
       onExit={onExit}
+      onViewDashboard={onViewDashboard}
       marketPollInterval={marketPollInterval}
     />
   );
