@@ -248,7 +248,7 @@ Settlement           real          protocol-driven
 
 1. Scheduler runs on interval (BR-11)
 2. Query DB for `active` positions with expiry ≤ now
-3. For each position, call `client.option.getOptionInfo(optionAddress)` and check `.settled`
+3. For each position, call `client.option.getFullOptionInfo(optionAddress)` and check `.isSettled`
 4. If not yet settled on-chain, leave as `active` and retry next run (BR-27)
 5. If settled, read the payout amount with `client.option.calculatePayout(optionAddress, settlementPrice)` (view call)
 6. **If payout > 0:** set status `settled`, record payout amount and settlement price
@@ -483,9 +483,9 @@ Verified by introspecting `client` at runtime and reading `node_modules/@thetanu
 - `validateBuySlippage` / `validateOrderExpiry` / `validateFillSize` — exported helpers (BR-29)
 
 **Settlement (UC-3) — all read-only**
-- `option.getOptionInfo(addr)` → `.settled` ← **authoritative settlement status**
+- `option.getFullOptionInfo(addr)` → `.isSettled` ← **authoritative settlement status**. `getOptionInfo()` does NOT exist; it was in this appendix from 30 Aug to 1 Sep and reached the README
 - `option.calculatePayout(addr, settlementPrice)` — view call, payout amount
-- `option.isExpired(addr)` / `option.isSettled(addr)`
+- `option.isExpired(addr)` — note `isSettled` is a FIELD on `getFullOptionInfo()`, not a client method
 - `events.getOptionPayoutEvents(addr)` — actual payout events
 - `events.getOptionSettlementFailedEvents(addr)` — failure monitoring (BR-27)
 - ❌ `option.payout(addr)` — **deprecated, throws `INVALID_PARAMS`.** Removed in audit fix TNU-AUDIT-0046. Do not call it.

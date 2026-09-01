@@ -30,9 +30,10 @@ Before implementing anything, the assistant must:
 |---|---|
 | ✅ | Done and verified |
 | 🔄 | In progress |
-| ⬜ | Not started |
+| ⬜ | Not started — no decision against it, just not built yet |
 | ⛔ | Blocked |
-| ❌ | Cut from scope |
+| ❌ | **Cut — do not build.** A decision was made against it. The note says when and why. |
+| ↩️ | **Back in scope after being cut.** The note says what changed. |
 
 ---
 
@@ -47,8 +48,10 @@ chain. See `docs/ONCHAIN-EVIDENCE.md`.
 Working: quote engine (1.1–1.7), database with RLS and seeds, HTTP API, the fill
 path with its ten-item pre-flight, and the settlement scheduler.
 
-Not started: 1.8 scenario preview, 3.10 reconciliation, 5.7 front-to-back
-integration.
+Not started: 7.5 no-liquidation demo. Back in scope after being cut: 7.4
+repayment and 8.6 vault maturity (1 Sep).
+
+5.7 front-to-back integration is verified as of 1 Sep.
 
 ### The product changed shape on 31 Aug
 
@@ -76,8 +79,9 @@ month", and rolling is not built.
 ⚠️ **Settlement lands 2026-09-02 08:00 UTC = 16:00 MYT, Tuesday afternoon.** See
 Phase 4.
 
-**Nothing is blocked** except 5.7, which waits on the purchase path being real or
-the interface gaining a third state for "real quote, simulated fill".
+**Nothing is blocked.** 5.7 was the last one and cleared on 1 Sep: the interface
+gained its third state and the purchase path became real, and the two together
+were verified end to end against a live fill.
 
 **Scope:** Phase 8 is cut — see Phase 8. Phase 7 lending is unassessed against the
 corrected book.
@@ -147,7 +151,7 @@ corrected book.
 | # | Task | Status | Acceptance |
 |---|---|---|---|
 | 2.1 | Supabase project created | ✅ | `gphzqvsdubygvijunobj`, region ap-southeast-1 (Singapore) |
-| 2.2 | Migration tooling set up | ✅ | `supabase/migrations/`, 5 migrations applied and recorded |
+| 2.2 | Migration tooling set up | ✅ | `supabase/migrations/`, **14** migrations applied and recorded. Two were missing from the directory until 1 Sep — see DATABASE.md on MCP-applied migrations not writing files |
 | 2.3 | Core tables created | ✅ | users, balances, quotes, positions, position_events + DR-3/DR-7/DR-8/DR-10 constraints |
 | 2.4 | RLS enabled on every table | ✅ | All five; anon blocked by RLS *and* absent grants — verified with a publishable key |
 | 2.5 | DB access layer | ✅ | `src/db/` — secret key server-side only; no bare position update exists |
@@ -176,7 +180,7 @@ corrected book.
 | 3.7 | **First real on-chain fill** | ✅ | tx `0x6420c71c…` block 50670079, 0.495926 USDC. See `docs/ONCHAIN-EVIDENCE.md` |
 | 3.8 | Record the result | ✅ | Row `active` with tx hash, option `0xa609b6fb…`, real premium 0.495926 (fee included) |
 | 3.9 | Handle failure paths | ✅ | Revert → `failed`, timeout → `pending_verification`, never retried. **Implemented, not yet exercised** — the one fill succeeded |
-| 3.10 | Reconciliation script | ⬜ | Not started. `getFullOptionInfo()` gives buyer/seller/size, which is most of it |
+| 3.10 | Reconciliation script | ✅ | `resolveUnverified()` in `src/thetanuts/reconcile.js`, section 3 of `scripts/reconcile.js`. Ran clean 1 Sep — no unresolved fills, no drift |
 
 **Definition of done:** a BaseScan link to our own transaction. **Save the hash — it's the proof the whole submission rests on.**
 
@@ -226,12 +230,31 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 **Goal:** reflect on-chain settlement in our database. Read-only — settlement is automatic (requirements.md UC-3).
 
+> ⚠️ **Every row below is ✅, and none of this has ever executed.** No position
+> has reached a terminal status — `settled`, `expired_worthless` and
+> `needs_review` have never once been written. The first options this project has
+> held to expiry mature 2 and 3 Sep, so **2 Sep 16:00 MYT is the first real run**.
+>
+> What HAS been verified, and how far it goes:
+>
+> - the read path works against all five live options, and the buyer and size
+>   match the chain (BR-31)
+> - `transition_position` accepts all three terminal statuses — probed against
+>   the live database in rolled-back transactions
+> - the settled branch has never run, because it requires a settled option
+>
+> Two of the three price sources were found broken on 1 Sep precisely because
+> nothing had reached them: `getTWAP` reverts on an unsettled option, and
+> `full.settlementPrice` was read from a shape `getFullOptionInfo` does not
+> return. Dead code in a path that has never executed is indistinguishable from
+> working code.
+
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 4.1 | Query settlement status | ✅ | `option.isSettled()` — **not** `getOptionInfo().settled`, which does not exist. `getFullOptionInfo()` returns expiry, settled, buyer and size in one call |
+| 4.1 | Query settlement status | ✅ | `getFullOptionInfo(addr).isSettled` — a FIELD, not a method. Neither `getOptionInfo().settled` nor `option.isSettled()` exists. One call returns expiry, settled, buyer and size |
 | 4.2 | Read the payout | ✅ | `calculatePayout()` verified against the real position: $2,000 → 44.79968 USDC |
 | 4.3 | Scheduler loop | ✅ | `src/scheduler/` — hourly (BR-11), read-only client so it structurally cannot spend |
-| 4.4 | Failed-settlement detection | ✅ | Time threshold `SETTLEMENT_GRACE_HOURS` (default 6) → `needs_review`. Event path is impossible on the free tier (9-block `eth_getLogs` cap) |
+| 4.4 | Failed-settlement detection | ✅ | Time threshold `SETTLEMENT_GRACE_HOURS` (default 6) → `needs_review`. An event path now exists after all — `settlementSources.js` scans 9-block `eth_getLogs` cap) |
 | 4.5 | Catch-up on restart | ✅ | Startup sweep, oldest expiry first |
 
 **Definition of done:** a position bought in Phase 3 reaches a terminal status automatically.
@@ -254,13 +277,13 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. 4 endpoints, verified against the interface's adapter |
+| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. **5** endpoints; the fifth is `GET /api/loans/:id/stress` (7.5). See `docs/API-LOAN-STRESS.md` |
 | 5.2 | CORS configured | ✅ | `http://localhost:5173` named explicitly, preflight handled, unknown origins not echoed — verified in `api:check` |
 | 5.3 | Quote screen | ✅ | `frontend/src/screens/QuoteScreen.jsx`, both entry modes, no options jargon (BR-3) |
 | 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
-| 5.5 | Position dashboard | ✅ | `DashboardScreen.jsx` — status, floor, expiry, BaseScan link |
+| 5.5 | Position dashboard | 🔄 | `DashboardScreen.jsx` renders status, floor, expiry and the BaseScan link. **Two known defects, both introduced by the API change on 1 Sep and both in the frontend developer's files:** a vault call shows `$0.00 USDC` because `formatUsdc(null)` returns zero, and three positions still read "Payment status unavailable" because `paymentStatus: 'none'` is not in `paymentStatusCopy` |
 | 5.6 | Custody disclosure | ✅ | `RealityDisclosure.jsx` — "Who holds the funds?", shown not buried (BR-32) |
-| 5.7 | Front-to-back integration verified | ⬜ | Frontend still on `VITE_USE_MOCK_API=true`. **Blocked until the purchase path is real or the UI gains a third state** |
+| 5.7 | Front-to-back integration verified | ✅ | Verified 1 Sep against a real fill, tx `0x64e37010…`. Quote to broadcast took 140.7s — at least two book re-signings — so the fill went through economic matching, not the signature fast path. See ONCHAIN-EVIDENCE.md §6 |
 
 **Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.
 
@@ -279,8 +302,8 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 6.2 | Demo script rehearsed | ⬜ | Fits in 5 minutes, run end to end at least 3 times |
 | 6.3 | Demo can be re-run live | ⬜ | Judges may ask to see it twice |
 | 6.4 | 3–5 min video | ⬜ | YouTube or Loom, unlisted is fine |
-| 6.5 | Public repo README | ⬜ | Description, problem, chain, contract addresses, setup, team |
-| 6.6 | AI tool declaration | ⬜ | Every tool used, as required by the rules |
+| 6.5 | Public repo README | 🔄 | Audited against code and chain 1 Sep: eight transactions with what each proves, five option contracts, a simulated-vs-real table, and the setup section corrected (a fresh clone runs on mock data by default). **Demo section still to rewrite; video link still a placeholder** |
+| 6.6 | AI tool declaration | 🔄 | Table split per person. One row complete; **three carry a visible TODO** pending answers from the other developers. A blank is a disqualification risk and a guess is worse |
 | 6.7 | Devfolio submission | ⬜ | **Submit 4 Sep, not 5 Sep.** Leave a day of margin |
 | 6.8 | Q&A prep | ⬜ | Stop-loss vs put, odette.fi / collar difference, custody, seller side, why ETH only |
 
@@ -299,8 +322,8 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 7.1 | `loans` table + migration | ✅ | Triggers enforce BR-39 and BR-48 — a ratio cannot be inserted |
 | 7.2 | Credit limit derived from strike | ✅ | `src/lending/credit.js` — strike × contracts in bigint, no configurable factor |
 | 7.3 | Disburse USDC on-chain | ✅ | tx `0x29165d16…`, 4.597700 USDC = 2300 × 0.001999. See ONCHAIN-EVIDENCE.md |
-| 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
-| 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
+| 7.4 | Repayment flow | ✅ | Verify-and-record: the borrower signs, we verify on chain. tx `0x02c37705…`, 4.599411 owed. Seven checks; check 5 refused a wrong-direction transfer on first use. See ONCHAIN-EVIDENCE.md §4 |
+| 7.5 | No-liquidation demo | 🔄 | **Backend done, screen not built.** `src/lending/stress.js` + `GET /api/loans/:id/stress`, nine tests, both `as-disbursed` and `current` rule views. The side-by-side visualisation is the frontend developer's file; contract handed over in `docs/API-LOAN-STRESS.md` |
 
 **Definition of done:** a BaseScan link to a USDC disbursement whose size is provably derived from an on-chain put's strike.
 
@@ -323,10 +346,10 @@ question we would lose.
 |---|---|---|---|
 | 8.1 | `vaults` table + migration | ✅ | `yield_is_simulated` pinned true by CHECK; maturity must equal the call expiry |
 | 8.2 | Deposit split logic | ✅ | `splitDeposit()` solves backwards from the guarantee, so protection is exact |
-| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. Vanilla buy-side call, ~2-day expiry |
-| 8.4 | Simulated yield accrual | ⬜ | Labelled simulated **where the number appears** (BR-37) |
+| 8.3 | Buy a real call on Thetanuts | ✅ | tx `0x7930bc42…`, strike 2660, buyer side, 9347 raw contracts. See ONCHAIN-EVIDENCE.md §5 |
+| 8.4 | Simulated yield accrual | ✅ | `yieldIsSimulated` carried as data; `scripts/vault.js` labels it SIMULATED on the line the number is printed and again in the summary (BR-37). No frontend vault screen exists, so the CLI is where the number appears |
 | 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
-| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+| 8.6 | Maturity flow | 🔄 | **Code done 1 Sep.** `src/vault/maturity.js`, `npm run mature`, nine checks, eight tests. Resize tx `0xd7fec53c…`, participation 23.5422% (§7). **The transfer executes 3 Sep after 16:00 MYT** — see `docs/RUNBOOK-3-SEP.md` |
 
 **Non-negotiable in the copy** — a judge will do the arithmetic:
 

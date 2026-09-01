@@ -6,12 +6,14 @@
 // rule with two answers.
 
 import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
+import { stressLoanById } from '../lending/stress.js';
 import { insertPurchasedTier } from '../db/quotes.js';
 import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
-import { debitBalance } from '../db/balances.js';
+import { debitBalance, listBalanceEventsForPositions } from '../db/balances.js';
 import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
+import { strikeView, paymentView, sumPayments } from './positionView.js';
 
 /**
  * GET /api/demo-context
@@ -249,13 +251,30 @@ export async function getPositions() {
   const user = await getDemoUser();
   const rows = await listPositionsByUser(user.id);
 
+  // One query for every position, rather than one per row. The money trail is
+  // the only place a refund is recorded - positions.status says 'failed', which
+  // is not the same as saying the user got their money back.
+  const payments = await listPaymentsForPositions(rows.map((p) => p.id));
+
   return {
     positions: rows.map((p) => ({
       positionId: p.id,
       asset: p.asset,
       // 6 decimals: one contract protects one unit of the underlying.
       protectedAmount: Number(p.num_contracts_raw) / 1e6,
-      protectionFloorUsdc: Number(p.strike),
+
+      // --- put or call, and what the strike MEANS ------------------------
+      //
+      // A put strike is a floor: the price below which the holder is
+      // protected. A call strike is a threshold: the price above which they
+      // share the gain. Same number, opposite meaning.
+      //
+      // So the fields are mutually exclusive and each is null when it does not
+      // apply. The dashboard rendered a vault call as "Protection floor $2,680"
+      // - a floor above spot - because there was one field and it was always
+      // populated. A null cannot be rendered as the wrong label.
+      ...strikeView(p.option_type, p.strike),
+
       expiry: p.expiry,
       premiumPaidUsdc: p.premium_paid === null ? 0 : Number(p.premium_paid),
       status: p.status,
@@ -274,6 +293,79 @@ export async function getPositions() {
       // 'operator' is not.
       fill: p.tx_hash ? 'onchain' : 'operator',
       simulated: p.tx_hash === null,
+
+      // --- what happened to the user's money -----------------------------
+      //
+      // 'failed' says the purchase did not happen. It does not say whether the
+      // user was charged, or refunded, and the interface had nothing to render
+      // but "Payment status unavailable". A refunded position should be able to
+      // say so - it is the difference between "we lost your order" and "we lost
+      // your order and gave your money back".
+      ...paymentView(payments.get(p.id), p),
     })),
   };
+}
+
+/**
+ * The money trail for a set of positions, keyed by position id.
+ *
+ * One query for all of them rather than one per row. The totals are turned into
+ * a status by paymentView() in positionView.js, which is pure and tested.
+ *
+ * @param {string[]} positionIds
+ * @returns {Promise<Map<string, object>>}
+ */
+async function listPaymentsForPositions(positionIds) {
+  const out = new Map();
+  if (positionIds.length === 0) return out;
+
+  const events = await listBalanceEventsForPositions(positionIds);
+
+  for (const id of positionIds) {
+    out.set(id, sumPayments(events.filter((e) => e.position_id === id)));
+  }
+
+  return out;
+}
+
+/**
+ * GET /api/loans/:loanId/stress?price=1800
+ *
+ * The no-liquidation comparison (7.5). Feeds a hypothetical price through both
+ * sides - a conventional loan against the same ETH, and ours - and reports
+ * whether each would be liquidated.
+ *
+ * The disclosure that no lending protocol is integrated travels in the payload,
+ * not in the interface. Same principle as the reality block: a truth the screen
+ * must tell should not depend on the screen remembering to tell it.
+ */
+export async function getLoanStress(loanId, priceParam, ruleParam) {
+  if (priceParam === null || priceParam === undefined || priceParam === '') {
+    throw new ApiError('INVALID_REQUEST', 'A price is required, e.g. ?price=1800.');
+  }
+
+  const price = Number(priceParam);
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new ApiError('INVALID_REQUEST', `price must be a positive number, got '${priceParam}'.`);
+  }
+
+  const rule = ruleParam ?? 'as-disbursed';
+  if (!['as-disbursed', 'current'].includes(rule)) {
+    throw new ApiError('INVALID_REQUEST',
+      `rule must be 'as-disbursed' or 'current', got '${ruleParam}'.`);
+  }
+
+  try {
+    return await stressLoanById(loanId, price, rule);
+  } catch (error) {
+    // PostgREST reports a missing single() row as code PGRST116 - the message
+    // only says the result could not be coerced to one object, and the "0 rows"
+    // detail is on a different field. Matching the message alone therefore does
+    // not catch it, and it surfaces as UPSTREAM_ERROR: telling the caller the
+    // service broke when in fact they asked for something that isn't there.
+    if (error?.code === 'PGRST116' || /0 rows|no rows|not found/i.test(error?.message ?? '')) {
+      throw new ApiError('NOT_FOUND', `No loan ${loanId}.`);
+    }
+    throw error;
+  }
 }

@@ -38,6 +38,10 @@ export async function insertPendingPosition({
   expiry,
   numContractsRaw,
   premiumPaid = null,
+  // put or call. Defaulted rather than required because every position before
+  // Phase 8 is a put - but a call MUST pass 'call' explicitly, or the interface
+  // renders its strike as a protection floor above spot.
+  optionType = 'put',
 }) {
   const row = unwrap(
     await db.from('positions').insert({
@@ -53,6 +57,7 @@ export async function insertPendingPosition({
       // helpers take. Stored at fill scale so reconciliation against chain
       // state needs no rescaling (BR-36).
       num_contracts_raw: String(numContractsRaw),
+      option_type: optionType,
       premium_paid: premiumPaid,
     }).select().single(),
     'insertPendingPosition',
