@@ -172,7 +172,8 @@ describe('ProtectionFlowPage', () => {
   it('reviews a backend tier and submits only its quote and tier identifiers', async () => {
     const user = userEvent.setup();
     const client = apiClient();
-    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+    const onViewDashboard = vi.fn();
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} onViewDashboard={onViewDashboard} />);
     await completeConfiguration(user);
 
     await user.click(screen.getByRole('button', { name: /Get live quote/ }));
@@ -194,6 +195,9 @@ describe('ProtectionFlowPage', () => {
     expect(screen.getByText('Funds locked')).toBeVisible();
     expect(screen.getByText(/No transaction hash was returned/)).toBeVisible();
     expect(screen.queryByRole('link', { name: /BaseScan/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'View my protection' }));
+    expect(onViewDashboard).toHaveBeenCalledTimes(1);
   });
 
   it('does not let an expired quote continue to Review', async () => {
