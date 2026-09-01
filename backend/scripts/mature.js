@@ -8,7 +8,7 @@
 // WITH --confirm it SENDS REAL USDC. The transfer cannot be recalled.
 // ---------------------------------------------------------------------------
 //
-// The runbook is docs/RUNBOOK-3-SEP.md. Read it first if you have not run this
+// The runbook is docs/RUNBOOK.md. Read it first if you have not run this
 // before - it says what a correct output looks like and what to do when a check
 // fails.
 
@@ -75,7 +75,7 @@ if (preflight.owed) {
 }
 
 if (!preflight.pass) {
-  console.log('\n  Nothing was sent. See docs/RUNBOOK-3-SEP.md for what each failure means.\n');
+  console.log('\n  Nothing was sent. See docs/RUNBOOK.md for what each failure means.\n');
   process.exit(1);
 }
 
