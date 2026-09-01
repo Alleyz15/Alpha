@@ -1,7 +1,16 @@
-# Runbook — Wednesday 3 September 2026
+# Operations runbook — 2, 3 and 6 September 2026
 
-**Everything on this page happens after 16:00 MYT (08:00 UTC).** That is when the
-options expire. Before then, every command here will correctly refuse to run.
+Three separate days, in one file so nothing gets lost between two.
+
+| When | What | Page |
+|---|---|---|
+| **Tue 2 Sep, after 16:00 MYT** | Settle one expiring put | Step 1 only |
+| **Wed 3 Sep, after 16:00 MYT** | Settle four, then pay the matured deposit | Steps 1–3 |
+| **Sat 6 Sep, morning** | Re-measure the book before presenting | Before the pitch |
+
+**Steps 1 to 3 happen after 16:00 MYT (08:00 UTC)** on their day — that is when
+the options expire, and before then every command will correctly refuse to run.
+The pre-pitch check on the 6th can be run any time that morning.
 
 Written for someone who has never run any of it. **Whoever runs this may not be
 the person who wrote it**, so it assumes nothing.
@@ -28,10 +37,6 @@ Specifically:
 Nothing on this page is urgent. If you are unsure, stop — everything here can be
 done later, and none of it degrades by waiting a few hours.
 
-> **There is an earlier, smaller run on Tuesday 2 September**, same time. One put
-> ($2,320) expires then. Only step 1 applies that day — there is no maturity to
-> pay until the 3rd. Everything in step 1 below works unchanged.
-
 ---
 
 ## Before you start
@@ -50,7 +55,7 @@ Confirm the wallet is reachable and nothing is broken. This spends nothing:
 npm test
 ```
 
-Expect `pass 81`, `fail 0`. **If any test fails, stop and message the backend
+Expect `pass 90`, `fail 0`. **If any test fails, stop and message the backend
 developer.** Do not continue — a failing test here means the code does not match
 what this runbook assumes.
 
@@ -254,12 +259,66 @@ anyone asks why there are two deposits, that is the answer.
 
 ---
 
+## Before the pitch — Saturday 6 September
+
+**Five minutes, and it stops a presenter contradicting their own screen.**
+
+Run this on the demo machine on the morning of the pitch:
+
+```bash
+cd backend
+npm run market
+```
+
+It reads only — no wallet, no writes, nothing broadcast.
+
+### Why this matters more than it sounds
+
+The order book's expiries roll every day. Measured on 1 September:
+
+```
+ETH  2 day(s)   BTC  2 day(s)   SOL  1 day(s)   BNB  1 day(s)
+```
+
+**By the 6th those numbers will be different, and may be zero.** ETH and BTC
+will likely be shorter; SOL and BNB may offer nothing at all. That is the market,
+not a fault.
+
+### What to tell the presenters
+
+**Never state a fixed tenor.** Not "two-day protection", not "protection for a
+few days" — the script prints the phrase to use instead:
+
+> "the longest the book offers today"
+
+and the actual number is read off the screen during the demo, where it is
+computed live for that request.
+
+A presenter who says "two days" while the screen shows one has contradicted
+themselves in front of a judge, and the screen is right.
+
+### If an asset shows NONE
+
+It will display in the interface with a plain-English reason rather than
+disappearing. **That is correct behaviour and a good thing to point at** — it
+shows the product reads a real market rather than a fixture, and refuses to
+offer what it cannot deliver.
+
+### If NOTHING is available on any asset
+
+The script says so explicitly. Do not claim protection can be bought. Show the
+positions already held instead — eight real transactions, all verifiable, none
+of which depend on today's book.
+
+---
+
 ## What is safe to run at any time
 
 These read only and cannot spend anything:
 
 ```bash
-npm test                # 81 tests, no credentials needed
+npm test                # 90 tests, no credentials needed
+npm run market          # what the book offers today, per asset
 npm run db:check        # database connectivity
 npm run reconcile       # database vs chain
 npm run preflight       # the full purchase checklist, broadcasts nothing

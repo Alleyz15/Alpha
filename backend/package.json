@@ -18,7 +18,8 @@
     "repay:request": "node --env-file-if-exists=../.env scripts/repay.js request",
     "repay:confirm": "node --env-file-if-exists=../.env scripts/repay.js confirm",
     "mature": "node --env-file-if-exists=../.env scripts/mature.js",
-    "settle": "node --env-file-if-exists=../.env scripts/settle.js"
+    "settle": "node --env-file-if-exists=../.env scripts/settle.js",
+    "market": "node --env-file-if-exists=../.env scripts/market.js"
   },
   "repository": {
     "type": "git",
