@@ -109,3 +109,113 @@ Files updated:
 ### Deviations from plan
 
 None.
+
+## Phase 2 — Reusable UI components and data correctness
+
+**Status:** Complete
+
+### Approved implementation plan
+
+Phase 2 creates reusable UI building blocks based on `docs/alpha-design-system.md` and fixes the two known frontend interpretation bugs before complete screens are assembled.
+
+1. Correct position display logic:
+   - Protection positions use `protectionFloorUsdc` and protection wording.
+   - Upside positions use `upsideThresholdUsdc` and upside-exposure wording.
+   - Missing money values render a neutral placeholder instead of `$0.00`.
+2. Support `paymentStatus: "none"` with truthful wording that explains the simulated balance was not charged.
+3. Add reusable design-system components for:
+   - Buttons and cards.
+   - Semantic status and reality badges.
+   - Labelled form fields and segmented controls.
+   - Monospaced financial or technical values.
+   - Alerts and loading, empty, or error states.
+4. Ensure components use centralized tokens, visible keyboard focus, semantic HTML, text-plus-symbol status communication, and reduced-motion behavior.
+5. Add a compatible frontend component-testing setup and cover component interaction, accessibility contracts, defensive formatting, position-role handling, and payment-status handling.
+6. Keep complete page construction, routing changes, backend changes, and unsupported product capabilities outside this phase.
+
+### Planned files
+
+New files are expected under:
+
+- `frontend/src/components/ui/`
+- `frontend/src/styles/components.css`
+- `frontend/src/test/`
+
+Updated files are expected to include:
+
+- `frontend/src/adapters/quoteViewModel.js`
+- `frontend/src/index.css`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+
+### Completion requirements
+
+- Null or missing currency values cannot render as `$0.00`.
+- Protection and upside positions expose different, truthful metric labels and values.
+- `paymentStatus: "none"` is recognized and does not display an unavailable status.
+- Reusable components follow the approved visual tokens and accessibility requirements.
+- Automated component and adapter tests pass.
+- The production build and development-server smoke test pass.
+- No backend, API contract, environment, routing, or complete-page construction or redesign is introduced.
+
+### Implementation result
+
+Completed on 2026-09-01.
+
+- Made USDC formatting defensive: null, empty, non-numeric, and infinite values now render as `—`, while a genuine numeric zero still renders as `$0.00 USDC`.
+- Added `paymentStatus: "none"` with the label `Not charged to demo balance`.
+- Preserved explicit unknown future payment statuses as unknown instead of inferring that an on-chain position was paid.
+- Added role-aware position view data for downside protection, upside exposure, and unknown legacy shapes.
+- Updated the existing dashboard’s position copy and metric binding so upside positions show `Upside threshold` and are never described as protected. This was a targeted bug fix, not a page redesign.
+- Added reusable Button, Card, StatusBadge, RealityBadge, FormField, SegmentedControl, MonoValue, Alert, and AsyncState components.
+- Added token-driven component styling with primary, ghost, and row buttons; standard, glass, inset, and interactive cards; semantic badges and alerts; accessible fields and native radio controls; and reusable async states.
+- Extended the central token file with semantic tints and component-level text/disabled tokens. Component CSS contains no hardcoded color values.
+- Added Vitest, jsdom, and React Testing Library with adapter, dashboard regression, interaction, semantic, and accessibility-oriented tests.
+- Kept backend code, API contracts, environment files, routing, and complete-page construction unchanged.
+
+Files added:
+
+- `frontend/src/adapters/quoteViewModel.test.js`
+- `frontend/src/components/ui/Alert.jsx`
+- `frontend/src/components/ui/AsyncState.jsx`
+- `frontend/src/components/ui/Button.jsx`
+- `frontend/src/components/ui/Button.test.jsx`
+- `frontend/src/components/ui/Card.jsx`
+- `frontend/src/components/ui/DisplayComponents.test.jsx`
+- `frontend/src/components/ui/FormControls.test.jsx`
+- `frontend/src/components/ui/FormField.jsx`
+- `frontend/src/components/ui/MonoValue.jsx`
+- `frontend/src/components/ui/RealityBadge.jsx`
+- `frontend/src/components/ui/SegmentedControl.jsx`
+- `frontend/src/components/ui/StatusBadge.jsx`
+- `frontend/src/components/ui/index.js`
+- `frontend/src/screens/DashboardScreen.test.jsx`
+- `frontend/src/styles/components.css`
+- `frontend/src/test/setup.js`
+
+Files updated:
+
+- `frontend/src/adapters/quoteViewModel.js`
+- `frontend/src/screens/DashboardScreen.jsx`
+- `frontend/src/styles/tokens.css`
+- `frontend/src/index.css`
+- `frontend/vite.config.js`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Verification performed
+
+- Automated tests: passed; 5 test files and 28 tests passed.
+- Dashboard regression test: passed; an upside position shows its threshold, uses upside wording, recognizes no demo-balance charge, and contains no protection-floor or protected wording.
+- Production frontend build: passed with 89 modules transformed.
+- Development-server smoke test: passed; Vite returned HTTP 200 with the React root element, and the temporary test process was stopped afterward.
+- Dependency audit: passed; npm reported zero vulnerabilities.
+- Component color check: passed; `components.css` contains no hardcoded hex or RGBA color values.
+- Remote-font reference check: passed; no Google Fonts URL exists in frontend source.
+- Git whitespace check: passed.
+- Scope check: passed; no backend or environment file changed and no future phase heading was added.
+
+### Deviations from plan
+
+No scope deviations. During setup, npm identified a critical advisory in the initially evaluated Vitest 3.2.4 release. It was replaced with the compatible patched Vitest 3.2.6 release before completion; the final audit reports zero vulnerabilities.
