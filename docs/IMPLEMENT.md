@@ -330,7 +330,7 @@ question we would lose.
 | 8.3 | Buy a real call on Thetanuts | ✅ | tx `0x7930bc42…`, strike 2660, buyer side, 9347 raw contracts. See ONCHAIN-EVIDENCE.md §5 |
 | 8.4 | Simulated yield accrual | ✅ | `yieldIsSimulated` carried as data; `scripts/vault.js` labels it SIMULATED on the line the number is printed and again in the summary (BR-37). No frontend vault screen exists, so the CLI is where the number appears |
 | 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
-| 8.6 | Maturity flow | 🔄 | **Resize done 1 Sep** — 3 USDC vault on a real call, tx `0xd7fec53c…`, participation 23.5422%. See ONCHAIN-EVIDENCE.md §7. Maturity code still to build; the transfer itself happens 3 Sep when the call expires |
+| 8.6 | Maturity flow | 🔄 | **Code done 1 Sep.** `src/vault/maturity.js`, `npm run mature`, nine checks, eight tests. Resize tx `0xd7fec53c…`, participation 23.5422% (§7). **The transfer executes 3 Sep after 16:00 MYT** — see `docs/RUNBOOK-3-SEP.md` |
 
 **Non-negotiable in the copy** — a judge will do the arithmetic:
 

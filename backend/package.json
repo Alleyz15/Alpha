@@ -16,7 +16,9 @@
     "inspect:expiries": "node --env-file-if-exists=../.env scripts/expiries.js",
     "test": "node --test test/*.test.js",
     "repay:request": "node --env-file-if-exists=../.env scripts/repay.js request",
-    "repay:confirm": "node --env-file-if-exists=../.env scripts/repay.js confirm"
+    "repay:confirm": "node --env-file-if-exists=../.env scripts/repay.js confirm",
+    "mature": "node --env-file-if-exists=../.env scripts/mature.js",
+    "settle": "node --env-file-if-exists=../.env scripts/settle.js"
   },
   "repository": {
     "type": "git",
