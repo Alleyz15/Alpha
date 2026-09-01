@@ -157,7 +157,119 @@ anime.js v4 notes:
 - Always `revert()` in the `useEffect` cleanup, or animations outlive their component
 - **Never let React and anime.js control the same property on the same element.** React re-renders will overwrite mid-animation; the symptom is intermittent flicker that is very hard to trace
 
-### Supabase — NOT SET UP YET
+### The fill path — pre-flight only, nothing broadcast
+
+From `backend/`:
+
+```bash
+npm run preflight
+```
+
+Runs the ten-item checklist against a real order and broadcasts nothing. Takes arguments, because premiums moved fourfold in a single day and a script that cannot be re-aimed is one you rewrite under time pressure:
+
+```bash
+node --env-file-if-exists=../.env scripts/preflight-check.js 0.05 middle
+```
+
+`UNITS` then `TIER` (`highest` | `middle` | `lowest`), plus `--keep` to leave the test rows behind.
+
+> ⚠️ **A `Panic due to OVERFLOW(17)` from check 9 does NOT mean what it says.**
+> It is the contract's way of refusing an order we are not allowed to take. We
+> lost hours to it: the first guess was a missing allowance, which was wrong —
+> the approval went through and the revert was identical. The real cause was the
+> inverted side filter. If you see it now, the order is one we should not have
+> selected, not one that needs an approval.
+
+**The approval is a separate script**, because a check that silently sends a transaction is one nobody can run freely:
+
+```bash
+node --env-file-if-exists=../.env scripts/approve.js 3
+```
+
+Reports what it would do and sends nothing. Add `--confirm` to actually send it. It spends **gas only** (a fraction of a cent on Base), moves **no USDC**, and is reversible by approving 0.
+
+#### The budget is not $10
+
+Every fill has to sit at the bottom of BR-15's 1–3 USDC range, not the middle:
+
+| | |
+|---|---|
+| Phase 3 first fill | 1–3 USDC |
+| Phase 4 short-dated position | 1–3 USDC — required to demo settlement at all |
+| Two rehearsals | 2–6 USDC |
+| Demo day, live on stage | 1–3 USDC |
+| **Total** | **5–15 USDC against a ~10 USDC wallet** |
+
+The pre-flight output prints USDC remaining after the fill would settle, and how many more of that size are affordable. Watch that number rather than the balance.
+
+### Backend API — DONE (no fill yet)
+
+Two terminals. Backend first, from `backend/`:
+
+```bash
+npm run api
+```
+
+Then the frontend, from `frontend/`:
+
+```bash
+npm run dev
+```
+
+Verify the whole surface without a browser:
+
+```bash
+npm run api:check
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/demo-context` | display name, simulated balances |
+| `POST /api/quote` | `{ asset, units, mode, protectionPct? \| targetValueUsdc?+targetDate? }` → tier set |
+| `POST /api/purchase` | `{ quoteId, tierId }` — identifiers only |
+| `GET /api/positions` | the demo user's positions |
+| `GET /health` | liveness, touches nothing |
+
+Error envelope is `{ error: { code, message, details? } }` with `QUOTE_EXPIRED` 409, `BALANCE_EXCEEDED` 400, `NO_EXPIRY` 404, `NO_TIERS` 404, `INVALID_REQUEST` 400, `UPSTREAM_ERROR` 502.
+
+> ⚠️ **`POST /api/purchase` does not buy anything yet.** It persists the chosen quote and a `pending` position, then returns `txHash: null`, `explorerUrl: null`, `status: "pending_fill"`, `simulated: true`. The real fill is Phase 3. **Keep `VITE_USE_MOCK_API=true` until it lands** — in live mode the interface tells the user a real transaction was sent, and right now that would be untrue (BR-51).
+
+**Quote sets live in memory for 60 seconds** (`QUOTE_VALIDITY_SECONDS`), not in Postgres — the `quotes` table records what was purchased, not every price displayed. Restarting the API drops outstanding quotes and users must re-quote. Only the tier actually bought is persisted, at purchase time.
+
+`DEMO_USER_ID` pins which seeded user the API acts for; without it the earliest is used. The client never sends a user id.
+
+### Supabase — DONE
+
+Project `gphzqvsdubygvijunobj`, region `ap-southeast-1` (Singapore). Schema, RLS and demo seeds are applied.
+
+**Verify your setup in one command**, from `backend/`:
+
+```bash
+node --env-file-if-exists=../.env scripts/db-check.js
+```
+
+It checks the tables, the seeds, that an anonymous client is locked out, and a full quote → position → settled round trip including the event trail. It writes test rows and deletes them again. Set `SUPABASE_PUBLISHABLE_KEY` to include the anonymous-lockout check; without it that one is skipped.
+
+#### Migrations
+
+The schema lives in `supabase/migrations/`, one logical change per file, named `YYYYMMDDHHMMSS_description.sql`.
+
+- **Never edit a migration that has already been applied.** Write a new one. Editing an applied file makes your database and everyone else's diverge silently, and nobody finds out until something breaks in a way that makes no sense.
+- **Never change the schema in the Supabase web editor.** Clicking through the table editor creates no migration file, so the folder and the real database drift apart and the whole thing stops being trustworthy.
+- The filename timestamp must match the version recorded in `supabase_migrations.schema_migrations`, or the CLI will try to re-apply work that is already done.
+
+#### Two failure modes that look identical
+
+Both make a query come back with nothing, and they have different fixes:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `42501 permission denied for table X` | missing `GRANT` | grant the role DML — see `20260830210500_grant_service_role_access.sql` |
+| query returns zero rows, no error | RLS with no matching policy | add a policy, or use the secret key |
+
+> ⚠️ **This project's default privileges do not grant DML on new tables to `service_role`.** A newly created table is unreadable by the backend until it is granted explicitly. The grant migration sets `ALTER DEFAULT PRIVILEGES` so future tables are covered, but if you add a table and immediately get `42501`, this is why.
+
+#### If you are setting up a fresh project
 
 1. Sign up at supabase.com → New Project
 2. Region: **Southeast Asia (Singapore)** — closest to Malaysia
@@ -217,7 +329,148 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 | **2026-09-25** | **+27** | **49** |
 | **2026-10-30** | **+62** | **22** |
 
-> **This matters for product design.** Short-dated expiries dominate, but 27-day and 62-day options do exist with real liquidity. A "30-day downside protection" product is feasible — it maps to the +27 day expiry.
+> ⚠️ **The table above is the RAW book. It is not what we can buy.** Once puts, below-spot strikes and the buy side (BR-1) are filtered, the picture is much smaller — see below. An earlier version of this note claimed 27-day and 62-day options "exist with real liquidity" and that a 30-day product was feasible. **Both claims are false of the buyable book.**
+
+### What we can actually buy (corrected 31 Aug)
+
+> ⚠️ **Everything this section said before 31 Aug was wrong**, including a table
+> claiming "SOL/XRP/BNB/AVAX have zero fillable puts" that was cited as evidence of
+> BR-1 working in code. It was a bug. What follows is measured against the chain by
+> simulating every order.
+
+Three filters decide whether an order is ours to fill:
+
+| Filter | Rule | Why |
+|---|---|---|
+| Side | `order.isBuyer === true` | We must be the **buyer** (BR-1) |
+| Type | `rawApiData.isCall === false` | Downside protection is a put |
+| Legs | exactly **one** strike | Vanilla only — see below |
+
+**Fillable vanilla puts below spot, by asset:**
+
+| Asset | Buy-side puts | Vanilla | Simulated OK |
+|---|---|---|---|
+| ETH | 27 | 17 | 6/6 |
+| BTC | 32 | 16 | 6/6 |
+| SOL | 14 | 12 | 6/6 |
+| BNB | 13 | 10 | 6/6 |
+| AVAX | 9 | 9 | 2/6 |
+| XRP | 10 | 10 | **0/6** |
+
+**Four assets work well**, not two. XRP reverts at every size; AVAX is intermittent.
+
+**Tenor and depth — the numbers that define the product:**
+
+```
+expiry      (+days)  1-strike  2-strike  3-strike
+2026-08-31    +0.4d      22        8         2
+2026-09-01    +1.4d      37        4         0
+2026-09-02    +2.4d      15        3         0
+2026-09-25   +25.4d       0        3         2
+2026-10-30   +60.4d       0        7         2
+```
+
+**Vanilla puts stop at 2.4 days.** The long-dated orders are all multi-leg. And
+floors are shallow: ETH −0.4% to −6.1%, BTC −0.5% to −4.4%, SOL −0.7% to −7.5%.
+
+A 20% floor over 30 days is not available and never was.
+
+### Why the inverted filter survived eight tasks
+
+This is worth recording so nobody re-derives it.
+
+**Market makers sell near-the-money and buy deep out-of-the-money.** So the deep
+strikes — the 20%-down floors the product was designed around — carry
+`isBuyer === false`: the maker wants to *buy* those, and filling one would make us
+the seller.
+
+The broken filter selected exactly those orders. It surfaced a book that looked
+ideal — deep floors, long tenors, 26- and 60-day expiries — and every one of them
+was unfillable. The quote engine priced them, the tier logic ranked them, and the
+API served them for eight tasks, because nothing in a read-only path ever asks the
+chain whether an order can actually be filled.
+
+**It only surfaced when we tried to spend money.** `callStaticFillOrder` reverted
+with `Panic(0x11)`, an arithmetic overflow that says nothing about sides or
+permissions.
+
+The lesson for anything similar: a filter that selects what we *cannot* do looks
+identical to one that selects what we *can*, until something external disagrees.
+Simulate early.
+
+### Vanilla vs multi-leg — not interchangeable
+
+The book carries three products, and only the first is ours:
+
+| Implementation | Strikes | Product | Max payout |
+|---|---|---|---|
+| `0x7355EB92…` | 1 | vanilla put | `strike × contracts` |
+| `0x02Fe0d96…` | 2 | spread | the **spread width** |
+| `0x4fd2C6D2…` | 3 | butterfly | narrower still |
+
+A put spread pays out only *between* its strikes. Describing one to a user as
+"your floor is $2,100" would be false (BR-6) — its real maximum payout might be
+$2.50 where a vanilla put's would be $105. That exact discrepancy is how the second
+bug was caught.
+
+`getBuyablePutOrders()` filters to one strike. Do not relax it without changing
+what the interface promises.
+
+### The book re-signs wholesale every ~60 seconds
+
+**Nobody would guess this, and anyone touching `findLiveOrder` needs it.**
+
+Every order on the book is re-signed at the same moment, on roughly a 60-second
+timer. Not staggered per maker — **100% of signatures replaced simultaneously.**
+
+Measured 1 Sep 2026:
+
+```
+REFRESH at t=41.2s  — 100% of signatures replaced
+REFRESH at t=101.2s — 100% of signatures replaced
+interval: 59.9s
+```
+
+The signal was unmistakable. Sampling 320 orders every 5 seconds, **every single
+signature lived exactly 35.645 seconds**, identical to three decimal places. A
+distribution of independent lifetimes cannot look like that; one scheduled event
+can.
+
+**The same orders come back.** Across one refresh, 311 of 311 economically
+identical orders persisted — same maker, strike, expiry, type and side — with a
+new signature and usually a slightly different price:
+
+```
+persisted: 311 of 311    disappeared: 0
+price unchanged: 6       price moved: 305
+move: min 0.003% | median 0.515% | max 105.346%
+```
+
+**Prices are static inside a cycle and step at the refresh:**
+
+```
+elapsed   median   p90     max      % over 5% tolerance
+10s        0.00    0.00    0.00        0%
+20s        0.00    0.00    0.00        0%
+31s        0.76   13.94  133.37       11%
+92s        7.34   17.45   82.50       78%
+```
+
+#### What this means in code
+
+- **Never match a stored order by signature alone.** A quote more than ~60s old
+  will never find its signature, and a quote of average age has a coin-flip
+  chance. Two integration fills in a row were refused on exactly this.
+- `findLiveOrder()` tries the signature first, then falls back to matching on
+  **maker + strike + expiry + type + side — all five, or it refuses.** A partial
+  match is never approximated.
+- **`QUOTE_VALIDITY_SECONDS` must stay well inside 60.** It is 20: the window in
+  which the quoted price is exactly, not approximately, right. It was 60, which
+  exactly equalled the refresh period and therefore promised the one window that
+  cannot be guaranteed.
+- Scripts that quote and fill in one process (`scripts/fill.js`, ~6s end to end)
+  never hit this. Any flow with a human in the middle does.
+
 
 ### Order object shape
 
@@ -242,9 +495,376 @@ Checked 29 Aug 2026. The book is live, so counts change constantly.
 
 **Decimals: `strikePrice` and `price` both use 8 decimals — divide by 1e8.** Getting this wrong makes premiums look 100x too expensive.
 
+### Decimals — the full table
+
+All verified against the live book on 31 Aug 2026, not from documentation. Conversions live in `backend/src/thetanuts/decimals.js`; do not convert inline anywhere else.
+
+| Value | Decimals | Notes |
+|---|---|---|
+| `strikePrice`, `strikes[]` | 8 | |
+| `price` | **8** | The per-contract premium. **8, not USDC's 6** — see the trap below |
+| `availableAmount`, `maxCollateralUsable` | 6 | USDC |
+| `Order.numContracts` | **6** | Not 18 — see below |
+| `numContracts` **argument** to the payout helpers | **18** | Different from the field above |
+| return value of the payout helpers | 6 | USDC |
+
+**Runtime types:** order fields are `bigint` — `strikePrice`, `price`, `expiry`, `numContracts`, `deadline`, `availableAmount`. But `rawApiData.strikes[]` and `rawApiData.maxCollateralUsable` are **strings**. The same strike is reachable as both types, and a string passed to some SDK helpers skips scaling silently. Always read from `order.order`, never `rawApiData`.
+
+#### Trap 1 — the premium is 8 decimals even though it is paid in USDC
+
+```js
+client.utils.fromPriceDecimals(215625969n)  // "2.15625969"  correct
+client.utils.fromUsdcDecimals(215625969n)   // "215.625969"  100x too expensive
+```
+
+`price` is a USDC amount, so reaching for `fromUsdcDecimals` is the natural mistake. It does not throw.
+
+#### Trap 2 — `numContracts` means two different scales
+
+**`Order.numContracts` is 6 decimals.** Verified by arithmetic: `numContracts(6dp) × price(8dp)` equals `availableAmount(6dp)` exactly, 8/8 orders sampled.
+
+```
+nc=4303987819  px= 2.32342665  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+nc=2425421120  px= 4.12299535  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+nc= 642855247  px=15.55560141  avail=10000.00 | nc@6dp*px=10000.00 | nc@18dp*px=1.00e-8
+```
+
+**But `utils.calculatePayoutAtPrice` and `utils.calculateMaxPayout` expect 18 decimals** for the same argument, and return 6 decimals. Verified by computing payouts by hand against the live book: 25/25 for `calculatePayoutAtPrice`, 10/10 for `calculateMaxPayout`, across several strikes, contract counts, in-the-money and out-of-the-money cases.
+
+**Both are correct — they are describing different things.** The `.d.ts` field comment on the `Order` struct (line 758) documents the field; the `@example` blocks on the payout helpers (`5n * 10n**18n`) document the argument. Reading either as the whole story gives a 10¹² error.
+
+**Passing an order's own `numContracts` into a payout helper is silently wrong:**
+
+```
+strike $2,250, settling at $2,000, 4637.660318 contracts
+
+hand                4637.660318 × $250 = $1,159,415.08
+passed as-is (6dp)  raw             1 =        0.000001 USDC   ← 10^12 too small
+rescaled to 18dp    raw 1159415079500 =  1,159,415.0795 USDC   ← correct
+```
+
+It returns `1`, not an error. Use `toPayoutContracts()` from `decimals.js` at that boundary. **This matters for task 1.8** (scenario previews) and for anything showing a user what they would receive.
+
+#### Trap 3 — `order.numContracts` is not the order's size
+
+It looks like the quantity available. It is not, and it overstates the real cap by roughly 1000×:
+
+```
+order.numContracts        4932.23    = availableAmount / price   ← NOT a size limit
+calculateMaxContracts()      4.44    = availableAmount / strike  ← the real cap
+maxContracts × strike   10,000.00    = the maker's collateral, exactly
+```
+
+The seller's collateral has to cover the **maximum payout**, which is `strike × contracts` — so the cap is `availableAmount / strike`. `order.numContracts` instead answers "how many contracts if the entire collateral were spent on premium", which is not a thing anyone can do.
+
+Verified: `maxContracts × strike` equals `availableAmount` to the cent on every order sampled.
+
+**Always size with `optionBook.calculateMaxContracts(order)`.** `toHumanOrder()` deliberately does not expose `numContracts` so it cannot be picked up by mistake. See `backend/src/thetanuts/sizing.js`.
+
+**One contract protects one unit of the underlying** — `calculateMaxPayout` returns exactly `strike` for one contract. Protecting 1 ETH takes 1 contract.
+
+**Fractional contracts work.** `calculateNumContracts(usdcAmount, price)` round-trips exactly at 6dp granularity: 1 USDC buys 0.493223 contracts, and 0.493223 × 2.02747993 = 1.000000 USDC. The protocol's *minimum* fill size is still undocumented (requirements.md §7 open question 4), so `sizePosition()` takes `minContracts` as a parameter and only reports violations — it must become a hard refusal once the real figure is known.
+
+### Identifying which asset an order is for
+
+**`order.underlyingToken` is not a usable asset identifier.** It is the WETH address for ETH, an unrelated token for BTC, and **`0x0000…0000` for SOL, XRP, BNB and AVAX** — four assets share one value, so it cannot tell them apart.
+
+**Use `rawApiData.priceFeed` instead**, resolved against `client.chainConfig.priceFeeds`:
+
+```js
+client.chainConfig.priceFeeds
+// { ETH: "0x71041d…", BTC: "0x64c911…", SOL: "0x975043…", DOGE: "0x8422f3…",
+//   XRP: "0x9f0C1d…", BNB: "0x4b7836…", PAXG: "0x5213eB…", AVAX: "0xE70f2D…",
+//   "ETH/USD": "0x71041d…", "BTC/USD": "0x64c911…" }
+```
+
+Feed addresses are unique per asset and present on every order. Note the `ETH/USD` and `BTC/USD` aliases point at the same addresses as `ETH` and `BTC` — drop keys containing `/` or those two assets get listed twice. `DOGE` and `PAXG` have feeds but no market data and no orders.
+
+> `api.filterOrders({ asset, type })` looks like it would do this for us. **It is broken** — it throws `Cannot read properties of undefined (reading 'map')` for every asset. Filter `fetchOrders()` by hand.
+
+### Spot prices are already plain numbers
+
+`api.getMarketData()` returns human-scale JS numbers, **not** 8-decimal integers:
+
+```js
+{ prices: { ETH: 2458.24, BTC: 78156.73, SOL: 105.13, XRP: 1.39, BNB: 693.54, AVAX: 7.38 },
+  metadata: { lastUpdated: 1788088438000, currentTime: 1788088412911 } }
+```
+
+**The 8-decimal rule applies only to `strikePrice` and `price` on order objects.** Dividing a spot price by 1e8 gives a number 100 million times too small.
+
+> `api.getMarketPrices()` returns `{ price: "0", change24h: 0, timestamp: null }` — all zeros, for every asset. **Unusable.** Use `getMarketData()`.
+
+### Order side — which orders we are allowed to fill
+
+`isBuyer` describes the **maker's** side, from the taker's perspective. We are always the taker.
+
+| `order.isBuyer` | `rawApiData.isLong` | Maker wants to | We would be the | Fillable? |
+|---|---|---|---|---|
+| `false` | `true` | sell | **buyer** | ✅ yes |
+| `true` | `false` | buy | **seller** | ❌ **never — BR-1** |
+
+`isLong === !isBuyer` always (verified across all 359 orders on the book).
+
+**This is a product constraint, not a detail.** Selling exposes us to near-unlimited loss, which is the exact risk this product exists to keep users away from. Roughly **half the puts on the book are the forbidden side**, so an unfiltered "puts on ETH" count is about double what we can actually trade.
+
+**Consequence for asset selection:** filtering to buyable puts leaves **ETH and BTC only**. SOL, XRP, BNB and AVAX each have 10–20 puts on the book and **zero** we can fill.
+
+| Asset | Puts on book | Buyable by us |
+|---|---|---|
+| ETH | 48 | **19** |
+| BTC | 54 | **22** |
+| SOL | 20 | 0 |
+| XRP | 13 | 0 |
+| BNB | 16 | 0 |
+| AVAX | 10 | 0 |
+
+Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has been stable. This is what UC-1 exception E2 ("disable that asset in the UI") has to act on.
+
 ---
 
 ## Gotchas we already hit
+
+### Operations that fail silently, and report success they did not achieve
+
+**Thirteen instances now, one family.** The shape:
+
+> **An operation that can fail silently will eventually report success it did not
+> achieve.** Every instance so far was caught by someone checking the result
+> against reality, never by reading the output that claimed it worked.
+
+| Where | Claimed | Actually |
+|---|---|---|
+| `ensureExactAllowance` | `0.000000 -> 0.000000` | the approval had succeeded |
+| disbursement closing balance | `9.371552 (was 9.371552)` | 4.5977 USDC had left |
+| post-fill contract read | recorded 2000 contracts | the chain said 1999 |
+| `reconcile` settled-state check | printed `ok` | the RPC read had failed |
+| `api:check` cleanup | `test rows removed` | an FK blocked every delete |
+| `api:check` balances | said nothing | 1.395637 USDC of drift |
+| commit `63d7fcc` | added economic matching and a terminal state | also cut `fill.js` from 398 lines to 130 |
+| `QUOTE_VALIDITY_SECONDS` | a configured 20-second window | never read; both call sites hardcoded 60 |
+| `NOT_FOUND` API code | a 404 for a missing loan | not in the status table, so it surfaced as `UPSTREAM_ERROR` |
+| the API router | routes matched by path | exact-match only, so the agreed `/:id/` endpoint could not exist |
+| `stress.js` / `repay.js` | pure arithmetic, testable | imported the DB client at load, so the tests could not import them |
+| `RUNBOOK-3-SEP.md` | commands to run on the day | `npm run settle` did not exist, and `settle.js` writes nothing without `--confirm` |
+| `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
+
+The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
+four scripts, none checking `error`. When `balance_events` gained an
+`ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
+printing success.
+
+The two newest are different in kind, and worth naming separately.
+
+#### The commit that described a change it did not make
+
+`63d7fcc` said it added economic order matching and a terminal state for refused
+fills. It added the first. It also truncated `fill.js` from 398 lines to 130,
+deleting `prepareFill()` and `executeFill()`, and `failRefusedFill()` — the
+terminal state the message describes — was never written at all. The entire
+on-chain write path was gone, and three scripts died at parse time.
+
+It was verified with `api:check` and `reconcile`. Both passed. Both were always
+going to pass, because neither imports `fill.js`.
+
+> **A verification that cannot observe the change it is verifying is not a
+> verification.** The other instances were operations reporting success they did
+> not achieve. This was a *commit message* reporting a change it did not make,
+> confirmed by a test that could not see the file.
+
+The same failure in another costume: `fill.js`'s own header still read "There is
+no executeFill() yet, on purpose" long after task 3.7 added one. A header that
+misdescribes what a file does is a commit message that misdescribes what it
+changed, left in place.
+
+**What to do:**
+
+- **Run the command that exercises the file you changed**, not the suite that is
+  cheap to run. For a change to the fill path, `npm run preflight` is the
+  verification and `api:check` is not.
+- **`npm test` now fails when a module cannot parse OR imports a name its target
+  does not export.** The second is the one that matters here: the truncated file
+  parsed perfectly, and the real error was a linking failure. See
+  `backend/test/modules-link.test.js`, which was verified by putting the
+  truncated file back and watching it fail.
+- **Check the commit after making it.**
+  `git show HEAD:path | grep "^export"` takes five seconds and catches a
+  truncation that a diffstat reading "392 insertions" does not.
+
+#### A field read from a shape that does not exist
+
+`readSettlementPrice()` had two sources. The second was:
+
+```js
+const p = full?.settlementPrice ?? full?.settlement?.settlementPrice;
+```
+
+`getFullOptionInfo` returns exactly `{ info, buyer, seller, isExpired,
+isSettled, numContracts, collateralAmount }`. There is no `settlementPrice`
+field and no `.settlement` object, so that expression could only ever evaluate
+to `undefined`.
+
+Same family as `getOptionInfo().settled`: code written against a shape nobody
+checked. It survived because **nothing ever reached the code path** — it runs
+only for a settled option, and this project had never held one to expiry.
+The optional chaining meant it failed silently rather than throwing.
+
+> **Dead code in a path that has never executed is indistinguishable from
+> working code.** It reviews clean, it passes every test that does not reach
+> it, and it fails the first time it matters — which for a settlement path is
+> the day the option expires.
+
+**What to do:** for any branch that has never run, print the actual shape
+before trusting a field name. `Object.keys()` on the real object takes one
+command and would have caught this on the day it was written.
+
+#### A runbook describing commands that do not exist
+
+The operational instructions for 3 September were drafted and then **walked as an
+instruction rather than read as a description** - every command run in order. That
+found three errors in a document that read perfectly well:
+
+- **`npm run settle` did not exist.** Step 1 would have failed outright, for
+  someone who by definition has nobody to ask.
+- **`settle.js` is report-only without `--confirm`.** The runbook would have left
+  the database un-updated while appearing to work - the silent-success family,
+  this time in prose.
+- **It said three positions expire on the 3rd.** Four do.
+
+It also omitted the 2 September run entirely, which nobody noticed while reading
+because a document about the 3rd does not look like it is missing the 2nd.
+
+> **A document that tells someone what to do is code.** It has the same failure
+> modes and deserves the same verification: run it, do not review it. The pattern
+> now covers code, commit messages, configuration, reference docs and operational
+> instructions - the only thing they have in common is describing something that
+> was not checked.
+
+**What to do:** before handing anyone a runbook, execute every command in it in
+order, on the real machine, and paste what actually came back. A command that
+cannot be run yet - because a date has not arrived - should say what its blocked
+output looks like, which is itself something you can only know by running it.
+
+#### The configuration value that was never read
+
+`QUOTE_VALIDITY_SECONDS` sat in `.env` from Phase 1 and had no effect. Both
+`buildQuote()` and `buildQuoteSet()` defaulted to a hardcoded
+`validitySeconds = 60` and neither read the environment.
+
+This cost more than it looks. We spent an afternoon measuring that 60 seconds
+promises exactly the window the book cannot guarantee — the book re-signs
+wholesale every ~60s — and concluded the value had to come down to 20. The rule
+was right and the measurement was right. Nothing was enforcing either, and
+changing the number in `.env` produced no error and no effect.
+
+> **A value that looks configured and is not is worse than one that is plainly
+> hardcoded.** A hardcoded number is visibly a decision. A dead environment
+> variable is an invitation to tune something that does not move.
+
+**What to do:**
+
+- **Grep `.env.example` against the source.** Every name in it should appear in a
+  `process.env` read somewhere, or it is decoration.
+- **Read configuration at call time, not at module load**, so the value applies
+  after `--env-file` and a test can override it.
+- **Make one command print the value it is actually using.** Pre-flight check 3
+  reports both windows, so a wrong number shows up in every run rather than
+  being inferred from a file nobody re-reads.
+
+#### Three found by running the code rather than reading it
+
+All three came from the same twenty minutes of exercising one new endpoint, and
+none would have been found by reading the diff.
+
+**`NOT_FOUND` was not in the API status table.** `toErrorResponse` maps any
+unlisted code to `UPSTREAM_ERROR`, so asking for a loan that does not exist
+reported that the service had broken. The handler raised `NOT_FOUND` correctly
+and something downstream changed it, which is why reading the handler proved
+nothing. Two attempts to fix it by matching the error message also failed:
+PostgREST puts `0 rows` in a `details` field, and the message says only that the
+result could not be coerced. The identifying mark is `error.code === 'PGRST116'`.
+
+**The router matched exact paths only.** `/api/loans/:loanId/stress` had already
+been agreed and written into the note for the frontend developer, and could not
+have existed. A route may now carry a `pattern` instead of a `path`.
+
+**A pure calculation could not be imported without credentials.** `stress.js`
+and `repay.js` imported the Supabase client and the signer at module load, both
+of which throw when `.env` is absent - and `npm test` does not load `.env`. The
+money arithmetic was therefore impossible to test at all.
+
+> **Untestable arithmetic is where the 100x errors live.** This project has
+> already had two scale bugs - 6dp versus 18dp contracts, and the payout
+> helpers. The defence against a third is a test, and a test needs an import.
+
+Fix: import the credentialed modules INSIDE the functions that use them, so the
+money maths stays a pure function of its arguments.
+
+**What the audit found.** Eighteen modules still need credentials at import, and
+for `src/db/*`, `src/api/*` and `src/scheduler/*` that is correct - they exist to
+talk to the database. What matters is that none of them is arithmetic. Every
+calculation module now imports cleanly:
+
+```
+credit.js  stress.js  repay.js  vault.js  decimals.js  selection.js  sizing.js
+```
+
+`quote.js` is on the credentialed list, but its pure parts already live in
+`selection.js` and `sizing.js`, which are clean and tested.
+
+**Re-run the audit** after adding a module that does arithmetic:
+
+```bash
+for f in $(find src -name '*.js'); do node -e "import('./$f').catch(e=>/is not set/.test(e.message)&&console.log('$f'))"; done
+```
+
+**What to do:**
+
+- **Check every write's `error`.** Supabase returns it rather than throwing, so a
+  bare `await db.from(x).delete()` swallows failures by default.
+- **Verify the outcome; do not infer it from the absence of a throw.**
+  `verifyDiscarded()` re-queries the database, and `confirmedRead()` polls and
+  returns `{ value, confirmed }`.
+- **Never weaken a constraint for test convenience.** `ON DELETE RESTRICT` was
+  correct — a financial event must not vanish because the row it referenced was
+  deleted. The cleanup respects it instead: refund, delete the events, then
+  delete the position.
+- **A check that changes what it measures is not a check.** `api:check` now
+  refunds through the same compensating path a failed fill uses, and asserts the
+  rows are actually gone.
+
+
+### Read-your-own-write: decisions made against state that has already moved
+
+**This has bitten three times in one day.** It is one bug wearing three costumes,
+so recognise the shape rather than fixing each instance.
+
+The shape: read some state, decide something from it, then act — while the state
+changes underneath between the read and the act.
+
+| Where | What happened | Symptom |
+|---|---|---|
+| `ensureExactAllowance` | re-read the allowance immediately after approving | reported `0.000000 -> 0.000000` on an approval that had actually succeeded |
+| `approve(6)` after `approve(0)` | gas estimated while the allowance was still non-zero, executed once it was zero | **reverted out of gas** — a zero→non-zero SSTORE costs ~20k more, limit 46,444 against ~56,240 needed |
+| post-fill contract count | read the option contract milliseconds after its creation confirmed | returned `null`, so the row kept the quoted 2000 instead of the on-chain 1999 |
+
+Two of the three cost real money in gas; the third would have made a lending
+artefact claim a number the chain disagreed with.
+
+**What to do about it:**
+
+- **Never estimate gas across a state change you are about to cause.** If you send
+  A then B, and A changes what B writes, B's estimate must be taken after A lands.
+- **Poll, don't peek.** A single read straight after a write can be served from a
+  block that predates it. `pollAllowanceUntil()` is the pattern.
+- **A fresh contract is not immediately queryable.** Reads against an address
+  created in the transaction you just confirmed can return null for a moment.
+- **Fall back rather than block** when the read is a nicety, but record that the
+  read failed. The post-fill guard did this correctly — the event payload said
+  `onChainContractsSeen: null`, which is how the discrepancy was found later.
+- **Reconcile catches what the moment missed.** `npm run reconcile` compares every
+  row against chain and is the backstop for all of the above.
+
 
 Format: symptom → cause → fix
 

@@ -4,10 +4,21 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "api": "node --env-file-if-exists=../.env scripts/serve.js",
+    "db:check": "node --env-file-if-exists=../.env scripts/db-check.js",
+    "api:check": "node --env-file-if-exists=../.env scripts/api-check.js",
+    "preflight": "node --env-file-if-exists=../.env scripts/preflight-check.js",
+    "fill:position": "node --env-file-if-exists=../.env scripts/fill-position.js",
+    "reconcile": "node --env-file-if-exists=../.env scripts/reconcile.js",
+    "approve": "node --env-file-if-exists=../.env scripts/approve.js",
     "inspect:orders": "node --env-file-if-exists=../.env scripts/inspect-order.js",
     "inspect:sdk": "node --env-file-if-exists=../.env scripts/inspect-sdk.js",
     "inspect:expiries": "node --env-file-if-exists=../.env scripts/expiries.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js",
+    "repay:request": "node --env-file-if-exists=../.env scripts/repay.js request",
+    "repay:confirm": "node --env-file-if-exists=../.env scripts/repay.js confirm",
+    "mature": "node --env-file-if-exists=../.env scripts/mature.js",
+    "settle": "node --env-file-if-exists=../.env scripts/settle.js"
   },
   "repository": {
     "type": "git",
@@ -22,6 +33,7 @@
   },
   "homepage": "https://github.com/Alleyz15/Alpha#readme",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "@thetanuts-finance/thetanuts-client": "^0.3.0",
     "dotenv": "^17.4.2",
     "ethers": "^6.17.0"
