@@ -15,6 +15,11 @@ const STATUS_BY_CODE = {
   // UPSTREAM_ERROR, which would tell the caller the service broke when in fact
   // they asked for something that is not there.
   NOT_FOUND: 404,
+  // A third-party market-data provider is rate-limiting us, unreachable, or
+  // answering with something we cannot use. 503 rather than 502 because it is
+  // temporary by nature and the interface should say "unavailable, try again"
+  // rather than "something is broken".
+  MARKET_DATA_UNAVAILABLE: 503,
   INVALID_REQUEST: 400,
   UPSTREAM_ERROR: 502,
 };
