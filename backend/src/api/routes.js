@@ -14,6 +14,7 @@ import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
 import { strikeView, paymentView, sumPayments } from './positionView.js';
+import { buildMarketContext } from './marketContext.js';
 
 /**
  * GET /api/demo-context
@@ -368,4 +369,28 @@ export async function getLoanStress(loanId, priceParam, ruleParam) {
     }
     throw error;
   }
+}
+
+/**
+ * GET /api/market-context
+ *
+ * Live prices and what protection is actually purchasable right now, per asset.
+ *
+ * NOTHING HERE IS CACHED, deliberately - see the note at the top of
+ * marketContext.js. `longestProtectionDays` is what the date picker caps
+ * against, and the book's expiries roll daily; a cached cap lets a user choose a
+ * date that was reachable an hour ago and be refused at the quote step.
+ */
+export async function getMarketContext() {
+  const user = await getDemoUser();
+  const balances = await listBalances(user.id);
+
+  // Holdings come from the user's seeded balances, so an asset the demo user
+  // does not hold still appears - with its real price and availability - and
+  // simply shows zero held.
+  const holdings = Object.fromEntries(
+    balances.filter((b) => b.asset !== 'USDC').map((b) => [b.asset, Number(b.amount)]),
+  );
+
+  return buildMarketContext({ holdings });
 }

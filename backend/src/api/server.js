@@ -6,7 +6,7 @@
 import { createServer } from 'node:http';
 import { toErrorResponse, ApiError } from './errors.js';
 import { startSweeping, stopSweeping } from './quoteStore.js';
-import { getDemoContext, postQuote, postPurchase, getPositions, getLoanStress } from './routes.js';
+import { getDemoContext, postQuote, postPurchase, getPositions, getLoanStress, getMarketContext } from './routes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
 // the machine call this API, and the demo runs on a laptop that is also
@@ -62,6 +62,7 @@ const routes = [
   { method: 'POST', path: '/api/quote', handler: (body) => postQuote(body) },
   { method: 'POST', path: '/api/purchase', handler: (body) => postPurchase(body) },
   { method: 'GET', path: '/api/positions', handler: () => getPositions() },
+  { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
 
   // The only route with a path parameter, so it carries a pattern instead of
   // a literal path. Kept as a regex rather than pulling in a router: there are
