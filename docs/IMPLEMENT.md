@@ -277,12 +277,13 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. **5** endpoints; the fifth is `GET /api/loans/:id/stress` (7.5). See `docs/API-LOAN-STRESS.md` |
+| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. **8** endpoints. Contracts handed over: `docs/API-LOAN-STRESS.md` (7.5), `docs/API-MARKET-CONTEXT.md`, `docs/API-COIN-DETAIL.md` |
 | 5.2 | CORS configured | ✅ | `http://localhost:5173` named explicitly, preflight handled, unknown origins not echoed — verified in `api:check` |
 | 5.3 | Quote screen | ✅ | `frontend/src/screens/QuoteScreen.jsx`, both entry modes, no options jargon (BR-3) |
 | 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
 | 5.5 | Position dashboard | 🔄 | `DashboardScreen.jsx` renders status, floor, expiry and the BaseScan link. **Two known defects, both introduced by the API change on 1 Sep and both in the frontend developer's files:** a vault call shows `$0.00 USDC` because `formatUsdc(null)` returns zero, and three positions still read "Payment status unavailable" because `paymentStatus: 'none'` is not in `paymentStatusCopy` |
 | 5.6 | Custody disclosure | ✅ | `RealityDisclosure.jsx` — "Who holds the funds?", shown not buried (BR-32) |
+| 5.8 | Coin Detail market data | 🔄 | **Backend done 1 Sep**, scope added by team decision. Three read-only endpoints in `src/marketdata/` — CoinGecko overview, Binance candles and depth snapshot. Display only, enforced by a test, not a comment. **No streaming endpoint**: polling depth every 2–3s is visually identical over a demo and cannot leave a stale panel looking live. The chart itself is the frontend developer's half, and the frontend has no charting library yet |
 | 5.7 | Front-to-back integration verified | ✅ | Verified 1 Sep against a real fill, tx `0x64e37010…`. Quote to broadcast took 140.7s — at least two book re-signings — so the fill went through economic matching, not the signature fast path. See ONCHAIN-EVIDENCE.md §6 |
 
 **Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.

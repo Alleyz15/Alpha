@@ -15,6 +15,8 @@ import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
 import { strikeView, paymentView, sumPayments } from './positionView.js';
 import { buildMarketContext } from './marketContext.js';
+import { resolveMarket, resolveRange, MARKET_ASSETS, RANGE_KEYS } from '../marketdata/assets.js';
+import { fetchOverview, fetchCandles, fetchDepth } from '../marketdata/providers.js';
 
 /**
  * GET /api/demo-context
@@ -393,4 +395,94 @@ export async function getMarketContext() {
   );
 
   return buildMarketContext({ holdings });
+}
+
+// ---------------------------------------------------------------------------
+// Coin Detail market data. DISPLAY ONLY.
+// ---------------------------------------------------------------------------
+//
+// These read CoinGecko and Binance. Nothing they return may price a trade: no
+// quote, fill, credit limit, participation rate or settlement figure reads from
+// them. Protection is priced on Thetanuts and nowhere else, and
+// test/marketdataIsolation.test.js fails if that stops being true.
+//
+// Every failure is a 503 the interface renders as "unavailable". Never a shaped
+// response with plausible numbers in it.
+
+/** Turn a provider failure into the API envelope. */
+function asMarketDataError(error) {
+  if (error?.code === 'MARKET_DATA_UNAVAILABLE') {
+    return new ApiError('MARKET_DATA_UNAVAILABLE', error.message, {
+      provider: error.provider,
+      status: error.status ?? undefined,
+    });
+  }
+  return error;
+}
+
+/**
+ * GET /api/assets/overview
+ *
+ * All four assets in one CoinGecko request. USD, and the payload says so - it
+ * is not Binance's USDT price and not our USDC protection quotes.
+ */
+export async function getAssetsOverview() {
+  try {
+    return await fetchOverview();
+  } catch (error) {
+    throw asMarketDataError(error);
+  }
+}
+
+/**
+ * GET /api/assets/:symbol/candles?range=1D
+ *
+ * OHLCV from Binance, so one response drives either a line chart (close) or
+ * candles (open/high/low/close). Prices are USDT.
+ */
+export async function getAssetCandles(symbol, rangeParam) {
+  const asset = resolveMarket(symbol);
+  if (!asset) {
+    throw new ApiError('NOT_FOUND', `No market data for '${symbol}'.`, {
+      supported: MARKET_ASSETS.map((a) => a.symbol),
+    });
+  }
+
+  const range = resolveRange(rangeParam);
+  if (!range) {
+    throw new ApiError('INVALID_REQUEST',
+      `range must be one of ${RANGE_KEYS.join(', ')}.`, { supported: RANGE_KEYS });
+  }
+
+  try {
+    return await fetchCandles(asset, range);
+  } catch (error) {
+    throw asMarketDataError(error);
+  }
+}
+
+/**
+ * GET /api/assets/:symbol/order-book
+ *
+ * A depth snapshot from ONE exchange. The response says so in `venue`, `scope`
+ * and `scopeStatement` - a disclosure the interface renders rather than one it
+ * decides whether to render, the same principle as isRealProtocol.
+ *
+ * There is no streaming endpoint, deliberately. Poll this every 2-3 seconds: at
+ * a demo's timescale it looks the same as a live feed, and a dropped websocket
+ * leaves a stale panel that looks like a working one.
+ */
+export async function getAssetOrderBook(symbol) {
+  const asset = resolveMarket(symbol);
+  if (!asset) {
+    throw new ApiError('NOT_FOUND', `No market data for '${symbol}'.`, {
+      supported: MARKET_ASSETS.map((a) => a.symbol),
+    });
+  }
+
+  try {
+    return await fetchDepth(asset);
+  } catch (error) {
+    throw asMarketDataError(error);
+  }
 }
