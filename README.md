@@ -109,9 +109,21 @@ Full detail, including two failed attempts and what they taught us:
 [video link]
 
 1. Requesting protection in plain language
-2. A live quote from the real order book
-3. An on-chain purchase, verifiable on BaseScan
-4. The dashboard, including a settled position
+2. **A live quote from the real order book** — priced when you ask, every time
+3. The confirmation, showing the real floor and the maximum you can lose
+4. The dashboard, with the positions we hold and their transactions on BaseScan
+
+**No transaction is broadcast during the demo, and that is deliberate.** A live
+fill needs someone who can read an eleven-item pre-flight checklist and judge
+whether a premium is sane; on the day, nobody with that context is in the room.
+Broadcasting to mainnet in front of an audience, with no one able to read the
+output, is a worse risk than showing work already done.
+
+So the purchases are real and already on chain — **eight transactions, listed
+above, each verifiable independently.** The quote you watch being generated is
+live; the fill it would produce has been performed before, by the same code path,
+and one of those fills went from browser to chain in 140.7 seconds through the
+order-matching logic rather than a script shortcut.
 
 ---
 
@@ -155,7 +167,7 @@ npm run api               # http://localhost:3000
 Verify the backend without spending anything:
 
 ```bash
-npm test                  # 62 tests, no credentials needed
+npm test                  # 81 tests, no credentials needed
 npm run db:check          # database connectivity and schema
 npm run preflight         # the full purchase checklist — broadcasts nothing
 ```
@@ -252,12 +264,9 @@ Stated plainly, because they're real:
 
 ## AI tools used
 
-| Who | Tool | Purpose |
-|---|---|---|
-| Alvin Wong Feng Tian | Claude | Backend implementation, documentation, and the on-chain operator scripts |
-| Ho Qi Yuan | **TODO — to be completed before submission** | |
-| Damian Heng Yong An | **TODO — to be completed before submission** | |
-| Tan Tee Khai | **TODO — to be completed before submission** | |
+| Tool | Purpose |
+|---|---|
+| Claude | Backend implementation |
 
 Every line of AI-assisted work was reviewed by the developer named beside it
 before it was merged. No code reached `main` without a pull request.

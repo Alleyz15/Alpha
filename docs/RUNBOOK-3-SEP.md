@@ -3,7 +3,30 @@
 **Everything on this page happens after 16:00 MYT (08:00 UTC).** That is when the
 options expire. Before then, every command here will correctly refuse to run.
 
-Written for someone who has never run any of it. Follow it top to bottom.
+Written for someone who has never run any of it. **Whoever runs this may not be
+the person who wrote it**, so it assumes nothing.
+
+---
+
+## The one rule
+
+> **If a check fails, stop and message someone. Do not improvise.**
+
+Every failure mode on this page is recoverable — as long as nobody guesses. The
+checks exist because the code refuses to act on something it cannot verify, and
+working around one converts a safe stop into an unsafe outcome.
+
+Specifically:
+
+- **A failed check means nothing was sent.** Not that money is missing.
+- **Never re-run a command that hung** after `--confirm`. The transfer may have
+  landed; running it twice pays twice, and that cannot be undone.
+- **Never edit the database by hand** to make a check pass.
+- Waiting is always safe. There is no deadline today that is worse than a wrong
+  transaction.
+
+Nothing on this page is urgent. If you are unsure, stop — everything here can be
+done later, and none of it degrades by waiting a few hours.
 
 > **There is an earlier, smaller run on Tuesday 2 September**, same time. One put
 > ($2,320) expires then. Only step 1 applies that day — there is no maturity to
