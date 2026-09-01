@@ -40,7 +40,7 @@ export default function ConfigureProtectionStep({
 
   return (
     <>
-      <button className="protection-back" type="button" onClick={onExit}>← Back to asset</button>
+      <button className="protection-back" type="button" onClick={onExit}>← Back to Welcome</button>
 
       <div className="protection-config-topline">
         <header className="protection-heading">

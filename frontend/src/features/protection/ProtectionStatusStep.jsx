@@ -4,7 +4,7 @@ import { formatUsdc, toPaymentStatusLabel } from '../../adapters/quoteViewModel.
 import ProtectionProgress from './ProtectionProgress.jsx';
 import { purchaseStatusView } from './protectionFlowUtils.js';
 
-export default function ProtectionStatusStep({ asset, quote, tier, purchase, onExit }) {
+export default function ProtectionStatusStep({ asset, quote, tier, purchase, onExit, onViewDashboard }) {
   const status = purchaseStatusView(purchase);
   const hasExplorerLink = purchase.fill === 'onchain' && Boolean(purchase.explorerUrl);
 
@@ -42,10 +42,11 @@ export default function ProtectionStatusStep({ asset, quote, tier, purchase, onE
               Verify on BaseScan <ExternalIcon />
             </a>
           )}
-          <Button variant={hasExplorerLink ? 'ghost' : 'primary'} onClick={onExit}>Back to asset</Button>
+          <Button variant={hasExplorerLink ? 'ghost' : 'primary'} onClick={onViewDashboard}>View my protection</Button>
+          <Button variant="ghost" onClick={onExit}>Back to Welcome</Button>
         </div>
 
-        <small className="protection-authority-note">Portfolio navigation will be connected when the application navigation plan is approved.</small>
+        <small className="protection-authority-note">Position status and on-chain evidence are loaded from Alpha’s live backend.</small>
       </Card>
     </>
   );

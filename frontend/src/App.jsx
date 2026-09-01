@@ -1,110 +1,58 @@
-import { useEffect, useState } from 'react';
-import { api, liveApi, useMockApi } from './api/client.js';
-import { toPositionViewModel } from './adapters/quoteViewModel.js';
-import AppHeader from './components/AppHeader.jsx';
-import RealityDisclosure from './components/RealityDisclosure.jsx';
-import QuoteScreen from './screens/QuoteScreen.jsx';
-import ConfirmationScreen from './screens/ConfirmationScreen.jsx';
-import DashboardScreen from './screens/DashboardScreen.jsx';
+import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { liveApi } from './api/client.js';
+import { Card } from './components/ui/index.js';
+import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
 import WelcomePage from './features/welcome/WelcomePage.jsx';
 
-function LegacyApp() {
-  const [activeView, setActiveView] = useState('explore');
-  const [flow, setFlow] = useState({ step: 'quote', quote: null, tier: null, purchase: null });
-  const [demoContext, setDemoContext] = useState(null);
-  const [positions, setPositions] = useState([]);
-  const [positionsState, setPositionsState] = useState('loading');
-
-  async function loadPositions() {
-    setPositionsState('loading');
-    try {
-      const response = await api.getPositions();
-      setPositions(response.positions.map(toPositionViewModel));
-      setPositionsState('ready');
-    } catch {
-      setPositionsState('error');
-    }
-  }
-
-  useEffect(() => {
-    api.getDemoContext().then(setDemoContext).catch(() => setDemoContext(null));
-    loadPositions();
-  }, []);
-
-  function navigate(view) {
-    setActiveView(view);
-    if (view === 'explore') {
-      setFlow({ step: 'quote', quote: null, tier: null, purchase: null });
-    }
-    if (view === 'dashboard') loadPositions();
-  }
-
-  function reviewQuote(quote, tier) {
-    setFlow({ step: 'confirmation', quote, tier, purchase: null });
-  }
-
-  function returnToQuote() {
-    setFlow({ step: 'quote', quote: null, tier: null, purchase: null });
-  }
-
-  function finishPurchase(purchase) {
-    setFlow((current) => ({ ...current, step: 'complete', purchase }));
-  }
+function WelcomeRoute() {
+  const navigate = useNavigate();
 
   return (
-    <div className="app-shell">
-      <AppHeader activeView={activeView} onNavigate={navigate} demoContext={demoContext} />
+    <WelcomePage
+      apiClient={liveApi}
+      onProtect={(symbol) => navigate(`/protect/${symbol}`)}
+      onDashboard={() => navigate('/dashboard')}
+    />
+  );
+}
 
-      <RealityDisclosure variant="banner" isMock={useMockApi} reality={demoContext?.reality} />
+function ProtectionRoute() {
+  const navigate = useNavigate();
+  const { symbol = '' } = useParams();
 
-      <main>
-        {activeView === 'explore' && flow.step === 'quote' && (
-          <QuoteScreen demoContext={demoContext} isMock={useMockApi} reality={demoContext?.reality} onReview={reviewQuote} />
-        )}
+  return (
+    <ProtectionFlowPage
+      symbol={decodeURIComponent(symbol).toUpperCase()}
+      apiClient={liveApi}
+      onExit={() => navigate('/')}
+      onViewDashboard={() => navigate('/dashboard')}
+    />
+  );
+}
 
-        {activeView === 'explore' && flow.step !== 'quote' && (
-          <ConfirmationScreen
-            step={flow.step}
-            quote={flow.quote}
-            tier={flow.tier}
-            purchase={flow.purchase}
-            isMock={useMockApi}
-            reality={demoContext?.reality}
-            onBack={returnToQuote}
-            onComplete={finishPurchase}
-            onViewDashboard={() => navigate('dashboard')}
-          />
-        )}
-
-        {activeView === 'dashboard' && (
-          <DashboardScreen positions={positions} state={positionsState} isMock={useMockApi} reality={demoContext?.reality} onExplore={() => navigate('explore')} />
-        )}
-      </main>
-
-      <footer className="site-footer">
-        <RealityDisclosure variant="footer" isMock={useMockApi} reality={demoContext?.reality} />
-      </footer>
-    </div>
+function NotFoundPage() {
+  return (
+    <main className="protection-flow">
+      <div className="protection-container protection-container--state">
+        <Card variant="glass" className="protection-route-error">
+          <span className="protection-eyebrow">Page not found</span>
+          <h1>Alpha could not find this page.</h1>
+          <p>Return to the Welcome page to choose a supported path.</p>
+          <Link className="alpha-button alpha-button--primary alpha-button--default" to="/">Back to Welcome</Link>
+        </Card>
+      </div>
+    </main>
   );
 }
 
 export default function App() {
-  const pathname = window.location.pathname;
-  const route = window.location.pathname.match(/^\/protect\/([^/]+)\/?$/i);
-
-  if (route) {
-    return (
-      <ProtectionFlowPage
-        symbol={decodeURIComponent(route[1]).toUpperCase()}
-        apiClient={liveApi}
-      />
-    );
-  }
-
-  if (pathname === '/' || pathname === '') {
-    return <WelcomePage apiClient={liveApi} />;
-  }
-
-  return <LegacyApp />;
+  return (
+    <Routes>
+      <Route path="/" element={<WelcomeRoute />} />
+      <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/protect/:symbol" element={<ProtectionRoute />} />
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
 }
