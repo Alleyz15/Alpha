@@ -27,7 +27,7 @@ Confirm the wallet is reachable and nothing is broken. This spends nothing:
 npm test
 ```
 
-Expect `pass 70`, `fail 0`. **If any test fails, stop and message the backend
+Expect `pass 81`, `fail 0`. **If any test fails, stop and message the backend
 developer.** Do not continue — a failing test here means the code does not match
 what this runbook assumes.
 
@@ -79,7 +79,25 @@ protected floor, so the protection was never needed — like an insurance policy
 you did not have to claim on. The user keeps their ETH and loses only the premium.
 That is the product working.
 
-### If a position says `needs_review`
+### If EVERY position says `needs_review`
+
+**This is a known issue, not a protocol fault. Do not escalate it as one.**
+
+Settlement has never once run — these are the first options this project has
+held to expiry, so the code that reads the settled price has never executed
+against a settled option. Three sources are tried: the protocol's payout
+event, its price oracle, and its indexer. If all three come back empty, every
+position flags `needs_review`.
+
+That is the code refusing to guess. It will not record a zero payout it cannot
+verify, because a zero that means "did not pay" and a zero that means "could
+not read" look identical afterwards.
+
+**What to do:** note it, finish the runbook, and send the output. Nothing is
+lost — the payout, if any, was paid automatically by the protocol into the
+wallet whether or not we recorded it. It is a bookkeeping gap, not a money gap.
+
+### If ONE position says `needs_review`
 
 The option expired but the protocol has not settled it yet. Settlement is
 automatic but not instantaneous.
@@ -218,7 +236,7 @@ anyone asks why there are two deposits, that is the answer.
 These read only and cannot spend anything:
 
 ```bash
-npm test                # 70 tests, no credentials needed
+npm test                # 81 tests, no credentials needed
 npm run db:check        # database connectivity
 npm run reconcile       # database vs chain
 npm run preflight       # the full purchase checklist, broadcasts nothing

@@ -14,6 +14,7 @@
 
 import { client } from '../thetanuts/client.js';
 import { transitionPosition } from '../db/positions.js';
+import { readSettlementFromEvents, readSettlementFromIndexer } from './settlementSources.js';
 
 /** Expired this long without settling is worth a human looking at (BR-27). */
 const graceHours = () => Number(process.env.SETTLEMENT_GRACE_HOURS ?? 6);
@@ -39,14 +40,20 @@ async function readSettlementPrice(optionAddress) {
     if (twap && BigInt(twap) > 0n) return { price: BigInt(twap), source: 'option.getTWAP' };
   } catch { /* fall through - reported via `source` rather than thrown */ }
 
-  // 2. Whatever the full info surfaces once settled.
-  try {
-    const full = await client.option.getFullOptionInfo(optionAddress);
-    const p = full?.settlementPrice ?? full?.settlement?.settlementPrice;
-    if (p && BigInt(p) > 0n) return { price: BigInt(p), source: 'getFullOptionInfo' };
-  } catch { /* fall through */ }
+  // 2. REMOVED, 1 Sep 2026. This read `full.settlementPrice` and
+  //    `full.settlement.settlementPrice`. getFullOptionInfo returns exactly
+  //    { info, buyer, seller, isExpired, isSettled, numContracts,
+  //    collateralAmount } - no settlementPrice, no .settlement object - so the
+  //    expression could only ever be undefined. It was written against a shape
+  //    that does not exist and survived because nothing reached this path until
+  //    the first option was about to expire. The event sources replace it.
 
   return { price: null, source: 'unavailable' };
+}
+
+/** The wallet holding the buyer side, for the indexer lookup. */
+function buyerWallet(full) {
+  return (full?.buyer ?? '').toLowerCase();
 }
 
 /**
@@ -69,16 +76,44 @@ export async function readSettlementState(position) {
   let payoutUsdc = null;
   let settlementPrice = null;
   let priceSource = null;
+  let eventSource = null;
+  let indexer = null;
 
   if (settled) {
-    const found = await readSettlementPrice(position.option_address);
-    priceSource = found.source;
+    // 1. THE EVENTS FIRST. An OptionPayout event is a record of what the
+    //    protocol transferred, not a calculation of what it should have. If it
+    //    exists, no oracle read and no arithmetic can contradict it.
+    const events = await readSettlementFromEvents(
+      position.option_address, Number(full.info.expiry),
+    );
+    eventSource = events.source;
 
-    if (found.price !== null) {
-      settlementPrice = Number(found.price) / 1e8;
-      const result = await client.option.calculatePayout(position.option_address, found.price);
-      payoutUsdc = Number(result.payout) / 1e6;
+    if (events.payoutRaw !== null) {
+      payoutUsdc = Number(events.payoutRaw) / 1e6;
     }
+    if (events.settlementPriceRaw !== null) {
+      settlementPrice = Number(events.settlementPriceRaw) / 1e8;
+    }
+
+    // 2. The oracle, for anything the events did not supply. calculatePayout
+    //    echoes back whatever price it is handed, so it is only as good as the
+    //    price - which is why it is second, not first.
+    if (payoutUsdc === null || settlementPrice === null) {
+      const found = await readSettlementPrice(position.option_address);
+      priceSource = found.source;
+
+      if (found.price !== null) {
+        if (settlementPrice === null) settlementPrice = Number(found.price) / 1e8;
+        if (payoutUsdc === null) {
+          const result = await client.option.calculatePayout(position.option_address, found.price);
+          payoutUsdc = Number(result.payout) / 1e6;
+        }
+      }
+    }
+
+    // 3. The indexer. Corroboration only - it is an index, not the chain, and
+    //    it never supplies a payout on its own.
+    indexer = await readSettlementFromIndexer(position.option_address, buyerWallet(full));
   }
 
   const expiryMs = Number(full.info.expiry) * 1000;
@@ -90,7 +125,12 @@ export async function readSettlementState(position) {
     settled,
     payoutUsdc,
     settlementPrice,
+    // Every source that was consulted, recorded on the event payload. When
+    // this runs unattended, the trail of WHERE a figure came from is the only
+    // way to judge it afterwards.
     priceSource,
+    eventSource,
+    indexer,
     hoursPastExpiry,
     // BR-31 verified against the chain rather than assumed: the option's buyer
     // should be our wallet, and our row should say the same size.
@@ -186,6 +226,9 @@ export async function settlePosition(position, { apply = false } = {}) {
       settledAt: new Date().toISOString(),
       payload: {
         priceSource: state.priceSource,
+        eventSource: state.eventSource,
+        indexerStatus: state.indexer?.status ?? null,
+        indexerPnl: state.indexer?.pnlUsdc ?? null,
         buyerOnChain: state.buyer,
         contractsMatch: state.contractsMatch,
       },

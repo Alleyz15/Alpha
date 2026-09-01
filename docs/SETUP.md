@@ -627,7 +627,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Twelve instances now, one family.** The shape:
+**Thirteen instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -647,6 +647,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | the API router | routes matched by path | exact-match only, so the agreed `/:id/` endpoint could not exist |
 | `stress.js` / `repay.js` | pure arithmetic, testable | imported the DB client at load, so the tests could not import them |
 | `RUNBOOK-3-SEP.md` | commands to run on the day | `npm run settle` did not exist, and `settle.js` writes nothing without `--confirm` |
+| `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -689,6 +690,33 @@ changed, left in place.
 - **Check the commit after making it.**
   `git show HEAD:path | grep "^export"` takes five seconds and catches a
   truncation that a diffstat reading "392 insertions" does not.
+
+#### A field read from a shape that does not exist
+
+`readSettlementPrice()` had two sources. The second was:
+
+```js
+const p = full?.settlementPrice ?? full?.settlement?.settlementPrice;
+```
+
+`getFullOptionInfo` returns exactly `{ info, buyer, seller, isExpired,
+isSettled, numContracts, collateralAmount }`. There is no `settlementPrice`
+field and no `.settlement` object, so that expression could only ever evaluate
+to `undefined`.
+
+Same family as `getOptionInfo().settled`: code written against a shape nobody
+checked. It survived because **nothing ever reached the code path** — it runs
+only for a settled option, and this project had never held one to expiry.
+The optional chaining meant it failed silently rather than throwing.
+
+> **Dead code in a path that has never executed is indistinguishable from
+> working code.** It reviews clean, it passes every test that does not reach
+> it, and it fails the first time it matters — which for a settlement path is
+> the day the option expires.
+
+**What to do:** for any branch that has never run, print the actual shape
+before trusting a field name. `Object.keys()` on the real object takes one
+command and would have caught this on the day it was written.
 
 #### A runbook describing commands that do not exist
 
