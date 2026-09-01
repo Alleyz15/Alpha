@@ -1,0 +1,212 @@
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import ProtectionFlowPage from './ProtectionFlowPage.jsx';
+
+function marketContext(spotUsdc = 77_000) {
+  return {
+    assets: [
+      {
+        symbol: 'BTC',
+        name: 'Bitcoin',
+        spotUsdc,
+        holdingUnits: 0.01,
+        protectionAvailable: true,
+        longestProtectionDays: 2,
+        strikesBelowSpot: 7,
+        unavailableReason: null,
+      },
+      {
+        symbol: 'ETH', name: 'Ethereum', spotUsdc: 2400, holdingUnits: 0.4,
+        protectionAvailable: true, longestProtectionDays: 2, strikesBelowSpot: 8, unavailableReason: null,
+      },
+      {
+        symbol: 'SOL', name: 'Solana', spotUsdc: 101, holdingUnits: 10,
+        protectionAvailable: true, longestProtectionDays: 1, strikesBelowSpot: 9, unavailableReason: null,
+      },
+      {
+        symbol: 'BNB', name: 'BNB', spotUsdc: 680, holdingUnits: 1.5,
+        protectionAvailable: true, longestProtectionDays: 1, strikesBelowSpot: 11, unavailableReason: null,
+      },
+    ],
+    updatedAt: '2026-09-02T00:10:00.000Z',
+    reality: { price: 'live', balance: 'simulated' },
+  };
+}
+
+function quoteResponse() {
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + 60_000);
+  return {
+    quoteId: 'quote-live-1',
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    validForSeconds: 60,
+    asset: 'BTC',
+    spot: 77_500,
+    requested: { units: 0.005, targetDate: new Date(createdAt.getTime() + 86_400_000).toISOString() },
+    tiers: [
+      {
+        tierId: 'tier-balanced',
+        recommended: true,
+        actual: {
+          tier: 'middle', floorUsdc: 70_000, protectionPct: 9.7,
+          expiry: new Date(createdAt.getTime() + 86_400_000).toISOString(),
+        },
+        size: { protectedUnits: 0.005 },
+        cost: { premiumUsdc: 1.25 },
+        maxLoss: { forConfirmation: 38.75 },
+        disclosure: {
+          sizeReduced: false, unprotectedUnits: 0, unprotectedValueUsdc: 0,
+          expiryLaterThanRequested: false,
+        },
+        settlement: { paysIn: 'USDC' },
+        payout: { floorValueUsdc: 350 },
+      },
+    ],
+  };
+}
+
+function apiClient(overrides = {}) {
+  return {
+    getDemoContext: vi.fn().mockResolvedValue({
+      reality: { balance: 'simulated', quote: 'live', fill: 'operator', settlement: 'live' },
+    }),
+    getMarketContext: vi.fn().mockResolvedValue(marketContext()),
+    createQuote: vi.fn().mockResolvedValue(quoteResponse()),
+    purchaseQuote: vi.fn().mockResolvedValue({
+      positionId: 'position-1',
+      status: 'pending_fill',
+      fill: 'operator',
+      paymentStatus: 'held',
+      txHash: null,
+      explorerUrl: null,
+    }),
+    ...overrides,
+  };
+}
+
+async function completeConfiguration(user) {
+  const amount = await screen.findByLabelText(/Amount to protect/);
+  await user.type(amount, '0.005');
+  const date = screen.getByLabelText(/Target date/);
+  await user.type(date, date.min);
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('ProtectionFlowPage', () => {
+  it('rejects unsupported route assets without making a backend call', () => {
+    const client = apiClient();
+    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+
+    expect(screen.getByText(/cannot configure protection/i)).toBeVisible();
+    expect(client.getMarketContext).not.toHaveBeenCalled();
+    expect(client.getDemoContext).not.toHaveBeenCalled();
+  });
+
+  it('uses the route asset as a read-only selection and renders live backend context', async () => {
+    const client = apiClient();
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'Buy protection for Bitcoin' })).toBeVisible();
+    expect(screen.getByLabelText('Selected asset')).toHaveTextContent('Bitcoin');
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getAllByText('$77,000.00 USDC').length).toBeGreaterThan(0);
+    expect(screen.getByText('0.01 BTC')).toBeVisible();
+    expect(screen.getByText('Live market price')).toBeVisible();
+    expect(screen.getByText('Simulated holding')).toBeVisible();
+  });
+
+  it('shows the backend reason and disables quoting when protection is unavailable', async () => {
+    const unavailable = marketContext();
+    unavailable.assets[0] = {
+      ...unavailable.assets[0],
+      protectionAvailable: false,
+      longestProtectionDays: null,
+      unavailableReason: 'no protection is being offered on this asset right now',
+    };
+    const client = apiClient({ getMarketContext: vi.fn().mockResolvedValue(unavailable) });
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+
+    expect(await screen.findByText('no protection is being offered on this asset right now')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Get live quote/ })).toBeDisabled();
+    expect(client.createQuote).not.toHaveBeenCalled();
+  });
+
+  it('locks the backend quote price, invalidates it after an input change, and resumes polling', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const client = apiClient();
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} marketPollInterval={30_000} />);
+    await act(async () => Promise.resolve());
+    await completeConfiguration(user);
+
+    await user.click(screen.getByRole('button', { name: /Get live quote/ }));
+    expect(await screen.findByText('Available choices')).toBeVisible();
+    expect((await screen.findAllByText('$77,500.00 USDC')).length).toBeGreaterThan(0);
+    expect(client.createQuote).toHaveBeenCalledWith(expect.objectContaining({
+      asset: 'BTC', units: 0.005, mode: 'percentage', protectionPct: 10,
+    }));
+
+    const callsAfterQuote = client.getMarketContext.mock.calls.length;
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(client.getMarketContext).toHaveBeenCalledTimes(callsAfterQuote);
+
+    const amount = screen.getByLabelText(/Amount to protect/);
+    await user.clear(amount);
+    await user.type(amount, '0.004');
+
+    expect(screen.getByText('Available choices')).toBeVisible();
+    expect(screen.queryByRole('radiogroup', { name: 'Available protection choices' })).not.toBeInTheDocument();
+    expect(screen.getByText(/live protection choices will appear here/i)).toBeVisible();
+    expect(screen.getByText('Configuration changed')).toBeVisible();
+    expect(screen.getAllByText('Current live price').length).toBeGreaterThan(0);
+
+    await act(async () => Promise.resolve());
+    await waitFor(() => expect(client.getMarketContext.mock.calls.length).toBeGreaterThan(callsAfterQuote));
+  });
+
+  it('reviews a backend tier and submits only its quote and tier identifiers', async () => {
+    const user = userEvent.setup();
+    const client = apiClient();
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+    await completeConfiguration(user);
+
+    await user.click(screen.getByRole('button', { name: /Get live quote/ }));
+    await screen.findAllByText('$77,500.00 USDC');
+    await user.click(screen.getByRole('button', { name: /Continue to review/ }));
+
+    expect(screen.getByRole('heading', { name: 'Check your BTC protection' })).toBeVisible();
+    expect(screen.getAllByText('$77,500.00 USDC').length).toBeGreaterThan(0);
+    expect(screen.getByText(/simulated holding/i)).toBeVisible();
+    expect(screen.getByText(/operator execution/i)).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: /Submit purchase request/ }));
+
+    await waitFor(() => expect(client.purchaseQuote).toHaveBeenCalledWith({
+      quoteId: 'quote-live-1',
+      tierId: 'tier-balanced',
+    }));
+    expect(await screen.findByRole('heading', { name: 'Your request is waiting for execution.' })).toBeVisible();
+    expect(screen.getByText('Funds locked')).toBeVisible();
+    expect(screen.getByText(/No transaction hash was returned/)).toBeVisible();
+    expect(screen.queryByRole('link', { name: /BaseScan/ })).not.toBeInTheDocument();
+  });
+
+  it('does not let an expired quote continue to Review', async () => {
+    const user = userEvent.setup();
+    const expired = quoteResponse();
+    expired.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    const client = apiClient({ createQuote: vi.fn().mockResolvedValue(expired) });
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+    await completeConfiguration(user);
+
+    await user.click(screen.getByRole('button', { name: /Get live quote/ }));
+    expect(await screen.findByText('Quote expired')).toBeVisible();
+    expect(screen.getByRole('button', { name: /request again above/i })).toBeDisabled();
+    expect(screen.queryByRole('heading', { name: 'Check your BTC protection' })).not.toBeInTheDocument();
+  });
+});

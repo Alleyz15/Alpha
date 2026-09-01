@@ -1,0 +1,81 @@
+:root {
+  color-scheme: dark;
+
+  /* Color palette from docs/alpha-design-system.md. */
+  --bg: #060a14;
+  --bg-elevated: #0a1120;
+  --surface: #0d1830;
+  --surface-glass: rgba(14, 24, 46, 0.6);
+  --surface-glass-strong: rgba(17, 29, 54, 0.85);
+  --border: rgba(94, 235, 255, 0.1);
+  --border-strong: rgba(94, 235, 255, 0.35);
+  --primary: #2e6fff;
+  --primary-2: #5b8cff;
+  --signal: #5eebff;
+  --success: #29d398;
+  --danger: #ff4d6a;
+  --warning: #ffb84d;
+  --text: #e8eefc;
+  --text-muted: #8792ad;
+  --text-faint: #4b5670;
+  --text-on-primary: #ffffff;
+
+  /* Semantic tints keep component styles free of hardcoded color values. */
+  --primary-tint: rgba(46, 111, 255, 0.12);
+  --signal-tint: rgba(94, 235, 255, 0.08);
+  --success-tint: rgba(41, 211, 152, 0.12);
+  --danger-tint: rgba(255, 77, 106, 0.12);
+  --warning-tint: rgba(255, 184, 77, 0.12);
+  --interactive-tint: rgba(94, 235, 255, 0.06);
+
+  --gradient-primary: linear-gradient(135deg, var(--primary), #4c7eff);
+  --gradient-signal: linear-gradient(135deg, var(--signal), var(--primary));
+
+  /* Typography. */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Four-pixel spacing scale plus the documented intermediate gaps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-6-5: 26px;
+  --space-9: 36px;
+  --space-12: 48px;
+
+  /* Shape and elevation. */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+  --shadow-card: 0 30px 80px rgba(0, 0, 0, 0.5);
+  --glow-primary: 0 4px 26px rgba(46, 111, 255, 0.55);
+  --glow-signal: 0 0 22px rgba(94, 235, 255, 0.55);
+
+  /* Page-width contracts. Individual pages override --content-max. */
+  --content-max: 1400px;
+  --content-max-marketing: 1440px;
+  --content-max-payment: 1160px;
+  --content-max-protection: 880px;
+
+  /* Shared interaction timing. Motion is progressive enhancement. */
+  --duration-fast: 160ms;
+  --duration-normal: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --disabled-opacity: 0.48;
+
+  /* Temporary aliases for code awaiting screen-by-screen migration. */
+  --ink: var(--text);
+  --muted: var(--text-muted);
+  --line: var(--border);
+  --green: var(--primary);
+  --green-dark: var(--primary-2);
+  --mint: rgba(46, 111, 255, 0.12);
+  --cream: var(--bg-elevated);
+}

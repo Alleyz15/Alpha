@@ -6,7 +6,10 @@
 import { createServer } from 'node:http';
 import { toErrorResponse, ApiError } from './errors.js';
 import { startSweeping, stopSweeping } from './quoteStore.js';
-import { getDemoContext, postQuote, postPurchase, getPositions, getLoanStress } from './routes.js';
+import {
+  getDemoContext, postQuote, postPurchase, getPositions, getLoanStress, getMarketContext,
+  getAssetsOverview, getAssetCandles, getAssetOrderBook,
+} from './routes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
 // the machine call this API, and the demo runs on a laptop that is also
@@ -62,16 +65,35 @@ const routes = [
   { method: 'POST', path: '/api/quote', handler: (body) => postQuote(body) },
   { method: 'POST', path: '/api/purchase', handler: (body) => postPurchase(body) },
   { method: 'GET', path: '/api/positions', handler: () => getPositions() },
+  { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
 
-  // The only route with a path parameter, so it carries a pattern instead of
-  // a literal path. Kept as a regex rather than pulling in a router: there are
-  // five endpoints, and a dependency to match one of them is not a trade worth
-  // making three days before a freeze.
+  // Coin Detail market data. DISPLAY ONLY - CoinGecko and Binance, read-only,
+  // and nothing they return prices a trade. This literal sits ABOVE the
+  // /api/assets/:symbol patterns so 'overview' can never be captured as a
+  // symbol; add new literals above the patterns for the same reason.
+  { method: 'GET', path: '/api/assets/overview', handler: () => getAssetsOverview() },
+
+  // Routes with a path parameter carry a pattern instead of a literal path.
+  // Kept as regexes rather than pulling in a router: there are eight endpoints,
+  // and a dependency to match three of them is not a trade worth making two
+  // days before a freeze.
   {
     method: 'GET',
     pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/stress$'),
     path: '/api/loans/:loanId/stress',
     handler: (_body, { params, query }) => getLoanStress(params[0], query.get('price'), query.get('rule')),
+  },
+  {
+    method: 'GET',
+    pattern: new RegExp('^/api/assets/([A-Za-z]{2,10})/candles$'),
+    path: '/api/assets/:symbol/candles',
+    handler: (_body, { params, query }) => getAssetCandles(params[0], query.get('range')),
+  },
+  {
+    method: 'GET',
+    pattern: new RegExp('^/api/assets/([A-Za-z]{2,10})/order-book$'),
+    path: '/api/assets/:symbol/order-book',
+    handler: (_body, { params }) => getAssetOrderBook(params[0]),
   },
 ];
 

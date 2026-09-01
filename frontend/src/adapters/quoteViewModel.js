@@ -11,6 +11,7 @@ const paymentStatusCopy = {
   held: 'Funds locked',
   paid: 'Paid',
   refunded: 'Refunded',
+  none: 'Not charged to demo balance',
 };
 
 export function toPaymentStatusLabel(paymentStatus) {
@@ -51,7 +52,12 @@ const errorCopy = {
 };
 
 export function formatUsdc(value) {
-  return `${currency.format(value)} USDC`;
+  if (value == null || value === '') return '—';
+
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return '—';
+
+  return `${currency.format(numericValue)} USDC`;
 }
 
 export function formatDate(iso) {
@@ -60,6 +66,33 @@ export function formatDate(iso) {
     month: 'short',
     year: 'numeric',
   }).format(new Date(iso));
+}
+
+export function formatUpdatedAt(iso) {
+  if (!iso) return 'Update time unavailable';
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Update time unavailable';
+
+  return `Updated ${new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date)}`;
+}
+
+export function toMarketAssetViewModel(asset, updatedAt) {
+  return {
+    ...asset,
+    priceLabel: formatUsdc(asset.spotUsdc),
+    holdingLabel: `${number.format(asset.holdingUnits)} ${asset.symbol}`,
+    availabilityLabel: asset.protectionAvailable
+      ? asset.longestProtectionDays === 0
+        ? 'Protection available today only'
+        : `Protection available up to ${asset.longestProtectionDays} day${asset.longestProtectionDays === 1 ? '' : 's'}`
+      : 'Protection unavailable',
+    updatedAtLabel: formatUpdatedAt(updatedAt),
+  };
 }
 
 export function toApiErrorViewModel(error, requestContext = {}) {
@@ -138,21 +171,56 @@ export function toPositionViewModel(position) {
     failed: 'Failed',
   };
 
-  const paymentStatus = paymentStatusCopy[position.paymentStatus]
+  const hasExplicitPaymentStatus = position.paymentStatus != null;
+  const paymentStatus = Object.hasOwn(paymentStatusCopy, position.paymentStatus)
     ? position.paymentStatus
-    : position.fill === 'onchain'
-      ? 'paid'
-      : ['pending', 'pending_fill', 'pending_verification'].includes(position.status)
-        ? 'held'
-        : null;
+    : hasExplicitPaymentStatus
+      ? 'unknown'
+      : position.fill === 'onchain'
+        ? 'paid'
+        : ['pending', 'pending_fill', 'pending_verification'].includes(position.status)
+          ? 'held'
+          : null;
+
+  const inferredRole = position.protectionFloorUsdc != null && position.upsideThresholdUsdc == null
+    ? 'protection'
+    : position.upsideThresholdUsdc != null && position.protectionFloorUsdc == null
+      ? 'upside'
+      : 'unknown';
+  const role = ['protection', 'upside'].includes(position.role) ? position.role : inferredRole;
+
+  const roleView = role === 'protection'
+    ? {
+        positionRoleLabel: 'Downside protection',
+        amountSummaryLabel: position.fill === 'onchain' ? 'protected' : 'protection requested',
+        primaryMetricLabel: 'Protection floor',
+        primaryMetricValue: position.protectionFloorUsdc,
+      }
+    : role === 'upside'
+      ? {
+          positionRoleLabel: 'Upside exposure',
+          amountSummaryLabel: position.fill === 'onchain' ? 'upside exposure active' : 'upside purchase requested',
+          primaryMetricLabel: 'Upside threshold',
+          primaryMetricValue: position.upsideThresholdUsdc,
+        }
+      : {
+          positionRoleLabel: 'Position',
+          amountSummaryLabel: position.fill === 'onchain' ? 'position active' : 'position requested',
+          primaryMetricLabel: 'Position threshold',
+          primaryMetricValue: null,
+        };
 
   return {
     ...position,
+    role,
+    ...roleView,
     statusLabel: statusCopy[position.status] ?? position.status,
     paymentStatus,
     paymentStatusLabel: toPaymentStatusLabel(paymentStatus),
     amountLabel: `${number.format(position.protectedAmount)} ${position.asset}`,
-    floorLabel: formatUsdc(position.protectionFloorUsdc),
+    primaryMetricValueLabel: formatUsdc(roleView.primaryMetricValue),
+    floorLabel: role === 'protection' ? formatUsdc(position.protectionFloorUsdc) : null,
+    upsideThresholdLabel: role === 'upside' ? formatUsdc(position.upsideThresholdUsdc) : null,
     premiumLabel: formatUsdc(position.premiumPaidUsdc),
     payoutLabel: position.payoutUsdc == null ? null : formatUsdc(position.payoutUsdc),
     expiryLabel: formatDate(position.expiry),
