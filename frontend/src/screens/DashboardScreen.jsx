@@ -5,7 +5,7 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
   return (
     <section className="dashboard-page" aria-labelledby="dashboard-title">
       <div className="dashboard-heading">
-        <div><span className="eyebrow">Your coverage</span><h1 id="dashboard-title">My protection</h1><p>Track each floor, end date and current status in one place.</p></div>
+        <div><span className="eyebrow">Your positions</span><h1 id="dashboard-title">Protection and upside</h1><p>Track each position’s purpose, threshold, end date and current status.</p></div>
         <button className="primary-button compact" type="button" onClick={onExplore}>Add protection</button>
       </div>
 
@@ -30,9 +30,10 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
               <div className="asset-token">Ξ</div>
               <div className="position-title">
                 <span>Ethereum</span>
-                <strong>{position.amountLabel} {position.fill === 'onchain' ? 'protected' : 'protection requested'}</strong>
+                <strong>{position.amountLabel} {position.amountSummaryLabel}</strong>
+                <small>{position.positionRoleLabel}</small>
               </div>
-              <div className="position-metric"><small>Protection floor</small><strong>{position.floorLabel}</strong></div>
+              <div className="position-metric"><small>{position.primaryMetricLabel}</small><strong>{position.primaryMetricValueLabel}</strong></div>
               <div className="position-metric"><small>End date</small><strong>{position.expiryLabel}</strong></div>
               <div className="position-metric">
                 <small>Payment status</small>
@@ -50,7 +51,7 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
 
       <div className="dashboard-note">
         <ShieldIcon />
-        <p><strong>Protection is checked at the end date.</strong><span>Price movement before then does not trigger a payout. Results appear here after the protocol settles them.</span></p>
+        <p><strong>Read each position by its displayed purpose.</strong><span>Protection floors cover downside at expiry. Upside thresholds describe separate exposure and are never presented as protection.</span></p>
       </div>
     </section>
   );
