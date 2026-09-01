@@ -7,6 +7,7 @@ import QuoteScreen from './screens/QuoteScreen.jsx';
 import ConfirmationScreen from './screens/ConfirmationScreen.jsx';
 import DashboardScreen from './screens/DashboardScreen.jsx';
 import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
+import WelcomePage from './features/welcome/WelcomePage.jsx';
 
 function LegacyApp() {
   const [activeView, setActiveView] = useState('explore');
@@ -89,6 +90,7 @@ function LegacyApp() {
 }
 
 export default function App() {
+  const pathname = window.location.pathname;
   const route = window.location.pathname.match(/^\/protect\/([^/]+)\/?$/i);
 
   if (route) {
@@ -98,6 +100,10 @@ export default function App() {
         apiClient={liveApi}
       />
     );
+  }
+
+  if (pathname === '/' || pathname === '') {
+    return <WelcomePage apiClient={liveApi} />;
   }
 
   return <LegacyApp />;

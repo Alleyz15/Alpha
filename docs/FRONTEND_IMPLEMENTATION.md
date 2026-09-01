@@ -345,3 +345,122 @@ Files updated:
 - No product-scope deviation. Because the future navigation structure is intentionally undecided, the route is recognized directly in `App.jsx` without adding a routing dependency. A later approved navigation phase can place it inside the final router without changing the protection feature's data or screen boundaries.
 - The user-approved Configure refinement supersedes the original 1160px checkout width for this step only and uses 1380px to support the horizontal controls and comparison rows. Review and Status retain their previously approved widths and layouts.
 - The active Portfolio action is intentionally not connected from Status yet. Status explains that Portfolio navigation will be connected after the navigation plan is approved, matching the approved Phase 3 boundary.
+
+## Phase 4 — Welcome page
+
+**Status:** Complete
+
+### Approved implementation plan
+
+Phase 4 replaces the root route with Alpha's public Welcome page. It introduces the product in plain language, shows the current four-asset market context honestly, explains the protection journey and the prototype's reality boundaries, and uses Anime.js as progressive visual enhancement. It does not build Coin Detail, add coin buy or sell execution, add global application navigation, or invent market values.
+
+1. Build the centered public landing structure from `docs/alpha-design-system.md`:
+   - A compact Alpha brand header with in-page links for How it works, Live market, and Product reality.
+   - A hero explaining the product through the approved message: “Crypto moves. Your plans should not have to.”
+   - Clear calls to the live market section and the product journey.
+   - Factual product markers for four supported assets, Base execution, and USDC settlement.
+2. Add a live hero market snapshot:
+   - Read only `GET /api/market-context` through the live API client.
+   - Let the user switch between BTC, ETH, BNB, and SOL.
+   - Display the backend price, simulated holding, current protection availability, backend update time, and `unavailableReason` when supplied.
+   - Poll about every 30 seconds while the page is visible, retain the last successful snapshot on a refresh failure, and never substitute sample prices or availability.
+3. Explain the product with approved plain-language sections:
+   - Choose the outcome, compare live choices, and verify the result.
+   - State that protection should feel like a plan rather than a trading terminal.
+   - Present the complete six-step journey from reading the live market through tracking the resulting position.
+   - Show all four supported assets in the live market section even when one is unavailable.
+4. Add the protection comparison and timing clarification:
+   - Compare an unprotected holding with a holding that has a backend-issued end-date floor.
+   - Explain USDC settlement and frontend-visible maximum-loss information without presenting a fake example quote.
+   - Keep the approved note visible that protection is evaluated at the end date, not whenever the displayed price crosses the floor.
+5. Make the prototype boundary prominent:
+   - Separate live and verifiable behavior, simulated demo holdings, and operator-executed purchase behavior into distinct cards.
+   - State that Alpha simulates the user holding, not the live protection market.
+   - Never call a request on-chain before the backend returns transaction evidence.
+6. Use Anime.js 4.5.0 creatively but safely:
+   - Scope all page motion to the Welcome root and clean it up when the page unmounts.
+   - Add a staged hero entrance, animated SVG signal paths, traveling signal pulses, staggered section reveals, a rotating Alpha identity statement, and live-value refresh accents.
+   - Use the six-step desktop journey as a scroll-led explanation while rendering a direct static list on compact screens.
+   - Keep all content visible before animation, isolate animation errors from product behavior, respect `prefers-reduced-motion`, and avoid using motion to imply a financial result.
+7. Add responsive and accessibility behavior:
+   - Use semantic headings, sections, lists, tabs, status messages, and keyboard-focus treatment.
+   - Collapse multi-column content cleanly for compact screens.
+   - Keep the mobile journey static and fully readable without scroll choreography.
+8. Add automated coverage for live market rendering, asset switching, backend unavailability reasons, initial API failure, and last-successful-snapshot retention.
+
+### Planned content
+
+- Header: `ALPHA`, `Downside protection`, `How it works`, `Live market`, `Product reality`, and `See live availability`.
+- Hero: `LIVE DOWNSIDE PROTECTION`, `Crypto moves. Your plans should not have to.`, the approved product explanation, `See live availability`, and `How Alpha works`.
+- Benefits: `Protection without the trading-language barrier`, with `Choose the outcome`, `Compare live choices`, and `Verify the result`.
+- Mission: `Protection should feel like a plan, not a trading terminal.` with rotating statements for plain-language protection, live-market behavior, Base verification, and simulation honesty.
+- Journey: `From a downside target to a verifiable result`, followed by six steps: read the live market, describe the protection, compare available choices, review before continuing, request operator execution, and track the position.
+- Live market: `Availability changes. Alpha shows it honestly.` and four backend-connected asset cards for Bitcoin, Ethereum, BNB, and Solana.
+- Comparison: `The same crypto. A clearer downside plan.` with factual with-protection and without-protection explanations and the end-date evaluation note.
+- Product reality: `Clear about what is real`, separated into live and verifiable, simulated for the demo, and operator executed.
+- Final action: `Know your floor before the market tests it` and `View live market`.
+- Footer disclosure: market availability is live, displayed holdings are simulated, and on-chain activity appears only when verified by the backend.
+
+### Completion requirements
+
+- `/` renders the approved Alpha Welcome page and `/protect/:symbol` continues to render Phase 3 unchanged.
+- Every displayed price, holding, update time, availability value, and unavailability reason comes from the live backend market-context response.
+- Initial loading, initial error, missing asset information, unavailable protection, and refresh failure states contain no substituted market data.
+- All four supported assets remain visible and are labelled accurately.
+- Reality disclosures clearly distinguish live market information, simulated user holdings, and operator execution.
+- Anime.js animations are scoped, cleaned up, reduced-motion safe, non-blocking, and do not control financial truth.
+- The page follows the approved design tokens and works at desktop and compact widths.
+- Automated tests, production build, live integration, styling checks, visual review, and Git checks pass.
+
+### Implementation result
+
+Completed on 2026-09-02.
+
+- Replaced the `/` legacy entry screen with the approved Welcome page while preserving `/protect/:symbol` and keeping the legacy application accessible at unmatched paths during the phased migration.
+- Built the complete header, hero, benefit, mission, journey, live-market, comparison, product-reality, final-action, and footer content defined in the approved plan.
+- Connected the page directly to `liveApi.getMarketContext()`. The page normalizes the response into the existing defensive market view model, preserves the documented asset order, polls every 30 seconds only while the document is visible, immediately refreshes after visibility returns, and retains the last successful values if a background update fails.
+- Added explicit no-fake-data states: initial failure says no sample values were substituted, missing live prices render `—`, malformed or missing assets say market information is unavailable, and unavailable assets retain the exact backend reason.
+- Added a tabbed hero snapshot and four live market cards. Both use the same backend response; the repetition lets the hero introduce one asset while the full market section keeps all four assets visible.
+- Added the complete six-step protection journey. Desktop uses a sticky narrative stage with scroll checkpoints and progressive rail state; compact screens receive a direct static six-card list instead of a fragile scroll effect.
+- Added an original Signal Grid SVG that communicates a defined floor without plotting invented price history. Its paths and signal nodes are decorative and are hidden from assistive technology.
+- Used Anime.js 4.5.0 for a staged hero timeline, SVG path drawing, SVG motion-path signals, ambient signal pulsing, staggered benefit/market/reality entrances, rotating mission wording, and live-value refresh accents.
+- Wrapped the page animation setup in `createScope`, scoped selectors to the page root, registered reduced-motion and compact-screen media queries, used `scope.revert()` for cleanup, and kept every animated element visibly rendered before Anime.js starts. Individual motion failures are caught and cannot interrupt data loading or interaction.
+- Applied the approved dark navy foundation, glass surfaces, cyan signal accent, blue action gradient, three font roles, tokenized spacing, restrained borders and glow, large centered marketing width, responsive columns, visible focus, and reduced-motion styling. The Welcome stylesheet contains no hardcoded color values.
+- Kept the page truthful about the prototype: live market and backend-issued protection choices, simulated displayed holdings with no user deposit flow, operator-controlled execution, and BaseScan evidence only after the backend returns it.
+- Added five Welcome page tests covering approved content plus live values, asset tab switching, backend unavailability reasons, initial no-fallback failure, and last-successful-snapshot retention after a refresh failure.
+
+Files added:
+
+- `frontend/src/features/welcome/SignalGrid.jsx`
+- `frontend/src/features/welcome/WelcomeJourney.jsx`
+- `frontend/src/features/welcome/WelcomePage.jsx`
+- `frontend/src/features/welcome/WelcomePage.test.jsx`
+- `frontend/src/features/welcome/useWelcomeAnimations.js`
+- `frontend/src/features/welcome/useWelcomeMarket.js`
+- `frontend/src/features/welcome/welcomeContent.js`
+- `frontend/src/styles/welcome.css`
+
+Files updated:
+
+- `frontend/src/App.jsx`
+- `frontend/src/index.css`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Verification performed
+
+- Official Anime.js documentation review: completed for React scope setup, `scope.revert()` cleanup, timelines, staggering, SVG drawable paths, SVG motion paths, scroll observers, and media-query-aware scopes.
+- Installed animation version check: passed; the lockfile contains Anime.js 4.5.0 and no dependency installation or version change was required.
+- Automated frontend tests: passed; 8 test files and 43 tests passed.
+- Dependency audit: passed; npm reported zero vulnerabilities.
+- Welcome behavior coverage: passed for live market values, asset-tab switching, simulated holdings, backend unavailability reasons, initial API failure with no sample substitution, and last-successful-snapshot retention after a refresh failure.
+- Production frontend build: passed with 113 modules transformed.
+- Live integration check: passed; the active frontend returned HTTP 200 and `GET /api/market-context` returned HTTP 200 with ETH, BTC, SOL, and BNB, live-price reality, simulated-balance reality, and non-null prices at verification time.
+- Desktop visual review: passed at 1440×1000; the hero, signal visual, live card, hierarchy, spacing, and call-to-action balance remain centered and readable.
+- Full-page visual review: passed; all approved sections appear in the intended order and the desktop journey keeps its stage visible while the user advances through the steps.
+- Compact visual review: passed at the reliable 500px headless-browser width; copy wraps cleanly, calls to action become full width, facts remain scannable, the market card fits the viewport, and compact journey behavior is static.
+- Styling check: passed; `welcome.css` contains no hardcoded hex, RGB, or RGBA color values.
+
+### Deviations from plan
+
+- The approved page content and product scope were implemented without deviation.
+- No new Anime.js dependency was installed because the frontend already contained Anime.js and its lockfile resolved to the current 4.5.0 release requested for this phase.
