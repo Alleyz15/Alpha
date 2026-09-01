@@ -74,7 +74,11 @@ console.log(`\n--- ${user.display_name}'s positions ---\n`);
 for (const p of positions) {
   const hrs = (new Date(p.expiry).getTime() - Date.now()) / 3_600_000;
   console.log(`  ${p.id}`);
-  console.log(`    ${p.status.padEnd(20)} $${p.strike} floor | expires ${p.expiry.slice(0, 16).replace('T', ' ')} UTC ` +
+  // A put strike is a floor; a call strike is the threshold above which the
+  // holder shares the gain. Printing "floor" for a call is how the dashboard
+  // came to show a protection floor above spot.
+  const strikeLabel = p.option_type === 'call' ? 'call strike' : 'floor';
+  console.log(`    ${p.status.padEnd(20)} $${p.strike} ${strikeLabel} | expires ${p.expiry.slice(0, 16).replace('T', ' ')} UTC ` +
     `(${hrs > 0 ? 'in ' + hrs.toFixed(1) + 'h' : Math.abs(hrs).toFixed(1) + 'h ago'})`);
   if (p.option_address) console.log(`    option ${p.option_address}`);
   if (p.payout !== null) console.log(`    payout ${p.payout} USDC at $${p.settlement_price}`);

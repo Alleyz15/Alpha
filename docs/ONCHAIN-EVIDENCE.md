@@ -305,7 +305,71 @@ next loan from having this problem. It does not fix this one, and this one is wh
 is on chain.**
 
 ---
-## 6. The vault, resized so maturity can be real — 1 Sep 2026
+## 6. Browser to chain — 31 Aug 2026
+
+**The only transaction that proves the whole path works.** A quote requested from
+the interface, confirmed by a person, filled on Base — with a human round trip in
+the middle rather than a script doing both in one breath.
+
+| | |
+|---|---|
+| **BaseScan** | https://basescan.org/tx/0x64e37010da92270f3ffea4148c50a1b5f57fa831f7a0fbeefcc72332aa07e7ce |
+| Option | `0x110cfc45ed90f5c9e9264e286977ce8906c1de29` |
+| Type | ETH put, buyer side |
+| Floor | $2,340 |
+| Expiry | 3 Sep 2026 |
+| Block | 50707590 |
+
+### Why the 140.7 seconds matter
+
+```
+quoted     2026-08-31T19:26:22.002Z
+created    2026-08-31T19:26:22.398Z
+broadcast  2026-08-31T19:28:42.743Z   <-- 140.7s after the quote
+confirmed  2026-08-31T19:28:50.476Z
+```
+
+**The Thetanuts order book re-signs wholesale roughly every 60 seconds.** Measured
+across 320 orders on 1 Sep, every signature lived exactly 35.645 seconds —
+identical to three decimal places, which is one scheduled event rather than a
+distribution of independent lifetimes.
+
+So 140.7 seconds spans at least two full re-signings. The signature quoted to the
+user no longer existed by the time the fill was broadcast. **This fill therefore
+went through economic order matching — maker, strike, expiry, type and side, all
+five or refuse — not through the signature fast path.**
+
+That is the difference between a demo and a product. The three earlier fills
+succeeded because `scripts/fill.js` quotes and broadcasts inside six seconds, so
+the signature was still current; any flow with a person in the middle was a coin
+flip on where in the refresh cycle it landed. Two integration attempts were
+refused on exactly that before the matching was fixed.
+
+### What was verified afterwards
+
+The price guard is what makes the longer window safe. Measured across one refresh,
+311 of 311 economically identical orders came back, 305 of them at a slightly
+different price — median drift 0.515%. Pre-flight check 4 re-verifies the price
+against `PRICE_TOLERANCE_PCT` at the moment of the fill, so a re-matched order that
+moved too far is refused rather than filled.
+
+**The fill window is only defensible because the price check is real. If check 4
+were ever weakened, the clock would have to come back** — which is why BR-8 is two
+rules: a 20-second display window for what the user is shown, and a 10-minute
+authorisation window for what the operator may execute.
+
+### What is real and what is not
+
+```
+the quote            real, from the live order book
+the confirmation     real, a person clicking in the browser
+the fill             real, on Base mainnet, buyer side
+the 140.7 seconds    real, from the position event trail
+the balance charged  SIMULATED. Seeded, not deposited (BR-50)
+```
+
+---
+## 7. The vault, resized so maturity can be real — 1 Sep 2026
 
 **The 100 USDC vault above cannot pay out.** Its maturity would transfer 100 USDC
 to the user and the wallet holds 4.66. The figure was never reachable, so a
