@@ -646,7 +646,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `NOT_FOUND` API code | a 404 for a missing loan | not in the status table, so it surfaced as `UPSTREAM_ERROR` |
 | the API router | routes matched by path | exact-match only, so the agreed `/:id/` endpoint could not exist |
 | `stress.js` / `repay.js` | pure arithmetic, testable | imported the DB client at load, so the tests could not import them |
-| `RUNBOOK-3-SEP.md` | commands to run on the day | `npm run settle` did not exist, and `settle.js` writes nothing without `--confirm` |
+| `RUNBOOK.md` | commands to run on the day | `npm run settle` did not exist, and `settle.js` writes nothing without `--confirm` |
 | `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
