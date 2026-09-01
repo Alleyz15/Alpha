@@ -1,0 +1,92 @@
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import WelcomePage from './WelcomePage.jsx';
+
+function marketContext() {
+  return {
+    assets: [
+      {
+        symbol: 'ETH', name: 'Ethereum', spotUsdc: 2850, holdingUnits: 0.4,
+        protectionAvailable: true, longestProtectionDays: 2, unavailableReason: null,
+      },
+      {
+        symbol: 'BTC', name: 'Bitcoin', spotUsdc: 77487.38, holdingUnits: 0.01,
+        protectionAvailable: true, longestProtectionDays: 2, unavailableReason: null,
+      },
+      {
+        symbol: 'SOL', name: 'Solana', spotUsdc: 101.25, holdingUnits: 10,
+        protectionAvailable: false, longestProtectionDays: null,
+        unavailableReason: 'No qualifying SOL protection is available right now.',
+      },
+      {
+        symbol: 'BNB', name: 'BNB', spotUsdc: 680, holdingUnits: 1.5,
+        protectionAvailable: true, longestProtectionDays: 1, unavailableReason: null,
+      },
+    ],
+    updatedAt: '2026-09-02T04:12:12.000Z',
+    reality: { price: 'live', balance: 'simulated' },
+  };
+}
+
+describe('WelcomePage', () => {
+  it('renders the approved message and live backend market values without sample choices', async () => {
+    const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+
+    expect(screen.getByRole('heading', { name: /Crypto moves.*Your plans should not have to/i })).toBeVisible();
+    expect(await screen.findAllByText('$77,487.38 USDC')).toHaveLength(2);
+    expect(screen.getAllByText('0.01 BTC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Protection available up to 2 days').length).toBeGreaterThan(0);
+    expect(screen.getByText('Alpha simulates the user holding—not the live protection market.')).toBeVisible();
+    expect(screen.queryByText('Balanced')).not.toBeInTheDocument();
+    expect(screen.queryByText('Basic')).not.toBeInTheDocument();
+    expect(screen.queryByText('Enhanced')).not.toBeInTheDocument();
+    expect(client.getMarketContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches the hero snapshot between assets while preserving backend values', async () => {
+    const user = userEvent.setup();
+    const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+    await screen.findAllByText('$77,487.38 USDC');
+
+    await user.click(screen.getByRole('tab', { name: 'ETH' }));
+    expect(screen.getByRole('tab', { name: 'ETH' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByText('$2,850.00 USDC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('0.4 ETH').length).toBeGreaterThan(0);
+  });
+
+  it('shows the backend reason for an unavailable asset instead of hiding it', async () => {
+    const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+
+    expect(await screen.findByRole('heading', { name: 'Solana' })).toBeVisible();
+    expect(screen.getByText('No qualifying SOL protection is available right now.')).toBeVisible();
+    expect(screen.getAllByText('Protection unavailable').length).toBeGreaterThan(0);
+  });
+
+  it('reports an initial live API failure and never substitutes fake market values', async () => {
+    const client = { getMarketContext: vi.fn().mockRejectedValue(new Error('offline')) };
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+
+    await waitFor(() => expect(screen.getAllByText('Live market information is temporarily unavailable')).toHaveLength(2));
+    expect(screen.getAllByText('Alpha could not reach the market right now. No sample values have been substituted.')).toHaveLength(2);
+    expect(screen.queryByText(/\$77,487/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the last successful snapshot visible when a background refresh fails', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const client = { getMarketContext: vi.fn()
+      .mockResolvedValueOnce(marketContext())
+      .mockRejectedValueOnce(new Error('refresh failed')) };
+    render(<WelcomePage apiClient={client} marketPollInterval={30_000} />);
+
+    await act(async () => Promise.resolve());
+    expect(screen.getAllByText('$77,487.38 USDC').length).toBeGreaterThan(0);
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(await screen.findByText('Live update paused. Showing the last successful market snapshot.')).toBeVisible();
+    expect(screen.getAllByText('$77,487.38 USDC').length).toBeGreaterThan(0);
+    vi.useRealTimers();
+  });
+});

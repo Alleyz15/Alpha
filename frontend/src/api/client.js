@@ -1,6 +1,6 @@
 import * as mockApi from './mockApi.js';
 
-const useMockApi = import.meta.env.VITE_USE_MOCK_API !== 'false';
+const useMockApi = import.meta.env.VITE_USE_MOCK_API === 'true';
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
 
 async function request(path, options = {}) {
@@ -23,14 +23,15 @@ async function request(path, options = {}) {
   return payload;
 }
 
-export const api = useMockApi
-  ? mockApi
-  : {
-      getDemoContext: () => request('/api/demo-context'),
-      createQuote: (body) => request('/api/quote', { method: 'POST', body: JSON.stringify(body) }),
-      purchaseQuote: (body) => request('/api/purchase', { method: 'POST', body: JSON.stringify(body) }),
-      getPositions: () => request('/api/positions'),
-    };
+export const liveApi = {
+  getDemoContext: () => request('/api/demo-context'),
+  getMarketContext: () => request('/api/market-context'),
+  createQuote: (body) => request('/api/quote', { method: 'POST', body: JSON.stringify(body) }),
+  purchaseQuote: (body) => request('/api/purchase', { method: 'POST', body: JSON.stringify(body) }),
+  getPositions: () => request('/api/positions'),
+};
+
+export const api = useMockApi ? mockApi : liveApi;
 
 export function getApiErrorCode(error) {
   return error?.payload?.error?.code ?? 'UPSTREAM_ERROR';
