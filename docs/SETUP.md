@@ -627,7 +627,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Eleven instances now, one family.** The shape:
+**Twelve instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -646,6 +646,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `NOT_FOUND` API code | a 404 for a missing loan | not in the status table, so it surfaced as `UPSTREAM_ERROR` |
 | the API router | routes matched by path | exact-match only, so the agreed `/:id/` endpoint could not exist |
 | `stress.js` / `repay.js` | pure arithmetic, testable | imported the DB client at load, so the tests could not import them |
+| `RUNBOOK-3-SEP.md` | commands to run on the day | `npm run settle` did not exist, and `settle.js` writes nothing without `--confirm` |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -688,6 +689,33 @@ changed, left in place.
 - **Check the commit after making it.**
   `git show HEAD:path | grep "^export"` takes five seconds and catches a
   truncation that a diffstat reading "392 insertions" does not.
+
+#### A runbook describing commands that do not exist
+
+The operational instructions for 3 September were drafted and then **walked as an
+instruction rather than read as a description** - every command run in order. That
+found three errors in a document that read perfectly well:
+
+- **`npm run settle` did not exist.** Step 1 would have failed outright, for
+  someone who by definition has nobody to ask.
+- **`settle.js` is report-only without `--confirm`.** The runbook would have left
+  the database un-updated while appearing to work - the silent-success family,
+  this time in prose.
+- **It said three positions expire on the 3rd.** Four do.
+
+It also omitted the 2 September run entirely, which nobody noticed while reading
+because a document about the 3rd does not look like it is missing the 2nd.
+
+> **A document that tells someone what to do is code.** It has the same failure
+> modes and deserves the same verification: run it, do not review it. The pattern
+> now covers code, commit messages, configuration, reference docs and operational
+> instructions - the only thing they have in common is describing something that
+> was not checked.
+
+**What to do:** before handing anyone a runbook, execute every command in it in
+order, on the real machine, and paste what actually came back. A command that
+cannot be run yet - because a date has not arrived - should say what its blocked
+output looks like, which is itself something you can only know by running it.
 
 #### The configuration value that was never read
 
