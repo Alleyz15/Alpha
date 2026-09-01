@@ -68,6 +68,33 @@ export function formatDate(iso) {
   }).format(new Date(iso));
 }
 
+export function formatUpdatedAt(iso) {
+  if (!iso) return 'Update time unavailable';
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Update time unavailable';
+
+  return `Updated ${new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date)}`;
+}
+
+export function toMarketAssetViewModel(asset, updatedAt) {
+  return {
+    ...asset,
+    priceLabel: formatUsdc(asset.spotUsdc),
+    holdingLabel: `${number.format(asset.holdingUnits)} ${asset.symbol}`,
+    availabilityLabel: asset.protectionAvailable
+      ? asset.longestProtectionDays === 0
+        ? 'Protection available today only'
+        : `Protection available up to ${asset.longestProtectionDays} day${asset.longestProtectionDays === 1 ? '' : 's'}`
+      : 'Protection unavailable',
+    updatedAtLabel: formatUpdatedAt(updatedAt),
+  };
+}
+
 export function toApiErrorViewModel(error, requestContext = {}) {
   const apiError = error?.payload?.error;
   const code = apiError?.code ?? 'UPSTREAM_ERROR';

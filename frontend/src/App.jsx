@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { api, useMockApi } from './api/client.js';
+import { api, liveApi, useMockApi } from './api/client.js';
 import { toPositionViewModel } from './adapters/quoteViewModel.js';
 import AppHeader from './components/AppHeader.jsx';
 import RealityDisclosure from './components/RealityDisclosure.jsx';
 import QuoteScreen from './screens/QuoteScreen.jsx';
 import ConfirmationScreen from './screens/ConfirmationScreen.jsx';
 import DashboardScreen from './screens/DashboardScreen.jsx';
+import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
 
-export default function App() {
+function LegacyApp() {
   const [activeView, setActiveView] = useState('explore');
   const [flow, setFlow] = useState({ step: 'quote', quote: null, tier: null, purchase: null });
   const [demoContext, setDemoContext] = useState(null);
@@ -85,4 +86,19 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+export default function App() {
+  const route = window.location.pathname.match(/^\/protect\/([^/]+)\/?$/i);
+
+  if (route) {
+    return (
+      <ProtectionFlowPage
+        symbol={decodeURIComponent(route[1]).toUpperCase()}
+        apiClient={liveApi}
+      />
+    );
+  }
+
+  return <LegacyApp />;
 }
