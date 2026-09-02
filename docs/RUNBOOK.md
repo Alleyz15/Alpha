@@ -55,8 +55,11 @@ Confirm the wallet is reachable and nothing is broken. This spends nothing:
 npm test
 ```
 
-Expect `pass 90`, `fail 0`. **If any test fails, stop and message the backend
-developer.** Do not continue — a failing test here means the code does not match
+Expect `pass 170`, `fail 0`.
+
+**The number that matters is `fail 0`.** If `pass` reads higher than 170, tests
+were added after this page was written and nothing is wrong. If anything says
+`fail`, **stop and message the backend developer** — do not continue — a failing test here means the code does not match
 what this runbook assumes.
 
 ---
@@ -390,7 +393,7 @@ of which depend on today's book.
 These read only and cannot spend anything:
 
 ```bash
-npm test                # 90 tests, no credentials needed
+npm test                # 170 tests, no credentials needed
 npm run market          # what the book offers today, per asset
 npm run db:check        # database connectivity
 npm run reconcile       # database vs chain
