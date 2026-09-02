@@ -107,6 +107,42 @@ protected floor, so the protection was never needed — like an insurance policy
 you did not have to claim on. The user keeps their ETH and loses only the premium.
 That is the product working.
 
+### Run it INSIDE the six-hour grace, not after
+
+**This is the single most important timing instruction on the page.**
+
+A position that is expired but not yet settled reports `wait` and nothing is
+written — that is fine, and it is what happened on 2 September at 0.3h past
+expiry. Come back and run it again; the second run recorded the settlement
+normally.
+
+But once a position is more than **six hours** past expiry and still unsettled,
+the sweep flags it `needs_review` — and **nothing ever picks it up again.** The
+sweep selects `status = 'active'`; `needs_review` is not in that set, so a later
+run will not revisit it even after the protocol settles. It is a one-way door,
+like a `pending` row nothing reclaims.
+
+**Four positions expire together on 3 September.** Running once inside the grace
+window is one command. Letting all four cross six hours is four manual
+recoveries.
+
+So: run step 1 an hour or two after 16:00 MYT. If everything says `wait`, wait
+and run it again. Do not leave it until the evening.
+
+### If a position has already reached `needs_review`
+
+It is recoverable, but only by hand, and only by someone who can run a script.
+
+The position must be put back to `active` before the sweep will look at it
+again. `needs_review → active` is permitted — only `settled` and
+`expired_worthless` are terminal (BR-19) — so nothing is lost. **Message the
+backend developer rather than attempting it**; it is a database write and there
+is no command for it.
+
+The one thing not to do is assume the money is affected. It is not: the protocol
+pays the buyer automatically at settlement whether or not our database noticed.
+A position stuck in `needs_review` is a bookkeeping gap.
+
 ### If EVERY position says `needs_review`
 
 **This is a known issue, not a protocol fault. Do not escalate it as one.**

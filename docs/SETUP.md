@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Fifteen instances now, one family.** The shape:
+**Sixteen instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -659,6 +659,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
 | "XRP fails 6/6" | the protocol rejects XRP | our premium truncation; XRP fills 8/8 at exact sizes |
 | "vanilla puts stop at 2.4 days" | the market's ceiling | our own single-leg rule; the book reaches 2 months |
+| a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -919,6 +920,47 @@ Format: symptom → cause → fix
 - **Every `VITE_` variable is `undefined` in the frontend** → Vite only reads `.env` from its own directory by default → add `envDir: '../'` to `frontend/vite.config.js`
 - **Script can't find `.env` after the restructure** → run it from inside `backend/`, and use the npm script where one exists → the npm entries carry `--env-file-if-exists=../.env`
 - **`npm init` in a folder that already has `package.json`** → silently overwrites it, dropping `"type": "module"` and the dependency list → run `npm install` instead; you only find out when `import` breaks
+
+---
+
+### A simulation inherits the constraints of whoever it simulates as
+
+**Sixteenth instance, and a new shape.** The others were things that reported
+success they had not achieved, or described something nobody checked. This one
+is a measurement that was *correct* and meant something other than what it
+appeared to.
+
+On 2 September we tried to confirm option sizes against the chain before quoting
+them, by simulating a fill with `eth_call`. An `eth_call` runs *as* an address,
+and that address has a USDC balance and an allowance. So a size could be refused
+for two entirely different reasons, and the simulation gives the same answer to
+both:
+
+```
+3 units, premium 6.6350, burner allowance 5.8637  ->  refused
+```
+
+The code then did the reasonable-looking thing and offered a smaller position —
+presenting **"our operator has not approved enough USDC"** to the user as
+**"the market will not fill this size"**. A reduced position looks like a
+legitimate result, so nothing about it would have looked wrong. The remedy is a
+larger approval, not selling someone less coverage than they asked for.
+
+It also silently dropped one of ETH's three tiers, reproducibly, because that
+tier's premium exceeded the allowance.
+
+> **A simulation answers "would this work, as me, right now" — never "is this
+> valid".** Any constraint attached to the simulating account, its balance, its
+> allowances, its nonce, comes back indistinguishable from a property of the
+> thing being tested.
+
+**What to do:** before treating a simulated refusal as a fact about the subject,
+rule out the simulator. Check the account's own constraints FIRST and report a
+shortfall as a shortfall — the pre-flight already does exactly this for
+allowances under BR-12, and the same check belonged in the probe.
+
+The work is on `feat/fillable-size`, committed and marked **DO NOT MERGE**, with
+the fix described in the commit message.
 
 ---
 
