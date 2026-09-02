@@ -9,11 +9,12 @@ import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
 import { stressLoanById } from '../lending/stress.js';
 import { insertPurchasedTier } from '../db/quotes.js';
 import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
+import { getPosition, listEventsForPositions } from '../db/positions.js';
 import { debitBalance, listBalanceEventsForPositions } from '../db/balances.js';
 import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
-import { strikeView, paymentView, sumPayments } from './positionView.js';
+import { strikeView, paymentView, sumPayments, executionView, timelineView } from './positionView.js';
 import { buildMarketContext } from './marketContext.js';
 import { resolveMarket, resolveRange, MARKET_ASSETS, RANGE_KEYS } from '../marketdata/assets.js';
 import { fetchOverview, fetchCandles, fetchDepth } from '../marketdata/providers.js';
@@ -259,6 +260,11 @@ export async function getPositions() {
   // is not the same as saying the user got their money back.
   const payments = await listPaymentsForPositions(rows.map((p) => p.id));
 
+  // One query for every position's events, not one per row. Needed for
+  // executionState and purchasedAt, which cannot be derived from the row
+  // alone - a tx_hash says a transaction exists, not that it confirmed.
+  const eventsByPosition = await listEventsForPositions(rows.map((p) => p.id));
+
   return {
     positions: rows.map((p) => ({
       positionId: p.id,
@@ -305,6 +311,7 @@ export async function getPositions() {
       // say so - it is the difference between "we lost your order" and "we lost
       // your order and gave your money back".
       ...paymentView(payments.get(p.id), p),
+      ...executionView(p, eventsByPosition.get(p.id) ?? []),
     })),
   };
 }
@@ -485,4 +492,84 @@ export async function getAssetOrderBook(symbol) {
   } catch (error) {
     throw asMarketDataError(error);
   }
+}
+
+/**
+ * GET /api/positions/:positionId
+ *
+ * Everything the Protection Details page needs, from data we already hold.
+ *
+ * ---------------------------------------------------------------------------
+ * OWNERSHIP IS CHECKED SERVER-SIDE. The client never names the user.
+ * ---------------------------------------------------------------------------
+ *
+ * The demo user is resolved here, exactly as every other endpoint does, and a
+ * position belonging to anyone else returns 404 rather than 403 - a 403 would
+ * confirm the id exists, which is itself a leak. On chain one wallet owns every
+ * position, so `positions.user_id` is the only record of who a position belongs
+ * to (BR-31); getting this check wrong is not recoverable from chain data.
+ */
+export async function getPositionDetail(positionId) {
+  const user = await getDemoUser();
+  const position = await getPosition(positionId);
+
+  // Same answer for "does not exist" and "is not yours".
+  if (!position || position.user_id !== user.id) {
+    throw new ApiError('NOT_FOUND', `No position ${positionId}.`);
+  }
+
+  const events = (await listEventsForPositions([position.id])).get(position.id) ?? [];
+  const payments = await listPaymentsForPositions([position.id]);
+  const payment = paymentView(payments.get(position.id), position);
+
+  return {
+    positionId: position.id,
+    asset: position.asset,
+    protectedAmount: Number(position.num_contracts_raw) / 1e6,
+    ...strikeView(position.option_type, position.strike),
+    expiry: position.expiry,
+    status: position.status,
+
+    premiumPaidUsdc: position.premium_paid === null ? 0 : Number(position.premium_paid),
+    payoutUsdc: position.payout === null ? null : Number(position.payout),
+    settlementPriceUsdc: position.settlement_price === null ? null : Number(position.settlement_price),
+
+    txHash: position.tx_hash,
+    optionAddress: position.option_address,
+    explorerUrl: position.tx_hash ? `https://basescan.org/tx/${position.tx_hash}` : null,
+
+    ...executionView(position, events),
+    ...payment,
+
+    // Sanitised: event name and timestamp only. Raw payloads carry RPC errors,
+    // signed order data and provider detail, and none of it goes to a browser.
+    timeline: timelineView(events),
+
+    buyer: {
+      displayName: user.display_name,
+    },
+
+    account: {
+      // Public address, and what it is. The user does not hold this position in
+      // their own wallet and the interface must not imply otherwise (BR-32).
+      walletAddress: process.env.THETANUTS_WALLET_ADDRESS ?? null,
+      controlledBy: 'operator',
+    },
+
+    order: {
+      settlementType: 'automatic_at_expiry',
+      settlementAsset: 'USDC',
+      // What actually paid for this. 'none' means no debit exists - the
+      // position was bought by the operator directly, before or outside the
+      // user-payment path - and saying so is more honest than implying the
+      // demo balance covered it.
+      paymentMethod: payment.paymentStatus === 'none'
+        ? 'operator_no_user_payment'
+        : 'simulated_usdc_balance',
+    },
+
+    // Deliberately absent: entryPriceUsdc and estimatedPayoutUsdc. The first
+    // needs a quotes join for one field; the second is an estimate, and the
+    // real payout is known only at expiry. Render them as an em dash.
+  };
 }

@@ -277,7 +277,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. **8** endpoints. Contracts handed over: `docs/API-LOAN-STRESS.md` (7.5), `docs/API-MARKET-CONTEXT.md`, `docs/API-COIN-DETAIL.md` |
+| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. **9** endpoints. Contracts handed over: `API-LOAN-STRESS.md` (7.5), `API-MARKET-CONTEXT.md`, `API-COIN-DETAIL.md`, `API-POSITION-DETAIL.md` |
 | 5.2 | CORS configured | ✅ | `http://localhost:5173` named explicitly, preflight handled, unknown origins not echoed — verified in `api:check` |
 | 5.3 | Quote screen | ✅ | `frontend/src/screens/QuoteScreen.jsx`, both entry modes, no options jargon (BR-3) |
 | 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
