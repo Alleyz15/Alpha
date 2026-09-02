@@ -1,6 +1,6 @@
 import { ExternalIcon, ShieldIcon } from '../../components/Icons.jsx';
 import { Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
-import { formatUsdc, toPaymentStatusLabel } from '../../adapters/quoteViewModel.js';
+import { getPremiumPresentation } from '../../utils/usdc.js';
 import ProtectionProgress from './ProtectionProgress.jsx';
 import { purchaseStatusView } from './protectionFlowUtils.js';
 
@@ -24,8 +24,7 @@ export default function ProtectionStatusStep({ asset, quote, tier, purchase, onE
           <div><dt>Amount protected</dt><dd>{tier.protectedAmount}</dd></div>
           <div><dt>Protection floor</dt><dd className="numeric">{tier.floor}</dd></div>
           <div><dt>Price when quoted</dt><dd className="numeric">{quote.spot}</dd></div>
-          <div><dt>Premium</dt><dd className="numeric">{formatUsdc(purchase.premiumUsdc) === '—' ? tier.cost : formatUsdc(purchase.premiumUsdc)}</dd></div>
-          <div><dt>Payment status</dt><dd>{toPaymentStatusLabel(purchase.paymentStatus)}</dd></div>
+          <div><dt>Payment</dt><dd className="numeric">{getPremiumPresentation(purchase.paymentStatus, purchase.premiumUsdc)}</dd></div>
           <div><dt>Execution</dt><dd>{purchase.fill === 'onchain' ? 'Completed on Base' : 'Application operator'}</dd></div>
         </dl>
 

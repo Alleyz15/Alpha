@@ -33,8 +33,7 @@ function PositionCard({ position, isMock }) {
 
       <div className="position-metric position-metric--payment">
         <small>Payment</small>
-        <strong>{position.paymentStatusLabel}</strong>
-        {position.paymentStatus === 'paid' && position.premiumLabel ? <small>{position.premiumLabel}</small> : null}
+        <strong>{position.premiumPresentation}</strong>
       </div>
 
       <div className="position-evidence">

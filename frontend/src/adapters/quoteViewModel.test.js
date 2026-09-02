@@ -19,9 +19,9 @@ const basePosition = {
 
 describe('formatUsdc', () => {
   it.each([null, undefined, '', Number.NaN, Number.POSITIVE_INFINITY])(
-    'renders %s as a neutral placeholder',
+    'returns null for missing or invalid value %s',
     (value) => {
-      expect(formatUsdc(value)).toBe('—');
+      expect(formatUsdc(value)).toBeNull();
     },
   );
 
@@ -31,12 +31,12 @@ describe('formatUsdc', () => {
 });
 
 describe('payment status copy', () => {
-  it('explains that none means the demo balance was not charged', () => {
-    expect(toPaymentStatusLabel('none')).toBe('Not charged to demo balance');
+  it('uses the shared placeholder for none', () => {
+    expect(toPaymentStatusLabel('none')).toBe('—');
   });
 
   it('keeps a neutral fallback for unknown values', () => {
-    expect(toPaymentStatusLabel('future_status')).toBe('Payment status unavailable');
+    expect(toPaymentStatusLabel('future_status')).toBe('—');
   });
 
   it('does not convert an explicit none status into paid', () => {
@@ -49,7 +49,7 @@ describe('payment status copy', () => {
     });
 
     expect(view.paymentStatus).toBe('none');
-    expect(view.paymentStatusLabel).toBe('Not charged to demo balance');
+    expect(view.paymentStatusLabel).toBe('—');
   });
 
   it('does not infer paid from an explicit unknown future status', () => {
@@ -62,7 +62,7 @@ describe('payment status copy', () => {
     });
 
     expect(view.paymentStatus).toBe('unknown');
-    expect(view.paymentStatusLabel).toBe('Payment status unavailable');
+    expect(view.paymentStatusLabel).toBe('—');
   });
 });
 
@@ -114,7 +114,10 @@ describe('position roles', () => {
 });
 
 describe('quote size confirmation', () => {
-  it('carries an unconfirmed operator-capacity result into the UI model', () => {
+  it.each([
+    ['operator_spend_capacity', /operator’s current USDC spending capacity/i],
+    ['capacity_unreadable', /could not read the operator’s current USDC spending capacity/i],
+  ])('carries an unconfirmed %s result into the UI model', (unconfirmedReason, expectedMessage) => {
     const view = toQuoteViewModel({
       quoteId: 'quote-1', asset: 'ETH', spot: 2400,
       requested: { units: 0.4, targetDate: '2026-09-05T00:00:00Z' },
@@ -122,7 +125,7 @@ describe('quote size confirmation', () => {
       tiers: [{
         tierId: 'tier-1', recommended: true,
         actual: { tier: 'balanced', floorUsdc: 2200, protectionPct: 8.3, expiry: '2026-09-05T00:00:00Z' },
-        size: { protectedUnits: 0.4, confirmed: false, unconfirmedReason: 'operator_spend_capacity' },
+        size: { protectedUnits: 0.4, confirmed: false, unconfirmedReason },
         cost: { premiumUsdc: 12 }, maxLoss: { forConfirmation: 80 },
         disclosure: { sizeReduced: false, unprotectedUnits: 0, unprotectedValueUsdc: 0, expiryLaterThanRequested: false },
         settlement: { paysIn: 'USDC' }, payout: { floorValueUsdc: 880 },
@@ -130,6 +133,6 @@ describe('quote size confirmation', () => {
     });
 
     expect(view.tiers[0].sizeConfirmed).toBe(false);
-    expect(view.tiers[0].sizeConfirmationMessage).toMatch(/operator’s current USDC spending capacity/i);
+    expect(view.tiers[0].sizeConfirmationMessage).toMatch(expectedMessage);
   });
 });

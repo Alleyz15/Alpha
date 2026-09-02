@@ -107,4 +107,29 @@ describe('Phase 6 pages', () => {
     expect(screen.getByRole('heading', { name: 'Order details' })).toBeVisible();
     expect(screen.getByText(/No price path has been invented/)).toBeVisible();
   });
+
+  it('does not claim a failed, refunded request has protection or a price floor', async () => {
+    const failedPosition = {
+      ...protectedPosition,
+      status: 'failed',
+      paymentStatus: 'refunded',
+      verifiedOnChain: false,
+      executionState: 'failed',
+      purchasedAt: null,
+      explorerUrl: null,
+    };
+    const apiClient = {
+      getPositionDetail: vi.fn().mockResolvedValue(failedPosition),
+      getAssetCandles: vi.fn().mockResolvedValue({ candles: [] }),
+    };
+    render(
+      <MemoryRouter initialEntries={['/protection/put-1']}>
+        <Routes><Route path="/protection/:positionId" element={<ProtectionDetailsPage apiClient={apiClient} />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('No protection became active. Execution failed and the held funds were refunded.')).toBeVisible();
+    const meaningSection = screen.getByRole('heading', { name: 'What this means for you' }).closest('.pd-meaning-card');
+    expect(within(meaningSection).queryByText(/price floor/i)).not.toBeInTheDocument();
+  });
 });

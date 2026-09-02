@@ -34,7 +34,7 @@ describe('DashboardScreen position roles', () => {
     expect(screen.getByText('Upside threshold')).toBeVisible();
     expect(screen.getByText('$2,680.00 USDC')).toBeVisible();
     expect(screen.getByText('1 ETH upside exposure active')).toBeVisible();
-    expect(screen.getByText('Not charged to demo balance')).toBeVisible();
+    expect(screen.getByText('—')).toBeVisible();
     expect(screen.getByRole('img', { name: 'Ethereum' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Verify on BaseScan' })).toHaveAttribute('href', 'https://basescan.org/tx/0xabc');
     expect(screen.queryByText('Protection floor')).not.toBeInTheDocument();
@@ -69,7 +69,7 @@ describe('DashboardScreen position roles', () => {
     );
 
     expect(screen.getByText('2 AVAX protection requested')).toBeVisible();
-    expect(screen.getByText('Funds locked')).toBeVisible();
+    expect(screen.getByText('Funds held')).toBeVisible();
     expect(screen.getByRole('img', { name: 'Avalanche' })).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Verify on BaseScan' })).not.toBeInTheDocument();
   });
