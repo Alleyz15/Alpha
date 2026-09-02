@@ -15,10 +15,6 @@ import {
 import useHomeAnimations from './useHomeAnimations.js';
 import useHomeData from './useHomeData.js';
 
-function HomeIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 10 8-6 8 6v9H5v-9Z" /><path d="M9 19v-6h6v6" /></svg>;
-}
-
 function PortfolioIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4z" /><path d="M8 7V5h8v2M4 11h16M10 15h4" /></svg>;
 }
@@ -49,9 +45,8 @@ function HomeRail({ navigate }) {
     <aside className="home-rail" aria-label="Primary navigation">
       <button className="home-rail__brand" type="button" onClick={() => navigate('/')} aria-label="Alpha Welcome">α</button>
       <nav>
-        <button className="is-active" type="button" aria-current="page" aria-label="Home"><HomeIcon /></button>
+        <button className="is-active" type="button" aria-current="page" aria-label="Markets"><MarketIcon /></button>
         <button type="button" onClick={() => navigate('/portfolio')} aria-label="Portfolio"><PortfolioIcon /></button>
-        <button type="button" onClick={() => navigate('/#live-market')} aria-label="Markets"><MarketIcon /></button>
       </nav>
       <button className="home-rail__help" type="button" onClick={() => navigate('/#product-reality')} aria-label="Product reality">?</button>
     </aside>

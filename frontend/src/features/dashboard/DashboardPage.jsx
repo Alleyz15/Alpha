@@ -42,7 +42,7 @@ export default function DashboardPage({ apiClient = liveApi, assetFilter = null 
   }, [load]);
 
   function navigateLegacyHeader(view) {
-    navigate(view === 'dashboard' ? '/dashboard' : '/');
+    navigate(view === 'dashboard' ? '/portfolio' : '/markets');
   }
 
   return (
@@ -55,7 +55,7 @@ export default function DashboardPage({ apiClient = liveApi, assetFilter = null 
           state={positionsState}
           isMock={false}
           reality={demoContext?.reality}
-          onExplore={() => navigate('/')}
+          onExplore={() => navigate('/markets')}
         />
       </main>
 

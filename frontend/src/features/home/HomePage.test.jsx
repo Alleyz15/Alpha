@@ -28,9 +28,9 @@ function apiClient(overrides = {}) {
 
 function renderHome(client) {
   return render(
-    <MemoryRouter initialEntries={['/dashboard']}>
+    <MemoryRouter initialEntries={['/markets']}>
       <Routes>
-        <Route path="/dashboard" element={<HomePage apiClient={client} />} />
+        <Route path="/markets" element={<HomePage apiClient={client} />} />
         <Route path="/portfolio" element={<div>Portfolio route</div>} />
         <Route path="/coin/:symbol" element={<div>Coin detail route</div>} />
       </Routes>
