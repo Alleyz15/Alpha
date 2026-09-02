@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Sixteen instances now, one family.** The shape:
+**Seventeen instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -660,6 +660,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | "XRP fails 6/6" | the protocol rejects XRP | our premium truncation; XRP fills 8/8 at exact sizes |
 | "vanilla puts stop at 2.4 days" | the market's ceiling | our own single-leg rule; the book reaches 2 months |
 | a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small |
+| `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -922,6 +923,44 @@ Format: symptom → cause → fix
 - **`npm init` in a folder that already has `package.json`** → silently overwrites it, dropping `"type": "module"` and the dependency list → run `npm install` instead; you only find out when `import` breaks
 
 ---
+
+### An operation that reported what it did NOT do, and stayed silent about what it did
+
+**Seventeenth instance, and the inverse of every other one.** The rest claimed
+success they had not achieved. This one claimed *inaction it had not maintained*.
+
+`scripts/fill-position.js` was described as a dry run. Run without `--confirm`
+against a position whose order had left the book, it printed:
+
+```
+BLOCKED: the quoted order is no longer on the book — re-quote
+Nothing was broadcast. The row is left pending (BR-14).
+```
+
+The first line is true. The second was false: `prepareFill` had already called
+`failRefusedFill`, moving the position `pending → failed` and refunding 1.522569
+USDC. Someone reading it concluded the position was untouched. It had
+transitioned and returned money.
+
+Nothing was wrong with the *behaviour* — resolving a refused fill is correct,
+and leaving it `pending` was the gap we had closed the day before. The message
+had simply never been updated to match, and it described the chain while saying
+nothing about the database.
+
+> **"Nothing happened" is two claims, not one.** Nothing was broadcast, and
+> nothing was written. A message that verifies the first and asserts the second
+> is the easiest kind of lie to write, because the author is thinking about the
+> money and the reader is thinking about the row.
+
+**What to do:** when an operation has more than one kind of side effect, say
+something about each one every time — including "unchanged". All three
+non-broadcast exits in that script now state the database outcome explicitly,
+and the two that genuinely change nothing say so rather than leaving it to be
+inferred from silence.
+
+And do not call something a dry run if it can write. The flag now promises two
+separate things: without `--confirm` nothing is broadcast and no money is spent,
+**and** the database may still change when a position is unfillable.
 
 ### A simulation inherits the constraints of whoever it simulates as
 
