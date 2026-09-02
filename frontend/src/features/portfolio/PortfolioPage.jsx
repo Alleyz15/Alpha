@@ -90,7 +90,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                   <div className="portfolio-stat-icon"><WalletIcon /></div>
                   <div>
                     <span>{portfolio.totalValueComplete ? 'Portfolio value' : 'Priced holdings value'}</span>
-                    <MonoValue as="strong">{formatUsdc(portfolio.totalValueUsdc)}</MonoValue>
+                    <MonoValue as="strong">{formatUsdc(portfolio.totalValueUsdc) ?? '—'}</MonoValue>
                     <small>Live USDC prices · simulated holdings</small>
                   </div>
                 </Card>

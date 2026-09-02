@@ -1,11 +1,9 @@
 import { getAssetIdentity } from '../../components/AssetLogo.jsx';
+import { formatUsdc, getPremiumPresentation } from '../../utils/usdc.js';
 
-const money = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+export { formatUsdc };
+
+const displayUsdc = (value) => formatUsdc(value) ?? '—';
 
 const amount = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 6,
@@ -26,12 +24,6 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 });
 
 const pendingStatuses = new Set(['pending', 'pending_fill', 'pending_verification']);
-
-export function formatUsdc(value) {
-  if (value === null || value === undefined || value === '') return '—';
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? `${money.format(numericValue)} USDC` : '—';
-}
 
 export function formatUnits(value, symbol) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
@@ -83,8 +75,8 @@ export function buildPortfolioRows(holdings = [], positions = []) {
         ...holding,
         ...identity,
         holdingsLabel: formatUnits(holding.amount, holding.asset),
-        priceLabel: formatUsdc(holding.priceUsdc),
-        valueLabel: formatUsdc(holding.valueUsdc),
+        priceLabel: displayUsdc(holding.priceUsdc),
+        valueLabel: displayUsdc(holding.valueUsdc),
         protectionState,
         protectionLabel: protectionState === 'active'
           ? 'Protected'
@@ -141,36 +133,33 @@ export function toProtectionDetailViewModel(position) {
   const strike = isProtection ? position.protectionFloorUsdc : position.upsideThresholdUsdc;
   const timeLeft = getTimeLeft(position.expiry);
   const paymentStatus = position.paymentStatus;
+  const quantityLabel = formatUnits(position.protectedAmount, position.asset);
+  const strikeLabel = displayUsdc(strike);
 
-  let premium = {
-    label: 'Premium',
-    value: '—',
-    caption: 'Payment information unavailable',
+  const premium = {
+    label: 'Payment',
+    value: getPremiumPresentation(paymentStatus, position.chargedUsdc ?? position.premiumPaidUsdc),
   };
-  if (paymentStatus === 'none') {
-    premium = {
-      label: 'Payment',
-      value: 'No payment',
-      caption: 'Purchased directly by the operator',
-    };
-  } else if (paymentStatus === 'held') {
-    premium = {
-      label: 'Premium held',
-      value: formatUsdc(position.chargedUsdc),
-      caption: 'Held from the simulated USDC balance',
-    };
-  } else if (paymentStatus === 'refunded') {
-    premium = {
-      label: 'Premium refunded',
-      value: formatUsdc(position.refundedUsdc),
-      caption: 'Returned to the simulated USDC balance',
-    };
-  } else if (paymentStatus === 'paid') {
-    premium = {
-      label: 'Premium paid',
-      value: formatUsdc(position.chargedUsdc ?? position.premiumPaidUsdc),
-      caption: 'Paid from the simulated USDC balance',
-    };
+
+  let meaning;
+  if (position.status === 'failed' || paymentStatus === 'refunded') {
+    meaning = paymentStatus === 'refunded'
+      ? 'No protection became active. Execution failed and the held funds were refunded.'
+      : 'No protection became active. Execution failed.';
+  } else if (
+    pendingStatuses.has(position.status)
+    || position.executionState === 'requested'
+    || position.executionState === 'broadcast'
+  ) {
+    meaning = 'This protection request is waiting for execution. No protection is active yet.';
+  } else if (['active', 'settled'].includes(position.status)) {
+    meaning = isProtection
+      ? `${quantityLabel} has a ${strikeLabel} price floor at expiry. If the settlement price finishes below that floor, the contract is designed to pay the difference in USDC.`
+      : `${quantityLabel} has upside exposure above the ${strikeLabel} threshold at expiry. This is an upside position, not downside protection.`;
+  } else {
+    meaning = isProtection
+      ? 'This protection is no longer active.'
+      : 'This upside position is no longer active.';
   }
 
   return {
@@ -179,9 +168,9 @@ export function toProtectionDetailViewModel(position) {
     isProtection,
     title: isProtection ? `${identity.symbol} Protection` : `${identity.symbol} Upside Position`,
     contractType: isProtection ? 'Downside protection' : 'Upside exposure',
-    strikeLabel: formatUsdc(strike),
-    entryPriceLabel: formatUsdc(position.entryPriceUsdc),
-    quantityLabel: formatUnits(position.protectedAmount, position.asset),
+    strikeLabel,
+    entryPriceLabel: displayUsdc(position.entryPriceUsdc),
+    quantityLabel,
     purchaseDateLabel: position.purchasedAt ? formatDate(position.purchasedAt) : 'Not confirmed',
     expiryLabel: formatDate(position.expiry),
     orderCreatedLabel: formatDate(position.createdAt, true),
@@ -198,6 +187,7 @@ export function toProtectionDetailViewModel(position) {
         ? 'Operator purchase — no user payment'
         : position.order?.paymentMethod ?? '—',
     premium,
+    meaning,
     timeLeft,
     timeline: (position.timeline ?? []).map((event) => ({
       ...event,

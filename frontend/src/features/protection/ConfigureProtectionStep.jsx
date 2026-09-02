@@ -217,7 +217,7 @@ export default function ConfigureProtectionStep({
                         <small>{tier.description}</small>
                       </span>
                       <span className="protection-tier-stat"><small>Protection floor</small><MonoValue as="strong">{tier.floor}</MonoValue></span>
-                      <span className="protection-tier-stat"><small>Protected amount</small><strong>{tier.protectedAmount}</strong></span>
+                      <span className="protection-tier-stat"><small>{tier.sizeConfirmed ? 'Protected amount' : 'Computed protection amount'}</small><strong>{tier.protectedAmount}</strong></span>
                       <span className="protection-tier-stat"><small>Premium</small><MonoValue as="strong">{tier.cost}</MonoValue></span>
                       <span className="protection-tier-stat"><small>End date</small><strong>{tier.expiry}</strong></span>
                       {!tier.sizeConfirmed && <span className="protection-tier-size-warning">Size check incomplete</span>}
@@ -267,7 +267,7 @@ export default function ConfigureProtectionStep({
             <div><dt>{quote ? 'Price when quoted' : 'Current live price'}</dt><dd className="numeric">{priceLabel}</dd></div>
             <div><dt>Target date</dt><dd>{form.targetDate || '—'}</dd></div>
             <div><dt>Protection floor</dt><dd className="numeric">{selectedTier?.floor ?? '—'}</dd></div>
-            <div><dt>Protected amount</dt><dd>{selectedTier?.protectedAmount ?? '—'}</dd></div>
+            <div><dt>{selectedTier?.sizeConfirmed ? 'Protected amount' : 'Computed protection amount'}</dt><dd>{selectedTier?.protectedAmount ?? '—'}</dd></div>
             <div><dt>Ends</dt><dd>{selectedTier?.expiry ?? '—'}</dd></div>
             <div className="protection-summary-total"><dt>Premium</dt><dd className="numeric">{selectedTier?.cost ?? '—'}</dd></div>
           </dl>

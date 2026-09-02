@@ -1,21 +1,15 @@
-const currency = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+import { formatUsdc, getPremiumPresentation } from '../utils/usdc.js';
+
+export { formatUsdc };
+
+const displayUsdc = (value) => formatUsdc(value) ?? '—';
 
 const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
 
-const paymentStatusCopy = {
-  held: 'Funds locked',
-  paid: 'Paid',
-  refunded: 'Refunded',
-  none: 'Not charged to demo balance',
-};
+const knownPaymentStatuses = new Set(['held', 'paid', 'refunded', 'none']);
 
-export function toPaymentStatusLabel(paymentStatus) {
-  return paymentStatusCopy[paymentStatus] ?? 'Payment status unavailable';
+export function toPaymentStatusLabel(paymentStatus, paidAmount) {
+  return getPremiumPresentation(paymentStatus, paidAmount);
 }
 
 const tierCopy = {
@@ -51,15 +45,6 @@ const errorCopy = {
   },
 };
 
-export function formatUsdc(value) {
-  if (value == null || value === '') return '—';
-
-  const numericValue = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numericValue)) return '—';
-
-  return `${currency.format(numericValue)} USDC`;
-}
-
 export function formatDate(iso) {
   return new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
@@ -88,7 +73,7 @@ export function toMarketAssetViewModel(asset, updatedAt) {
 
   return {
     ...asset,
-    priceLabel: formatUsdc(asset.spotUsdc),
+    priceLabel: displayUsdc(asset.spotUsdc),
     holdingLabel,
     availabilityLabel: asset.protectionAvailable
       ? asset.longestProtectionDays === 0
@@ -131,18 +116,18 @@ export function toQuoteViewModel(dto) {
       recommended: Boolean(tier.recommended),
       name: copy.name,
       description: copy.description,
-      floor: formatUsdc(tier.actual.floorUsdc),
+      floor: displayUsdc(tier.actual.floorUsdc),
       protectionDrop: `${tier.actual.protectionPct.toFixed(1)}% below today`,
       expiry: formatDate(tier.actual.expiry),
       protectedAmount: `${number.format(tier.size.protectedUnits)} ${dto.asset}`,
-      cost: formatUsdc(tier.cost.premiumUsdc),
-      maximumLoss: formatUsdc(tier.maxLoss.forConfirmation),
+      cost: displayUsdc(tier.cost.premiumUsdc),
+      maximumLoss: displayUsdc(tier.maxLoss.forConfirmation),
       sizeReduced: Boolean(tier.disclosure.sizeReduced),
       unprotectedAmount: `${number.format(tier.disclosure.unprotectedUnits)} ${dto.asset}`,
-      unprotectedValue: formatUsdc(tier.disclosure.unprotectedValueUsdc),
+      unprotectedValue: displayUsdc(tier.disclosure.unprotectedValueUsdc),
       expiryLaterThanRequested: Boolean(tier.disclosure.expiryLaterThanRequested),
       paysIn: tier.settlement.paysIn,
-      protectedValueAtFloor: formatUsdc(tier.payout.floorValueUsdc),
+      protectedValueAtFloor: displayUsdc(tier.payout.floorValueUsdc),
       sizeConfirmed: tier.size.confirmed === true,
       sizeConfirmationMessage: tier.size.unconfirmedReason === 'operator_spend_capacity'
         ? 'Alpha could not confirm this amount against the operator’s current USDC spending capacity. Final safety checks may reject the request.'
@@ -161,7 +146,7 @@ export function toQuoteViewModel(dto) {
   return {
     quoteId: dto.quoteId,
     asset: dto.asset,
-    spot: formatUsdc(dto.spot),
+    spot: displayUsdc(dto.spot),
     requestedAmount: `${number.format(dto.requested.units)} ${dto.asset}`,
     targetDate: formatDate(dto.requested.targetDate),
     createdAt: dto.createdAt,
@@ -185,7 +170,7 @@ export function toPositionViewModel(position) {
   };
 
   const hasExplicitPaymentStatus = position.paymentStatus != null;
-  const paymentStatus = Object.hasOwn(paymentStatusCopy, position.paymentStatus)
+  const paymentStatus = knownPaymentStatuses.has(position.paymentStatus)
     ? position.paymentStatus
     : hasExplicitPaymentStatus
       ? 'unknown'
@@ -229,12 +214,12 @@ export function toPositionViewModel(position) {
     ...roleView,
     statusLabel: statusCopy[position.status] ?? position.status,
     paymentStatus,
-    paymentStatusLabel: toPaymentStatusLabel(paymentStatus),
+    paymentStatusLabel: toPaymentStatusLabel(paymentStatus, position.premiumPaidUsdc),
     amountLabel: `${number.format(position.protectedAmount)} ${position.asset}`,
-    primaryMetricValueLabel: formatUsdc(roleView.primaryMetricValue),
-    floorLabel: role === 'protection' ? formatUsdc(position.protectionFloorUsdc) : null,
-    upsideThresholdLabel: role === 'upside' ? formatUsdc(position.upsideThresholdUsdc) : null,
-    premiumLabel: formatUsdc(position.premiumPaidUsdc),
+    primaryMetricValueLabel: displayUsdc(roleView.primaryMetricValue),
+    floorLabel: role === 'protection' ? displayUsdc(position.protectionFloorUsdc) : null,
+    upsideThresholdLabel: role === 'upside' ? displayUsdc(position.upsideThresholdUsdc) : null,
+    premiumPresentation: getPremiumPresentation(paymentStatus, position.premiumPaidUsdc),
     payoutLabel: position.payoutUsdc == null ? null : formatUsdc(position.payoutUsdc),
     expiryLabel: formatDate(position.expiry),
   };

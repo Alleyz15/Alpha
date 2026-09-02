@@ -123,7 +123,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
                 <Card className="pd-summary-card">
                   <span>{detail.premium.label}</span>
                   <MonoValue as="strong">{detail.premium.value}</MonoValue>
-                  <small>{detail.premium.caption}</small>
+                  {detail.premium.caption ? <small>{detail.premium.caption}</small> : null}
                 </Card>
                 <Card className="pd-summary-card">
                   <span>Time left</span>
@@ -159,7 +159,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
                   </Alert>
                 )}
                 <div className="pd-tracking-stats">
-                  <div><span>Market price</span><MonoValue as="strong">{formatUsdc(currentMarketPrice)}</MonoValue></div>
+                  <div><span>Market price</span><MonoValue as="strong">{formatUsdc(currentMarketPrice) ?? '—'}</MonoValue></div>
                   <div><span>Protection status</span><StatusBadge tone={statusTone(detail.status, detail.verifiedOnChain)}>{detail.statusLabel}</StatusBadge></div>
                 </div>
               </Card>
@@ -203,9 +203,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
                 <div className="pd-meaning-icon"><ShieldIcon size={28} /></div>
                 <div>
                   <h2>What this means for you</h2>
-                  <p>{detail.isProtection
-                    ? `${detail.quantityLabel} has a ${detail.strikeLabel} price floor at expiry. If the settlement price finishes below that floor, the contract is designed to pay the difference in USDC.`
-                    : `${detail.quantityLabel} has upside exposure above the ${detail.strikeLabel} threshold at expiry. This is an upside position, not downside protection.`}</p>
+                  <p>{detail.meaning}</p>
                 </div>
               </Card>
 

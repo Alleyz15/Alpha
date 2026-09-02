@@ -19,7 +19,7 @@ function useSecondsRemaining(expiresAt) {
 
 function PurchaseComplete({ purchase, tier, isMock, reality, onViewDashboard }) {
   const hasOnchainTransaction = purchase.fill === 'onchain' && typeof purchase.txHash === 'string';
-  const paymentStatusLabel = toPaymentStatusLabel(purchase.paymentStatus);
+  const paymentStatusLabel = toPaymentStatusLabel(purchase.paymentStatus, purchase.premiumUsdc);
 
   return (
     <section className="completion-card" aria-labelledby="complete-title">
