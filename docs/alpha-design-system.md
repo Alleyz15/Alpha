@@ -134,12 +134,11 @@ These are the small pill/rounded elements used throughout for status and metadat
 
 | Component | Shape/Color rule | Example |
 |---|---|---|
-| **Change chip** (`.change-chip`) | Green tint (`rgba(41,211,152,0.12)` bg, `--success` text) for positive, red tint (`rgba(255,77,106,0.12)` bg, `--danger` text) for negative. Always prefixed with `▲`/`▼`. | `▲ +4.82% (7d)` |
+| **Change chip** (`.change-chip`) | Green tint (`rgba(41,211,152,0.12)` bg, `--success` text) for positive, red tint (`rgba(255,77,106,0.12)` bg, `--danger` text) for negative. Always prefixed with `▲`/`▼`. | `▲ +4.82% (24h)` |
 | **Protection badge** (`.protection-badge`) | `.protected` = green tint + `●` dot; `.unprotected` = red tint + `○` dot | `● Protected` / `○ Unprotected` |
 | **Status badge** (`.status-badge`) | `.active-s` = green + `●`; `.soon-s` = amber (`--warning`) + `◐` | `● Active` / `◐ Expiring Soon` |
 | **Trend chip** (`.trend-chip`, Trending Now strip) | Neutral `--surface` card, rank number in mono `--text-faint`, change value colored per sign | `#1 SOL +12.4%` |
 | **Eyebrow / live indicator** (`.eyebrow`) | Glass pill with a small pulsing `--success` dot, mono uppercase text | `● LIVE · 214,902 signals processed today` |
-| **AI badge** (`.ai-badge`) | `--signal`-tinted pill with a small glowing dot, mono uppercase text, marks AI-generated content | `● AI MARKET BRIEF` |
 
 **Rule:** every badge pairs a glyph (`●`/`○`/`◐`/`▲`/`▼`) with color — never color alone.
 
@@ -203,19 +202,15 @@ Home, Portfolio, and Payment are all built to fit exactly one viewport with no p
 
 ### 3.2 Home (dashboard)
 
-**Purpose:** Daily-use landing screen after login. Market awareness + a lightweight portfolio glance + a clear path into Protection. **Not** a trading terminal — no order book, no depth chart here.
+**Purpose:** Daily-use landing screen after login. Market awareness + a clear path into Protection. **Not** a trading terminal — no order book, no depth chart here.
 
 **Layout:** `app-shell` (rail + `main-col.dash-fit`). Fits one viewport (§2.6).
 
 **Content, top to bottom:**
-1. **Topbar** — search box, "🛡 Protection Overview" pill button (navigates to Portfolio), avatar. No duplicate portfolio value here — it lives in the card below.
-2. **Row 1 (fixed height, 2-column):**
-   - **AI Market Brief** (wider column) — glass-tinted card, AI badge, one-paragraph daily summary, "Updated X min ago" caption.
-   - **Portfolio Snapshot** (narrower column) — portfolio value (mono, large), 7-day change chip, "View full portfolio →" link to Portfolio screen.
-3. **Row 2 (fixed height):** **Trending Now** — horizontal strip of trend chips (rank + symbol + change), scrollable if it overflows horizontally.
-4. **Row 3 (fills remaining height, 2-column, this row scrolls internally if needed):**
-   - **Top Cryptocurrencies** (wider) — the single comprehensive market table: star/favorite toggle, coin cell, price, 24h change, market cap, 7-day sparkline. This table **is** the watchlist (favoriting a row is the watchlist mechanism) — do not build a separate watchlist widget.
-   - **Market Movers** (narrower) — Gainers/Losers tab toggle over a compact 5-row list (symbol, magnitude bar, % change), plus a **protection nudge** card pinned to the bottom of this column (icon + one-line contextual suggestion referencing whichever coin is the top mover, e.g. "SOL is up 12.4% today — consider locking in gains with protection"). This nudge exists specifically to fill the column's remaining height with something on-brand rather than empty space, and to reinforce the product's core purpose.
+1. **Topbar** — search box, "🛡 Protection Overview" pill button (navigates to Portfolio), avatar. Do not add a personalised greeting such as "Good Morning, Demo User" anywhere on the Home page.
+2. **Portfolio Value** (fixed card) — the current displayed value of the user's simulated holdings using live USDC prices from the backend. Label the simulated-holdings basis clearly. Include a "View full portfolio →" link, but no seven-day change or performance claim.
+3. **Trending Now** (fixed height) — a horizontal strip ranking only Alpha's four supported assets by their real 24-hour movement. State this four-asset scope in the section copy; do not present it as a market-wide ranking. The strip scrolls horizontally if it overflows.
+4. **Top Cryptocurrencies** (fills remaining height, internal scroll if needed) — a full-width market table containing coin, price, 24h change, market cap, and 7-day sparkline.
 
 ### 3.3 Portfolio ("My Crypto")
 
@@ -226,9 +221,8 @@ Home, Portfolio, and Payment are all built to fit exactly one viewport with no p
 **Content, top to bottom:**
 1. **Topbar** — search box (holdings-scoped placeholder), avatar. No page-level "Buy Protection" button — protection is purchased per-asset from the table (see below).
 2. **Header** — "My Crypto" title + one-line subtitle. No button here.
-3. **Stat row (3 fixed cards):**
-   - Portfolio Value (mono, + 7d change chip)
-   - Protection Coverage (animated ring gauge + percentage of holdings protected)
+3. **Stat row (2 fixed cards):**
+   - Portfolio Value (mono; no 7-day performance claim)
    - Active Protections (count + "Next expiry in N days" caption)
 4. **Protection Overview** (fills remaining height, internal scroll):
    - Table: Asset (coin cell) · Holdings · Current Price · Protection (badge) · Expiry · Action.
@@ -260,13 +254,13 @@ There is intentionally no second table on this page. An earlier version had a se
 **Content, top to bottom:**
 1. **Back link** → Portfolio.
 2. **Header** — contract name ("BTC Protection") + status badge, then a meta line: Order ID · Expiry date · days-left (highlighted in `--signal`).
-3. **Summary row (4 cards):** Current PnL, Estimated Payout, Premium Paid, Time Left. Each card is a number + one-line caption in plain language (e.g. "If BTC falls to strike price") — **never show the payout formula**, anywhere on this page.
+3. **Summary row (2 cards):** Premium Paid and Time Left. Each card is a number + one-line caption in plain language.
 4. **Contract Overview** — two-column definition list: Asset, Contract Type, Quantity Covered, Entry Price, Strike Price, Purchase Date, Expiry Date, Status.
-5. **Live Tracking** — a calm price-line chart: the current price path plus a **dashed horizontal strike-price reference line** with a label, and a soft gradient fill in the zone between the price line and the strike line (the "protected zone"). No candlesticks, no order book here — that visual language belongs to Coin Detail, not this page. Below the chart: a 5-up stat row (Market Price, Protection Status pill, Current PnL, Estimated Payout, Net Result).
+5. **Live Tracking** — a calm price-line chart: the current price path plus a **dashed horizontal strike-price reference line** with a label, and a soft gradient fill in the zone between the price line and the strike line (the "protected zone"). No candlesticks, no order book here — that visual language belongs to Coin Detail, not this page. Below the chart: a 2-up stat row containing Market Price and the Protection Status pill.
 6. **Order Details** — two-column definition list: Buyer Name, Order ID, Account/Wallet (truncated), Order Created (date+time), Settlement Type, Payment Method.
 7. **Contract Timeline** — a horizontal progress bar with three milestones (Purchased → Active → Expiry), filled proportionally to elapsed time; each milestone shows its date.
 8. **Coverage Summary** — a single highlighted card (shield icon + heading "What this means for you") containing one plain-language paragraph explaining the protection in human terms. No jargon, no formulas.
-9. **Actions** — "View History" (ghost), "Buy More Protection" (primary, → Portfolio), and "Claim / Settle" shown **disabled** with an adjacent caption explaining why ("Claim available only if BTC falls below strike price") whenever the contract isn't currently claimable. Never hide this button outright — showing it disabled-with-reason is more trustworthy than making it disappear.
+9. **Actions** — "View History" (ghost) and "Buy More Protection" (primary). Do not add a manual Claim / Settle button: settlement is automatic at expiry and the interface must not suggest that the user needs to trigger it.
 
 ### 3.6 Payment (Buy Protection)
 
@@ -327,7 +321,6 @@ This screen is deliberately built as a **checkout**, not a trade ticket: two col
 ### 4.6 Empty states
 - Not present in the static prototype (all data is seeded) — implement:
   - Portfolio with zero holdings: replace the table with a centered message + primary CTA ("Buy your first crypto" or similar), not an empty table shell.
-  - Top Cryptocurrencies "Watching" tab with zero favorites: short empty message ("Star an asset to add it here") in place of the table body.
 
 ### 4.7 Resilience (non-negotiable — this was a real production bug)
 
@@ -358,21 +351,20 @@ The prototype originally depended on Anime.js from a CDN with no fallback. When 
 - [ ] Selector pill (two-line value + caption, radio-group behavior — Payment's coverage/strike/expiry pickers) — §2.2
 - [ ] Payment method option (radio row: icon + name + detail) — §2.2
 - [ ] Sparkline / mini-chart (SVG line, animated draw-in per §4.7 resilience rules)
-- [ ] Ring gauge (used for Protection Coverage) — animated arc per §4.7 resilience rules
 - [ ] Candlestick chart (Coin Detail only)
 - [ ] Protection tracking chart (price line + dashed strike reference + protected-zone fill — Protection Details only; do **not** reuse the candlestick component here, see §3.5)
 
 ### Screens
 - [ ] Welcome — hero, Signal Grid background animation, feature row, intro + pill rotator, pinned scrollytelling stack section (§3.1.5 — build the scroll-progress logic as a reusable hook, e.g. `useScrollProgress(sectionRef)`), comparison section, footer
-- [ ] Home — dash-fit layout (§2.6), AI brief + snapshot row, trending strip, unified Top Cryptocurrencies table + Market Movers/nudge column
-- [ ] Portfolio — dash-fit layout, 3 stat cards, single Protection Overview table with strict one-button-per-row logic
+- [ ] Home — dash-fit layout (§2.6), current Portfolio Value card without a seven-day change, four-asset Trending Now strip, and a full-width Top Cryptocurrencies table; no personalised greeting sentence
+- [ ] Portfolio — dash-fit layout, 2 stat cards, single Protection Overview table with strict one-button-per-row logic
 - [ ] Coin Detail — header, chart + stats + about, trade panel + order book
-- [ ] Protection Details — narrow centered layout (§3.5), all 8 content sections, disabled Claim/Settle with reason caption
+- [ ] Protection Details — narrow centered layout (§3.5), all approved content sections, automatic-settlement wording, and no manual Claim/Settle action
 - [ ] Payment — dash-fit layout with no topbar (§3.6), live-recalculating order summary, radio-group payment method, confirm → creates a `ProtectionContract` and routes to Protection Details on success
 
 ### Data layer
 - [ ] Define a `Coin` type: `{ symbol, name, price, change24h, marketCap, color, holdings, isProtected, sparkline: number[] }`
-- [ ] Define a `ProtectionContract` type: `{ orderId, asset, contractType, quantityCovered, entryPrice, strikePrice, purchaseDate, expiryDate, status, premiumPaid, currentPnl, estimatedPayout, buyerName, wallet, settlementType, paymentMethod }`
+- [ ] Define a `ProtectionContract` type: `{ orderId, asset, contractType, quantityCovered, entryPrice, strikePrice, purchaseDate, expiryDate, status, premiumPaid, buyerName, wallet, settlementType, paymentMethod }`
 - [ ] `isProtected` on a `Coin` should be derived from whether an associated `ProtectionContract` exists — not a separately-maintained flag — to avoid the two ever disagreeing.
 - [ ] Define a premium-rate lookup (protection level × contract length → rate) for the Payment screen's live summary preview, and treat it as **client-side estimate only** — the real charge must be confirmed by the backend at submit time (§3.6).
 - [ ] The asset a user is buying protection for is passed into Payment via route param / navigation state from wherever "Buy Protection" was clicked — Payment does not let the user pick a different asset once inside the flow.
@@ -384,4 +376,3 @@ The prototype originally depended on Anime.js from a CDN with no fallback. When 
 - [ ] Keyboard tab order reaches every interactive element with a visible focus ring (§4.3).
 - [ ] Run the page at 1280px, 1440px, and 1920px widths — confirm content stays centered (§1.3/§2.6 centering pattern) rather than drifting to one side. This applies to Payment as much as Home/Portfolio.
 - [ ] On Payment, changing any control (slider, preset, protection level, contract length) updates every affected row in the Order Summary — there should be no stale value left over from a previous selection.
-

@@ -583,6 +583,18 @@
   line-height: 1.4;
 }
 
+.protection-tier-size-warning {
+  grid-column: 2 / -1;
+  width: max-content;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-3);
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .protection-summary {
   position: sticky;
   top: var(--space-5);
@@ -921,6 +933,10 @@
     grid-column: 2;
     grid-template-columns: minmax(112px, 0.75fr) 1fr;
     align-items: baseline;
+  }
+
+  .protection-tier-size-warning {
+    grid-column: 2;
   }
 
   .protection-review-details dl,

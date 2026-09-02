@@ -3,6 +3,8 @@ import { liveApi } from './api/client.js';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
+import PortfolioPage from './features/portfolio/PortfolioPage.jsx';
+import ProtectionDetailsPage from './features/portfolio/ProtectionDetailsPage.jsx';
 import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
 import WelcomePage from './features/welcome/WelcomePage.jsx';
 
@@ -69,6 +71,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={<WelcomeRoute />} />
       <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/portfolio" element={<PortfolioPage />} />
+      <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
       <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
       <Route path="/protect/:symbol" element={<ProtectionRoute />} />
       <Route path="*" element={<NotFoundPage />} />

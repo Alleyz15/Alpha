@@ -32,6 +32,8 @@ export const liveApi = {
   createQuote: (body) => request('/api/quote', { method: 'POST', body: JSON.stringify(body) }),
   purchaseQuote: (body) => request('/api/purchase', { method: 'POST', body: JSON.stringify(body) }),
   getPositions: () => request('/api/positions'),
+  getPortfolio: () => request('/api/portfolio'),
+  getPositionDetail: (positionId) => request(`/api/positions/${encodeURIComponent(positionId)}`),
 };
 
 export const api = useMockApi ? mockApi : liveApi;

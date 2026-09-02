@@ -3,6 +3,7 @@ import {
   formatUsdc,
   toPaymentStatusLabel,
   toPositionViewModel,
+  toQuoteViewModel,
 } from './quoteViewModel.js';
 
 const basePosition = {
@@ -109,5 +110,26 @@ describe('position roles', () => {
 
     expect(view.role).toBe('protection');
     expect(view.primaryMetricLabel).toBe('Protection floor');
+  });
+});
+
+describe('quote size confirmation', () => {
+  it('carries an unconfirmed operator-capacity result into the UI model', () => {
+    const view = toQuoteViewModel({
+      quoteId: 'quote-1', asset: 'ETH', spot: 2400,
+      requested: { units: 0.4, targetDate: '2026-09-05T00:00:00Z' },
+      createdAt: '2026-09-03T00:00:00Z', expiresAt: '2026-09-03T00:01:00Z',
+      tiers: [{
+        tierId: 'tier-1', recommended: true,
+        actual: { tier: 'balanced', floorUsdc: 2200, protectionPct: 8.3, expiry: '2026-09-05T00:00:00Z' },
+        size: { protectedUnits: 0.4, confirmed: false, unconfirmedReason: 'operator_spend_capacity' },
+        cost: { premiumUsdc: 12 }, maxLoss: { forConfirmation: 80 },
+        disclosure: { sizeReduced: false, unprotectedUnits: 0, unprotectedValueUsdc: 0, expiryLaterThanRequested: false },
+        settlement: { paysIn: 'USDC' }, payout: { floorValueUsdc: 880 },
+      }],
+    });
+
+    expect(view.tiers[0].sizeConfirmed).toBe(false);
+    expect(view.tiers[0].sizeConfirmationMessage).toMatch(/operator’s current USDC spending capacity/i);
   });
 });

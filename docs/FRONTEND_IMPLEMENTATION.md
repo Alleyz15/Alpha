@@ -464,3 +464,127 @@ Files updated:
 
 - The approved page content and product scope were implemented without deviation.
 - No new Anime.js dependency was installed because the frontend already contained Anime.js and its lockfile resolved to the current 4.5.0 release requested for this phase.
+
+## Phase 6 — Portfolio and Protection Details
+
+**Status:** Complete
+
+### Approved implementation plan
+
+Phase 6 builds the real-data Portfolio and Protection Details experience. It consumes the backend portfolio, position-list, position-detail, and candle endpoints without adding sample holdings, estimated payouts, or client-generated contract facts. The final navigation shell remains outside this phase; both pages use centered standalone layouts without a sidebar.
+
+1. Build `/portfolio` as the user's holdings and protection overview:
+   - Load `GET /api/portfolio` and `GET /api/positions` together.
+   - Show Portfolio Value with an explicit simulated-holdings label and never add a seven-day performance claim.
+   - Respect `totalValueComplete`; when it is false, identify `unpricedAssets` and label the displayed value as partial.
+   - Keep active and pending protection counts separate and show the backend's next confirmed expiry.
+   - Show the six protectable crypto assets returned as holdings while retaining USDC in the backend total only.
+   - Render one Protection Overview table with Asset, Holdings, Current Price, Protection, Expiry, and Action.
+   - Treat only downside positions with `status: active` and `verifiedOnChain: true` as protected. Calls are upside positions and never count as protection.
+   - Enforce exactly one action per row: View for an active or pending downside position, or Buy Protection when no current downside position exists.
+   - Add holdings-scoped search plus honest loading, error, empty, no-match, and missing-price states.
+2. Build `/protection/:positionId` as the calm single-contract tracker:
+   - Load `GET /api/positions/:positionId`; return an ownership-safe not-found message for a 404.
+   - Show the contract identity, status, order reference, expiry, Premium/Payment, and Time Left without a current-market-price summary card or estimated-payout card.
+   - Add Contract Overview with Asset, Contract Type, Quantity Covered, Entry Price, Strike Price, Purchase Date, Expiry Date, and Status.
+   - Add a separate live tracking request using the real 1W candle endpoint. Draw a price line, dashed strike reference, and protected-zone fill; show an explicit unavailable state if no real chart data exists.
+   - Keep only Market Price and Protection Status beneath the chart. Do not add Current PnL, Net Result, or Estimated Payout.
+   - Add Order Details with Buyer Name, Order ID, Account/Wallet, Order Created, Settlement Type, and Payment Method. State that the wallet is operator-controlled and never imply user self-custody.
+   - Show BaseScan only when `verifiedOnChain` is true and an explorer URL is supplied.
+   - Render the sanitized backend event timeline, a three-point contract progress display, plain-language “What this means for you” copy, View History, and Buy More Protection.
+   - Do not add a manual Claim / Settle action because the backend reports automatic settlement at expiry.
+3. Add compatibility for the backend's quote-size evidence:
+   - Carry `size.confirmed` and `size.unconfirmedReason` through the quote view model.
+   - Display operator-capacity or unreadable-capacity warnings on Configure and Review.
+   - Keep the computed size visible while clearly stating that it was not confirmed; never present the number as chain-confirmed.
+4. Add responsive, accessibility, and resilience behavior:
+   - Follow the Alpha design tokens, centered app-page width, narrow 880px tracker width, visible focus, monospaced financial values, readable mobile stacking, and table-local overflow.
+   - Keep contract content usable when the separate chart request fails.
+   - Add automated tests for protection truth, one-action table behavior, no-payment display, null formatting, removed metrics, chart success/failure, and unconfirmed quote-size disclosure.
+
+### Planned files
+
+New files:
+
+- `frontend/src/features/portfolio/PortfolioPage.jsx`
+- `frontend/src/features/portfolio/ProtectionDetailsPage.jsx`
+- `frontend/src/features/portfolio/ProtectionTrackingChart.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.js`
+- `frontend/src/features/portfolio/PortfolioPages.test.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.test.js`
+- `frontend/src/styles/portfolio.css`
+
+Updated files:
+
+- `frontend/src/App.jsx`
+- `frontend/src/api/client.js`
+- `frontend/src/adapters/quoteViewModel.js`
+- `frontend/src/adapters/quoteViewModel.test.js`
+- `frontend/src/features/protection/ConfigureProtectionStep.jsx`
+- `frontend/src/features/protection/ReviewProtectionStep.jsx`
+- `frontend/src/styles/protection-flow.css`
+- `frontend/src/index.css`
+- `docs/alpha-design-system.md`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Completion requirements
+
+- Portfolio and Protection Details routes render from real backend responses with no sample financial data.
+- Unverified positions are never labelled protected, calls are never treated as downside protection, and BaseScan is gated by `verifiedOnChain`.
+- Incomplete totals, null entry prices, no-payment operator purchases, missing wallet information, and missing chart feeds have explicit honest states.
+- The requested Contract Overview, Live Tracking, Order Details, Timeline, explanation, and actions are present; removed payout/PnL/current-price-summary/manual-settlement elements are absent.
+- All frontend tests and the production build pass.
+
+### Implementation result
+
+Completed on 2026-09-03.
+
+- Added `/portfolio` and `/protection/:positionId` to the application router and extended the live client with `getPortfolio()` and `getPositionDetail()`.
+- Built the centered Portfolio page with holdings search, two summary cards, incomplete-total disclosure, simulated-holding disclosure, and a single internally scrollable Protection Overview table.
+- Added deterministic position-to-holding matching that prefers confirmed active downside protection, then a pending downside request. Upside calls, settled positions, expired positions, and failed positions do not make an asset appear protected.
+- Included USDC in the backend's portfolio total but intentionally excluded it from the protection-action table.
+- Enforced exactly one row action. Active or pending downside records open their detail page; unprotected crypto holdings open the asset-specific protection checkout.
+- Built the narrow Protection Details tracker with the revised two-card summary, complete Contract Overview, live line chart, strike reference, protected-zone fill, two tracking stats, complete Order Details, operator-custody disclosure, sanitized event history, progress milestones, plain-language contract meaning, and approved actions.
+- Kept market tracking independent from contract loading. If a real candle feed is unavailable, the chart reports that no path was invented while every stored contract and order section remains usable.
+- Added truthful payment presentation for paid, held, refunded, and operator-no-payment positions. Missing entry price, order ID, wallet, market price, or date values render as an em dash or an explicit not-confirmed state rather than zero.
+- Added unconfirmed quote-size handling to Configure and Review. The frontend now distinguishes a backend-computed amount from an amount checked against current operator capacity and explains both supported failure reasons.
+- Updated the design-system action rule to reflect automatic settlement at expiry and remove the stale manual Claim / Settle control.
+- Installed the dependencies already declared by the frontend after the checkout was found to be missing router and chart packages; no package version or lockfile change was required and npm reported zero vulnerabilities.
+
+Files added:
+
+- `frontend/src/features/portfolio/PortfolioPage.jsx`
+- `frontend/src/features/portfolio/ProtectionDetailsPage.jsx`
+- `frontend/src/features/portfolio/ProtectionTrackingChart.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.js`
+- `frontend/src/features/portfolio/PortfolioPages.test.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.test.js`
+- `frontend/src/styles/portfolio.css`
+
+Files updated:
+
+- `frontend/src/App.jsx`
+- `frontend/src/api/client.js`
+- `frontend/src/adapters/quoteViewModel.js`
+- `frontend/src/adapters/quoteViewModel.test.js`
+- `frontend/src/features/protection/ConfigureProtectionStep.jsx`
+- `frontend/src/features/protection/ReviewProtectionStep.jsx`
+- `frontend/src/styles/protection-flow.css`
+- `frontend/src/index.css`
+- `docs/alpha-design-system.md`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Verification performed
+
+- Frontend dependency installation and audit: passed; six missing declared packages were restored and npm reported zero vulnerabilities.
+- Automated frontend tests: passed; 13 test files and 73 tests passed.
+- Phase 6 behavior coverage: passed for USDC exclusion from protectable rows, call exclusion, unverified-position wording, one action per holding, route navigation, no-payment display, null entry/order handling, all required detail sections, removed payout/PnL/manual-settlement controls, live chart rendering, and chart-failure resilience.
+- Quote evidence coverage: passed; an unconfirmed operator-capacity result remains unconfirmed in the view model and supplies the approved explanation.
+- Production frontend build: passed with 138 modules transformed.
+- Dependency audit: passed; npm reported zero vulnerabilities.
+
+### Deviations from plan
+
+- The approved product scope was implemented without deviation.
+- The final sidebar/global navigation remains intentionally absent because its design has not yet been provided. The pages use local back and route actions so Phase 6 can function independently.
+- AVAX and XRP detail charts depend on backend candle availability. Phase 6 implements the correct unavailable state and does not substitute chart data; the page will begin rendering those charts automatically when the same endpoint supports them.
