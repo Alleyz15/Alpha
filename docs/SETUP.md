@@ -661,11 +661,55 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | "vanilla puts stop at 2.4 days" | the market's ceiling | our own single-leg rule; the book reaches 2 months |
 | a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small (**fixed** — see below) |
 | `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
+| `approve 9 --confirm` | one transaction, raising 5.86 to 9 | **two**; the reset landed and the raise ran out of gas, leaving 0 |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+#### An estimate is a measurement of a state you are about to leave
+
+Raising the approval from 5.863744 to 9 USDC on 2 Sep 2026 left the wallet
+approved for **zero**, unable to fill anything.
+
+`ensureAllowance` sends **two** transactions, because USDC-style tokens want the
+allowance reset before it is changed:
+
+```
+block 50787961   approve(0)   nonce 13   status 1   5.863744 -> 0
+block 50787962   approve(9)   nonce 14   status 0   OUT OF GAS
+                              gasUsed 46207 of gasLimit 46444  (99.5%)
+```
+
+Replaying the second call unconstrained by gas *succeeds*, which is the tell. It
+was never invalid — it was underfunded. Writing an allowance slot from a
+non-zero value costs about 2,900 gas; writing it from zero is a cold SSTORE at
+about 20,000. Both transactions were estimated up front, **while the slot still
+held 5.863744**, so the second one was priced for the cheap write it would have
+been if the first had not run. Measured after the fact: the estimate against the
+zero state is 56,240, against the 46,444 the transaction actually carried.
+
+The SDK's 20% buffer was not the problem and did not fail — the successful
+retry used 55,437 of 67,488, so the buffer was working. A 20% buffer cannot
+absorb a 21% state change. **No buffer can, because the error is not noise.**
+
+> **An estimate is a measurement of the state at the moment you took it.** Any
+> transaction that changes that state between the estimate and the send has
+> invalidated it, and a percentage buffer hides the small cases while leaving
+> the structural ones exactly as broken.
+
+**This one failed loudly**, which is why it is recorded here rather than in the
+table above as a silent success — the script threw and printed a stack trace.
+That is the good outcome. The bad part is what it left behind: a zero allowance
+and no instruction, on a command the runbook hands to someone who has never run
+it. **The remedy is in RUNBOOK.md, not in code**: re-running the command is
+safe and fixes it, because from a zero allowance there is no reset step and the
+estimate is taken against the state it will execute in. Verified by doing
+exactly that — `status 1`, allowance `9000000`, confirmed by a direct
+`allowance()` read rather than by the script's own report.
+
+Total cost of the episode: 0.00000082 ETH.
 
 #### The allowance row is now closed, and the fix is the general lesson
 

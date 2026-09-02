@@ -333,34 +333,42 @@ computed live for that request.
 A presenter who says "two days" while the screen shows one has contradicted
 themselves in front of a judge, and the screen is right.
 
-### Top up the USDC approval first — it costs nothing to check
+### The USDC approval is already raised — nothing to do
 
-Look first — this sends nothing:
+Done on 2 Sep 2026: the wallet is approved for **9 USDC** to the OptionBook
+(tx `0x3165e0ca…`). You do not need to run anything. This section exists only
+so that if something goes wrong you know what it is.
+
+The approval is what lets a quote confirm its size against the chain before the
+user sees it. Where the premium exceeds it, the quote still works — the size is
+shown but marked **not confirmed**, which is honest and harmless.
+
+**The wallet holds 9.257 USDC, so 9 is the ceiling.** The deepest protection
+tier on ETH, BTC, SOL and BNB costs more than that and will stay unconfirmed.
+That is a budget limit, not a market one, and not a fault.
+
+#### Only if the allowance is somehow back to zero
+
+Check it — this sends nothing:
 
 ```bash
 npm run approve 9
 ```
 
-Then, only if you want the change:
+If `allowance now` reads `0.000000`, run:
 
 ```bash
 npm run approve 9 -- --confirm
 ```
 
-Nine USDC, because the wallet holds 9.257 and BR-12 forbids an unbounded
-approval. The script refuses anything above 100 USDC outright.
+**If that command crashes with a stack trace, run it once more.** It sends two
+transactions — a reset to zero, then the real amount — and the second can run
+out of gas because the first changed what it costs. Re-running from a zero
+allowance skips the reset and succeeds. This happened on 2 Sep and re-running
+fixed it. It spends only gas, moves no USDC, and cannot buy anything.
 
-The wallet's approval to the OptionBook is currently **5.86 USDC**, and the
-largest protection tier on most assets costs more than that. Quotes still work:
-the size is shown, but marked as **not confirmed against the chain**, because
-the check needs an approval large enough to simulate paying the premium.
-
-That is honest, and it is not what you want on stage. Raising the approval turns
-those tiers from *computed* into *confirmed*. It sends one small transaction and
-spends only gas — **it buys nothing and moves no USDC**.
-
-If you would rather not send anything, do nothing: the quotes are still real and
-the pre-flight still refuses any fill it cannot afford. Nothing breaks.
+**If it fails twice, stop and message the backend developer.** Do not try a
+different amount.
 
 ### If an asset shows NONE
 
