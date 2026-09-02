@@ -13,14 +13,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildHoldings, summariseValue, countProtection, nextExpiry, isDownsideProtection,
+  annotateHoldings, POSITION_STATUSES, PENDING_STATUSES,
 } from '../src/api/portfolioView.js';
 
 const put = (over = {}) => ({
-  id: 'p1', option_type: 'put', strike: 2300, status: 'active',
+  id: 'p1', asset: 'ETH', option_type: 'put', strike: 2300, status: 'active',
   expiry: '2026-09-10T08:00:00.000Z', ...over,
 });
 const call = (over = {}) => ({
-  id: 'c1', option_type: 'call', strike: 2680, status: 'active',
+  id: 'c1', asset: 'ETH', option_type: 'call', strike: 2680, status: 'active',
   expiry: '2026-09-04T08:00:00.000Z', ...over,
 });
 
@@ -166,4 +167,167 @@ test('a pending position does not set nextExpiry', () => {
 test('nextExpiry is null when nothing is active', () => {
   assert.equal(nextExpiry([put({ status: 'settled' })], allVerified), null);
   assert.equal(nextExpiry([], allVerified), null);
+});
+
+// --- pending, against the schema rather than against today's data ----------
+//
+// `pending` and `pending_verification` do not occur in the demo database at
+// all - the live distribution is failed/active/expired_worthless - which is how
+// they came to be counted in neither total. These tests enumerate the CHECK
+// constraint, so a status can never again be missed for being absent today.
+
+test('every status in the constraint lands in exactly one bucket', () => {
+  for (const status of POSITION_STATUSES) {
+    const c = countProtection([put({ status })], allVerified);
+
+    const expected = status === 'active' ? 'active'
+      : PENDING_STATUSES.includes(status) ? 'pending' : 'neither';
+
+    assert.equal(c.activeProtectionCount, expected === 'active' ? 1 : 0, `${status} active count`);
+    assert.equal(c.pendingProtectionCount, expected === 'pending' ? 1 : 0, `${status} pending count`);
+  }
+});
+
+test('pending is counted as pending, not dropped', () => {
+  const c = countProtection([put({ status: 'pending' })], allVerified);
+  assert.equal(c.pendingProtectionCount, 1);
+  assert.equal(c.activeProtectionCount, 0);
+});
+
+test('pending_verification is counted as pending, not dropped', () => {
+  // Broadcast, outcome unknown. The user has been charged and there is no
+  // confirmed position - the definition of pending.
+  const c = countProtection([put({ status: 'pending_verification' })], allVerified);
+  assert.equal(c.pendingProtectionCount, 1);
+  assert.equal(c.activeProtectionCount, 0);
+});
+
+test('needs_review is in neither count', () => {
+  // Past expiry and merely unreconciled. Counting it as pending would suggest
+  // something is still coming.
+  const c = countProtection([put({ status: 'needs_review' })], allVerified);
+  assert.equal(c.activeProtectionCount, 0);
+  assert.equal(c.pendingProtectionCount, 0);
+});
+
+test('a pending CALL is in neither count', () => {
+  for (const status of PENDING_STATUSES) {
+    const c = countProtection([call({ status })], allVerified);
+    assert.equal(c.pendingProtectionCount, 0, `${status}: a call is not protection`);
+  }
+});
+
+test('a pending position does not set nextExpiry either', () => {
+  for (const status of PENDING_STATUSES) {
+    assert.equal(
+      nextExpiry([put({ status, expiry: '2026-09-01T08:00:00.000Z' })], allVerified),
+      null,
+      `${status} must not report an expiry for protection that does not exist yet`,
+    );
+  }
+});
+
+// --- one action per holding row --------------------------------------------
+
+const OFFERED = ['ETH', 'BTC', 'SOL', 'BNB', 'AVAX', 'XRP'];
+const annotate = (holdings, positions, verified = allVerified) =>
+  annotateHoldings(holdings, positions, verified, OFFERED);
+
+test('USDC is never protectable', () => {
+  // The spending balance, not an exposure. A Buy Protection button on a
+  // stablecoin is nonsense.
+  const [h] = annotate(buildHoldings([{ asset: 'USDC', amount: 250 }], {}), []);
+  assert.equal(h.protectable, false);
+  assert.equal(h.hasActiveProtection, false);
+  assert.equal(h.protectionPositionId, null);
+});
+
+test('an asset we cannot quote is not protectable', () => {
+  // Otherwise the row gets a button leading to a page that 404s.
+  const [h] = annotate(buildHoldings([{ asset: 'DOGE', amount: 100 }], { DOGE: 0.1 }), []);
+  assert.equal(h.protectable, false);
+});
+
+test('every offered asset we hold is protectable', () => {
+  const holdings = buildHoldings(
+    OFFERED.map((asset) => ({ asset, amount: 1 })),
+    Object.fromEntries(OFFERED.map((a) => [a, 100])),
+  );
+  for (const h of annotate(holdings, [])) {
+    assert.equal(h.protectable, true, `${h.asset} should be protectable`);
+  }
+});
+
+test('the View target is the SOONEST-expiring active protection', () => {
+  // A user can hold several positions on one asset and the row has one button.
+  // Opening the newest would show a position expiring in a month while another
+  // expires tomorrow.
+  const positions = [
+    put({ id: 'far', expiry: '2026-10-01T08:00:00.000Z' }),
+    put({ id: 'soon', expiry: '2026-09-04T08:00:00.000Z' }),
+    put({ id: 'mid', expiry: '2026-09-20T08:00:00.000Z' }),
+  ];
+  const [h] = annotate(buildHoldings([{ asset: 'ETH', amount: 1 }], { ETH: 2500 }), positions);
+
+  assert.equal(h.hasActiveProtection, true);
+  assert.equal(h.protectionPositionId, 'soon');
+});
+
+test('protection on another asset does not light up this row', () => {
+  const positions = [put({ id: 'eth1', asset: 'ETH' })];
+  const [h] = annotate(buildHoldings([{ asset: 'BTC', amount: 0.01 }], { BTC: 70000 }), positions);
+
+  assert.equal(h.hasActiveProtection, false);
+  assert.equal(h.protectionPositionId, null);
+});
+
+test('a CALL does not count as protection on the row', () => {
+  const positions = [call({ id: 'c1' })];
+  const [h] = annotate(buildHoldings([{ asset: 'ETH', amount: 1 }], { ETH: 2500 }), positions);
+
+  assert.equal(h.hasActiveProtection, false);
+  assert.equal(h.protectionPositionId, null);
+});
+
+test('PENDING protection gives no View target', () => {
+  // A View button opening an unfilled position invites the user to read it as
+  // cover they have. Pending is surfaced as a count, which is not a promise.
+  for (const status of [...PENDING_STATUSES, 'active']) {
+    const verified = status === 'active' ? noneVerified : allVerified;
+    const positions = [put({ id: 'p', status })];
+    const [h] = annotate(
+      buildHoldings([{ asset: 'ETH', amount: 1 }], { ETH: 2500 }), positions, verified,
+    );
+
+    assert.equal(h.hasActiveProtection, false, `${status} must not read as active`);
+    assert.equal(h.protectionPositionId, null, `${status} must not be a View target`);
+  }
+});
+
+test('a settled position is not a View target', () => {
+  const positions = [put({ id: 'old', status: 'settled' })];
+  const [h] = annotate(buildHoldings([{ asset: 'ETH', amount: 1 }], { ETH: 2500 }), positions);
+  assert.equal(h.protectionPositionId, null);
+});
+
+test('annotating preserves the pricing fields untouched', () => {
+  const base = buildHoldings([{ asset: 'AVAX', amount: 40 }], { AVAX: null });
+  const [h] = annotate(base, []);
+  assert.equal(h.priceUsdc, null);
+  assert.equal(h.valueUsdc, null, 'an unpriced holding stays unpriced');
+  assert.equal(h.amount, 40);
+});
+
+test('the View target is stable when two positions share an expiry', () => {
+  // The demo holds two ETH puts expiring in the same hour. Without an explicit
+  // tiebreak the answer would be whatever order the database returned.
+  const same = '2026-09-03T08:00:00.000Z';
+  const forward = [put({ id: 'bbb', expiry: same }), put({ id: 'aaa', expiry: same })];
+  const reversed = [...forward].reverse();
+
+  const pick = (ps) => annotate(buildHoldings([{ asset: 'ETH', amount: 1 }], { ETH: 2500 }), ps)[0]
+    .protectionPositionId;
+
+  assert.equal(pick(forward), 'aaa');
+  assert.equal(pick(reversed), 'aaa', 'the answer must not depend on row order');
 });

@@ -187,3 +187,32 @@ export function timelineView(events = []) {
       at: e.created_at,
     }));
 }
+
+/**
+ * A money field that may be absent: null stays null, never 0.
+ *
+ * ---------------------------------------------------------------------------
+ * ABSENT IS NOT ZERO. Third instance of the same mistake.
+ * ---------------------------------------------------------------------------
+ *
+ *   a call's protection floor    rendered "$2,680 floor" for a threshold
+ *   the CoinGecko overview       an omitted coin rendered as $0 market cap
+ *   premiumPaidUsdc              a missing premium rendered "$0.00", which
+ *                                says the protection was free
+ *
+ * Each was a null converted to a number so that something would render. The
+ * rendering is the interface's problem: given null it can say "not charged",
+ * "unavailable", or nothing at all. Given 0 it can only say zero, and zero is a
+ * claim - about a floor, a market cap, or a price the user paid.
+ *
+ * Kept as a named function rather than a ternary at each call site so the rule
+ * has somewhere to live and a test can hold it.
+ *
+ * @param {number|string|null|undefined} value
+ * @returns {number|null}
+ */
+export function usdcOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}

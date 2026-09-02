@@ -31,16 +31,34 @@
 // relabel a USDT price as USDC to make a page look consistent.
 
 /**
- * The fixed, reviewed mapping. Four assets, matching the ones we can protect.
+ * The fixed, reviewed mapping. Six assets, matching the ones we can protect.
  *
  * Deliberately a constant rather than something derived: a market-data symbol
  * that silently changed would point a chart at the wrong asset.
+ *
+ * ---------------------------------------------------------------------------
+ * TWO OF THESE IDS DO NOT MATCH THEIR TICKER, WHICH IS WHY THEY WERE CHECKED.
+ * ---------------------------------------------------------------------------
+ *
+ * CoinGecko calls Avalanche `avalanche-2` and XRP `ripple`. Guessing `avalanche`
+ * or `xrp` returns nothing, and an empty overview would have rendered as a coin
+ * with no market cap rather than as an error. Both were verified against the
+ * live API on 3 Sep 2026 - id, symbol and name together, so a right-looking id
+ * for the wrong coin could not pass:
+ *
+ *   avalanche-2  AVAX  Avalanche   $7.15   mcap 3,086,658,185
+ *   ripple       XRP   XRP         $1.33   mcap 83,720,595,246
+ *
+ * Both Binance pairs were confirmed TRADING via exchangeInfo, with klines and
+ * depth returning real data. Verify the same way before adding a seventh.
  */
 export const MARKET_ASSETS = Object.freeze([
-  { symbol: 'ETH', name: 'Ethereum', coingeckoId: 'ethereum',    binancePair: 'ETHUSDT' },
-  { symbol: 'BTC', name: 'Bitcoin',  coingeckoId: 'bitcoin',     binancePair: 'BTCUSDT' },
-  { symbol: 'SOL', name: 'Solana',   coingeckoId: 'solana',      binancePair: 'SOLUSDT' },
-  { symbol: 'BNB', name: 'BNB',      coingeckoId: 'binancecoin', binancePair: 'BNBUSDT' },
+  { symbol: 'ETH',  name: 'Ethereum',  coingeckoId: 'ethereum',    binancePair: 'ETHUSDT'  },
+  { symbol: 'BTC',  name: 'Bitcoin',   coingeckoId: 'bitcoin',     binancePair: 'BTCUSDT'  },
+  { symbol: 'SOL',  name: 'Solana',    coingeckoId: 'solana',      binancePair: 'SOLUSDT'  },
+  { symbol: 'BNB',  name: 'BNB',       coingeckoId: 'binancecoin', binancePair: 'BNBUSDT'  },
+  { symbol: 'AVAX', name: 'Avalanche', coingeckoId: 'avalanche-2', binancePair: 'AVAXUSDT' },
+  { symbol: 'XRP',  name: 'XRP',       coingeckoId: 'ripple',      binancePair: 'XRPUSDT'  },
 ]);
 
 /**

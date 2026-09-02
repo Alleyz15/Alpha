@@ -92,17 +92,25 @@ async function getJson(url, { provider, headers = {} } = {}) {
 /**
  * Overview for all four assets, in ONE CoinGecko request.
  *
- * One call rather than four keeps us far inside the demo tier's ~30/minute,
- * and means four assets either all appear or all fail together - which is
- * easier to render honestly than a page half-populated.
+ * One call rather than one per asset keeps us far inside the demo tier's
+ * ~30/minute, and means the assets either all appear or all fail together -
+ * which is easier to render honestly than a page half-populated.
  *
  * @returns {Promise<{assets:object[], source:string, updatedAt:string}>}
  */
 export async function fetchOverview() {
   return cached('overview', TTL.OVERVIEW_MS, async () => {
     const ids = MARKET_ASSETS.map((a) => a.coingeckoId).join(',');
+
+    // per_page COUNTS THE ASSETS, and must never be a literal.
+    //
+    // It was hardcoded to 4 while the list held four. Adding AVAX and XRP made
+    // it six ids into a four-row page, and with order=market_cap_desc the
+    // provider returned the four largest and dropped SOL and AVAX. They came
+    // back as coins with every field null - which is exactly what the graceful
+    // null-fill below is for, so nothing errored and nothing looked wrong.
     const url = `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${ids}` +
-      '&order=market_cap_desc&per_page=4&page=1&sparkline=false';
+      `&order=market_cap_desc&per_page=${MARKET_ASSETS.length}&page=1&sparkline=false`;
 
     // The key is optional: without it the public tier still answers, with a
     // lower limit. Server-side only - it must never be VITE_ prefixed, because
@@ -122,6 +130,20 @@ export async function fetchOverview() {
 
     // Our order, not the provider's, and an asset the provider omitted comes
     // back with null fields rather than vanishing from the list.
+    //
+    // That is deliberate and it is also how the per_page bug above stayed
+    // invisible: degrading gracefully means degrading QUIETLY. So the omission
+    // is logged - the response still renders, but the gap leaves a trace
+    // somebody can find.
+    const missing = MARKET_ASSETS.filter((a) => !byId.has(a.coingeckoId)).map((a) => a.symbol);
+    if (missing.length > 0) {
+      console.warn(
+        `[marketdata] CoinGecko returned no row for ${missing.join(', ')} - ` +
+        `asked for ${MARKET_ASSETS.length} ids, got ${raw.length}. ` +
+        'These will render with null fields.',
+      );
+    }
+
     const assets = MARKET_ASSETS.map((asset) =>
       normaliseOverview(byId.get(asset.coingeckoId) ?? {}, asset, updatedAt));
 

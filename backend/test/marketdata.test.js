@@ -21,8 +21,18 @@ test('symbols resolve case-insensitively, and unknown ones return null', () => {
   assert.equal(resolveMarket(undefined), null);
 });
 
-test('the four assets match the four we can protect', () => {
-  assert.deepEqual(MARKET_ASSETS.map((a) => a.symbol), ['ETH', 'BTC', 'SOL', 'BNB']);
+test('the six assets match the six we can protect', () => {
+  assert.deepEqual(MARKET_ASSETS.map((a) => a.symbol), ['ETH', 'BTC', 'SOL', 'BNB', 'AVAX', 'XRP']);
+});
+
+test('no two assets share a CoinGecko id or a Binance pair', () => {
+  // AVAX is `avalanche-2` and XRP is `ripple` - neither matches its ticker, so
+  // a copy-paste that left a duplicated id would point two coins at one price
+  // and look entirely plausible on screen.
+  const ids = MARKET_ASSETS.map((a) => a.coingeckoId);
+  const pairs = MARKET_ASSETS.map((a) => a.binancePair);
+  assert.equal(new Set(ids).size, ids.length, 'duplicate coingeckoId');
+  assert.equal(new Set(pairs).size, pairs.length, 'duplicate binancePair');
 });
 
 test('ranges map to intervals, and an unknown range is refused not defaulted', () => {
@@ -149,4 +159,47 @@ test('a successful load is cached and not repeated', async () => {
   assert.equal(await cached('k', 10_000, load), 1);
   assert.equal(await cached('k', 10_000, load), 1);
   assert.equal(calls, 1, 'the second call was served from cache');
+});
+
+// --- the request must count the assets, not assume them --------------------
+
+test('the overview asks for as many rows as there are assets', async (t) => {
+  // per_page was hardcoded to 4 while the list held four. Adding AVAX and XRP
+  // made it six ids into a four-row page, and with order=market_cap_desc the
+  // provider returned the four largest and silently dropped SOL and AVAX. They
+  // rendered as coins with every field null, because the graceful null-fill is
+  // indistinguishable from a provider that genuinely had no data.
+  //
+  // This asserts the request, not the response: a page too small to hold the
+  // list is the bug, and it is invisible in the output.
+  const { MARKET_ASSETS: assets } = await import('../src/marketdata/assets.js');
+  const { fetchOverview } = await import('../src/marketdata/providers.js');
+
+  let seen = null;
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    seen = String(url);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => assets.map((a) => ({
+        id: a.coingeckoId, current_price: 1, market_cap: 1, total_volume: 1,
+      })),
+    };
+  };
+  t.after(() => { globalThis.fetch = real; });
+
+  const out = await fetchOverview();
+
+  assert.ok(seen, 'no request was made');
+  assert.match(seen, new RegExp(`per_page=${assets.length}(&|$)`),
+    `per_page must equal the asset count (${assets.length}), got: ${seen}`);
+
+  for (const a of assets) {
+    assert.ok(seen.includes(a.coingeckoId), `${a.symbol} was not requested`);
+  }
+
+  // And every asset came back populated rather than null-filled.
+  assert.equal(out.assets.length, assets.length);
+  assert.equal(out.assets.filter((a) => a.priceUsd === null).length, 0);
 });

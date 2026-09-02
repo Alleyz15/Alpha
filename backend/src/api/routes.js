@@ -14,10 +14,14 @@ import { debitBalance, listBalanceEventsForPositions } from '../db/balances.js';
 import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
-import { strikeView, paymentView, sumPayments, executionView, timelineView } from './positionView.js';
-import { buildHoldings, summariseValue, countProtection, nextExpiry } from './portfolioView.js';
+import {
+  strikeView, paymentView, sumPayments, executionView, timelineView, usdcOrNull,
+} from './positionView.js';
+import {
+  buildHoldings, summariseValue, countProtection, nextExpiry, annotateHoldings,
+} from './portfolioView.js';
 import { getSpotPrices } from '../thetanuts/market.js';
-import { buildMarketContext } from './marketContext.js';
+import { buildMarketContext, OFFERED_ASSETS } from './marketContext.js';
 import { resolveMarket, resolveRange, MARKET_ASSETS, RANGE_KEYS } from '../marketdata/assets.js';
 import { fetchOverview, fetchCandles, fetchDepth } from '../marketdata/providers.js';
 
@@ -287,7 +291,14 @@ export async function getPositions() {
       ...strikeView(p.option_type, p.strike),
 
       expiry: p.expiry,
-      premiumPaidUsdc: p.premium_paid === null ? 0 : Number(p.premium_paid),
+      // NULL when nothing was paid, never 0.
+      //
+      // A missing premium rendered as $0.00 says the protection was free. The
+      // frontend takes the copy from paymentStatus instead: 'none' has nothing
+      // to show, 'held' means charged but not filled, 'paid' means filled.
+      // Absent is not zero - the same rule as an unpriced holding in the
+      // portfolio and a call's null protection floor.
+      premiumPaidUsdc: usdcOrNull(p.premium_paid),
       status: p.status,
       payoutUsdc: p.payout === null ? null : Number(p.payout),
       settlementPriceUsdc: p.settlement_price === null ? null : Number(p.settlement_price),
@@ -552,12 +563,19 @@ export async function getPortfolio() {
   // incomplete, not absent.
   const prices = await getSpotPrices(priced);
 
-  const holdings = buildHoldings(balances, prices);
-
   // verifiedOnChain comes from the event trail, never from tx_hash. One query
   // for every position rather than one per row.
   const eventsByPosition = await listEventsForPositions(positions.map((p) => p.id));
   const verified = (p) => executionView(p, eventsByPosition.get(p.id) ?? []).verifiedOnChain;
+
+  // protectable comes from the offered set rather than being restated here.
+  // Two lists of assets drift apart; one does not.
+  const holdings = annotateHoldings(
+    buildHoldings(balances, prices),
+    positions,
+    verified,
+    OFFERED_ASSETS.map((a) => a.symbol),
+  );
 
   return {
     ...summariseValue(holdings),
@@ -610,7 +628,8 @@ export async function getPositionDetail(positionId) {
     expiry: position.expiry,
     status: position.status,
 
-    premiumPaidUsdc: position.premium_paid === null ? 0 : Number(position.premium_paid),
+    // Null, never 0 - see the note on getPositions.
+    premiumPaidUsdc: usdcOrNull(position.premium_paid),
     payoutUsdc: position.payout === null ? null : Number(position.payout),
     settlementPriceUsdc: position.settlement_price === null ? null : Number(position.settlement_price),
 

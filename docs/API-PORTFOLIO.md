@@ -18,13 +18,18 @@ user is resolved server-side; the client never sends an identifier.
   "nextExpiry": "2026-09-03T08:00:00+00:00",
 
   "holdings": [
-    { "asset": "AVAX", "amount": 40,         "priceUsdc": 7.17,     "valueUsdc": 286.6 },
-    { "asset": "BNB",  "amount": 1.5,        "priceUsdc": 688.49,   "valueUsdc": 1032.728251 },
-    { "asset": "BTC",  "amount": 0.01,       "priceUsdc": 77440.36, "valueUsdc": 774.4036 },
-    { "asset": "ETH",  "amount": 0.4,        "priceUsdc": 2397.77,  "valueUsdc": 959.108 },
-    { "asset": "SOL",  "amount": 10,         "priceUsdc": 99.63,    "valueUsdc": 996.253 },
-    { "asset": "USDC", "amount": 249.923385, "priceUsdc": 1,        "valueUsdc": 249.923385 },
-    { "asset": "XRP",  "amount": 300,        "priceUsdc": 1.34,     "valueUsdc": 402.24 }
+    {
+      "asset": "ETH", "amount": 0.4, "priceUsdc": 2380.2, "valueUsdc": 952.08,
+      "protectable": true,
+      "hasActiveProtection": true,
+      "protectionPositionId": "48104f22-..."
+    },
+    {
+      "asset": "USDC", "amount": 249.923385, "priceUsdc": 1, "valueUsdc": 249.923385,
+      "protectable": false,
+      "hasActiveProtection": false,
+      "protectionPositionId": null
+    }
   ],
 
   "simulated": true
@@ -71,10 +76,21 @@ never `0`. Zero is a value.
 | `activeProtectionCount` | Downside protection that is **filled and confirmed on chain** |
 | `pendingProtectionCount` | Requested and paid for, **not yet filled** |
 
-`active` requires a confirmed event, exactly like `verifiedOnChain` on
-`/api/positions` — not a transaction hash, and not a row existing. Fills are run
-by a person (`reality.fill === 'operator'`), so a position can sit pending for
-hours. That is normal, not an error.
+`activeProtectionCount` requires **status `active` and a confirmed event**,
+exactly like `verifiedOnChain` on `/api/positions` — not a transaction hash, and
+not a row existing. Fills are run by a person (`reality.fill === 'operator'`),
+so a position can sit pending for hours. That is normal, not an error.
+
+`pendingProtectionCount` is **status `pending` or `pending_verification`**, plus
+the defensive case of an `active` row carrying no confirmed event. Neither
+pending status occurs in the demo data, which is how they were briefly counted
+nowhere at all; the tests now enumerate the schema's seven statuses rather than
+the three the database happens to hold.
+
+Everything else — `failed`, `settled`, `expired_worthless`, `needs_review` — is
+in **neither** count. Those are over. `needs_review` in particular is past
+expiry and merely unreconciled, so counting it as pending would suggest
+something is still coming.
 
 **Adding the two together would let the interface claim protection the user does
 not have.** That is the one claim the whole product rests on. If both are
@@ -98,7 +114,29 @@ active"*, never as a blank or missing date.
 > Right now the vault calls and the active puts happen to share an expiry, so
 > including calls would give the same answer today and a wrong one tomorrow.
 
-### `holdings[]`
+### `holdings[]` — one row, one action
+
+Three fields decide what the row's button does, so every surface makes the same
+choice rather than each picking "the first in the array":
+
+| Field | Use |
+|---|---|
+| `protectable` | Show **Buy Protection**. False for USDC and for anything we cannot quote |
+| `hasActiveProtection` | There is confirmed, live downside protection on this asset |
+| `protectionPositionId` | The position **View** opens, or `null` |
+
+`protectionPositionId` is the **soonest-expiring** active protection on that
+asset — the one the user most needs to look at, and often the one `nextExpiry`
+is already reporting. Ties break on id, so the answer never depends on the order
+rows came back in.
+
+**It is `null` whenever `hasActiveProtection` is false, including when
+protection is merely pending.** A View button opening an unfilled position
+invites the user to read it as cover they have. Pending is surfaced by
+`pendingProtectionCount`, which is a count and not a promise.
+
+`protectable: false` on USDC also keeps "Buy Protection" off a stablecoin — it
+is the spending balance, not an exposure.
 
 Every asset with a non-zero balance, including USDC. USDC is priced at exactly
 1 — it is part of what the portfolio is worth, and it can never be the reason a
@@ -118,6 +156,28 @@ wanted later it needs a daily snapshot table first, and then it is honest.
 
 **`protectionCoveragePct`** and **`estimatedPayoutUsdc`** were also left out of
 this pass; neither is blocked, they are just not built.
+
+---
+
+## Changed: `premiumPaidUsdc` is now `null`, not `0`
+
+On both `GET /api/positions` and `GET /api/positions/:positionId`.
+
+A missing premium rendered as `$0.00` says the protection was free. Take the
+copy from `paymentStatus` instead:
+
+| `paymentStatus` | Reasonable copy |
+|---|---|
+| `none` | nothing was charged |
+| `held` | charged, not yet bought |
+| `paid` | show the premium |
+| `refunded` | charged and returned |
+
+**A real `0` is still `0`.** Only absence became null — a recorded zero payout
+on an expired position is a fact, not a gap.
+
+Live today, five of eight positions return `null` here; all five previously read
+as `$0.00`.
 
 ---
 

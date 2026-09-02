@@ -49,7 +49,7 @@ differences between the three are normal and must not be smoothed.
 
 ## `GET /api/assets/overview`
 
-All four assets in one request. Cached 45 seconds server-side.
+All six assets in one request. Cached 45 seconds server-side.
 
 ```json
 {
@@ -80,8 +80,14 @@ value is `null`, never `0` — zero reads as a fact ("market cap: nothing"), nul
 renders as "unavailable". Guard every formatter; `Intl.NumberFormat` turns
 `null` into `0`, which is how the dashboard came to show `$0.00`.
 
-All four assets always appear, in a fixed order, even if the provider omitted
+All six assets always appear, in a fixed order, even if the provider omitted
 one — that asset simply has null fields.
+
+That graceful fill hid a real bug once: the CoinGecko request had `per_page`
+hardcoded to 4, so when the list grew to six the two smallest by market cap came
+back missing and rendered as coins with no data rather than as an error. An
+omission is now logged server-side, and a test asserts the request asks for as
+many rows as there are assets.
 
 ---
 
