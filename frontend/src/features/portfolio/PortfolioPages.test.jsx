@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import PortfolioPage from './PortfolioPage.jsx';
 import ProtectionDetailsPage from './ProtectionDetailsPage.jsx';
+import DashboardPage from '../dashboard/DashboardPage.jsx';
 
 const portfolio = {
   totalValueUsdc: 1830,
@@ -37,14 +38,37 @@ const protectedPosition = {
 describe('Phase 6 pages', () => {
   it('shows one truthful action per holding and excludes cash from protection rows', async () => {
     const user = userEvent.setup();
+    const secondProtection = {
+      ...protectedPosition,
+      positionId: 'put-2',
+      protectionFloorUsdc: 69_000,
+    };
+    const upsidePosition = {
+      ...protectedPosition,
+      positionId: 'call-1',
+      role: 'upside',
+      optionType: 'call',
+      protectionFloorUsdc: null,
+      upsideThresholdUsdc: 80_000,
+    };
+    const failedPosition = {
+      ...protectedPosition,
+      positionId: 'failed-1',
+      status: 'failed',
+      paymentStatus: 'refunded',
+      verifiedOnChain: false,
+    };
+    const positions = [protectedPosition, secondProtection, upsidePosition, failedPosition];
     const apiClient = {
       getPortfolio: vi.fn().mockResolvedValue(portfolio),
-      getPositions: vi.fn().mockResolvedValue({ positions: [protectedPosition] }),
+      getPositions: vi.fn().mockResolvedValue({ positions }),
+      getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
     };
     render(
       <MemoryRouter initialEntries={['/portfolio']}>
         <Routes>
           <Route path="/portfolio" element={<PortfolioPage apiClient={apiClient} />} />
+          <Route path="/positions/:symbol" element={<DashboardPage apiClient={apiClient} assetFilter="BTC" />} />
           <Route path="/protection/:positionId" element={<div>Opened protection</div>} />
           <Route path="/protect/:symbol" element={<div>Opened checkout</div>} />
         </Routes>
@@ -55,11 +79,15 @@ describe('Phase 6 pages', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(3);
     expect(within(table).queryByText('USDC')).not.toBeInTheDocument();
     expect(within(table).getAllByRole('button')).toHaveLength(2);
-    expect(within(table).getByRole('button', { name: /View/ })).toBeVisible();
+    expect(within(table).getByText('Protected · 2 positions')).toBeVisible();
+    expect(within(table).getByRole('button', { name: /View positions/ })).toBeVisible();
     expect(within(table).getByRole('button', { name: 'Buy protection' })).toBeVisible();
+    expect(screen.getByText(/Failed, refunded, and ended requests are intentionally excluded/)).toBeVisible();
 
-    await user.click(within(table).getByRole('button', { name: /View/ }));
-    expect(screen.getByText('Opened protection')).toBeVisible();
+    await user.click(within(table).getByRole('button', { name: /View positions/ }));
+    expect(await screen.findByRole('heading', { name: 'Recorded positions' })).toBeVisible();
+    expect(screen.getByText('3 positions')).toBeVisible();
+    expect(screen.queryByText('Failed')).not.toBeInTheDocument();
   });
 
   it('renders the requested contract and order sections without payout or PnL cards', async () => {

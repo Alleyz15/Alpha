@@ -23,8 +23,24 @@ describe('portfolio view model', () => {
       [{ positionId: 'put-1', asset: 'BTC', role: 'protection', status: 'active', verifiedOnChain: false, expiry: '2026-09-05T00:00:00Z' }],
     );
 
-    expect(row.protectionLabel).toBe('Being set up');
+    expect(row.protectionLabel).toBe('Being set up · 1 position');
     expect(row.positionId).toBe('put-1');
+  });
+
+  it('counts confirmed protection separately from all current asset positions and excludes failed requests', () => {
+    const [row] = buildPortfolioRows(
+      [{ asset: 'ETH', amount: 0.4, priceUsdc: 2400, valueUsdc: 960 }],
+      [
+        { positionId: 'put-1', asset: 'ETH', role: 'protection', status: 'active', verifiedOnChain: true, expiry: '2026-09-05T00:00:00Z' },
+        { positionId: 'put-2', asset: 'ETH', role: 'protection', status: 'active', verifiedOnChain: true, expiry: '2026-09-06T00:00:00Z' },
+        { positionId: 'call-1', asset: 'ETH', role: 'upside', status: 'active', verifiedOnChain: true },
+        { positionId: 'call-2', asset: 'ETH', role: 'upside', status: 'active', verifiedOnChain: true },
+        { positionId: 'failed-1', asset: 'ETH', role: 'protection', status: 'failed', paymentStatus: 'refunded', verifiedOnChain: false },
+      ],
+    );
+
+    expect(row.protectionLabel).toBe('Protected · 2 positions');
+    expect(row.currentPositionCount).toBe(4);
   });
 
   it('preserves unavailable prices instead of displaying zero', () => {

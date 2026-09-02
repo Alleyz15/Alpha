@@ -2,6 +2,7 @@ import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
+import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import HomePage from './features/home/HomePage.jsx';
 import PortfolioPage from './features/portfolio/PortfolioPage.jsx';
 import ProtectionDetailsPage from './features/portfolio/ProtectionDetailsPage.jsx';
@@ -51,6 +52,11 @@ function CoinDetailRoute() {
   );
 }
 
+function AssetPositionsRoute() {
+  const { symbol = '' } = useParams();
+  return <DashboardPage assetFilter={decodeURIComponent(symbol).toUpperCase()} />;
+}
+
 function NotFoundPage() {
   return (
     <main className="protection-flow">
@@ -73,6 +79,7 @@ export default function App() {
       <Route path="/dashboard" element={<HomePage />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/portfolio" element={<PortfolioPage />} />
+      <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
       <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
       <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
       <Route path="/protect/:symbol" element={<ProtectionRoute />} />

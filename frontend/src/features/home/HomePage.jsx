@@ -152,7 +152,7 @@ export default function HomePage({ apiClient = liveApi }) {
           <div className="home-section-heading home-section-heading--inline">
             <div>
               <h2 id="home-trending-title">Trending now</h2>
-              <p>Alpha’s four market assets, ranked by absolute 24-hour movement.</p>
+              <p>Alpha’s supported assets, ranked by absolute 24-hour movement.</p>
             </div>
             <span>{updateLabel}</span>
           </div>
@@ -182,7 +182,7 @@ export default function HomePage({ apiClient = liveApi }) {
           <div className="home-section-heading">
             <div>
               <span className="home-eyebrow">Market overview</span>
-              <h2>Top cryptocurrencies</h2>
+              <h2>Supported assets</h2>
               <p>Prices and market caps are aggregated USD data. Seven-day trends use Binance USDT candles.</p>
             </div>
             <StatusBadge tone={market.state === 'ready' ? 'live' : 'neutral'}>

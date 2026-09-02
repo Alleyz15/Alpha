@@ -6,7 +6,7 @@ import AppHeader from '../../components/AppHeader.jsx';
 import RealityDisclosure from '../../components/RealityDisclosure.jsx';
 import DashboardScreen from '../../screens/DashboardScreen.jsx';
 
-export default function DashboardPage({ apiClient = liveApi }) {
+export default function DashboardPage({ apiClient = liveApi, assetFilter = null }) {
   const navigate = useNavigate();
   const [demoContext, setDemoContext] = useState(null);
   const [positions, setPositions] = useState([]);
@@ -23,13 +23,19 @@ export default function DashboardPage({ apiClient = liveApi }) {
     setDemoContext(contextResult.status === 'fulfilled' ? contextResult.value : null);
 
     if (positionsResult.status === 'fulfilled') {
-      setPositions(positionsResult.value.positions.map(toPositionViewModel));
+      setPositions(positionsResult.value.positions
+        .filter((position) => !assetFilter || (
+          position.asset === assetFilter
+          && ['active', 'pending', 'pending_fill', 'pending_verification'].includes(position.status)
+          && position.paymentStatus !== 'refunded'
+        ))
+        .map(toPositionViewModel));
       setPositionsState('ready');
     } else {
       setPositions([]);
       setPositionsState('error');
     }
-  }, [apiClient]);
+  }, [apiClient, assetFilter]);
 
   useEffect(() => {
     load();
