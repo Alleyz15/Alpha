@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { listExpiries, selectProtectionTiers } from './selection.js';
 import { sizePosition } from './sizing.js';
+import { findFillableSize } from './fillableSize.js';
 import { getSpotPrice } from './market.js';
 import { getBalance } from '../db/balances.js';
 import { client } from './client.js';
@@ -109,10 +110,26 @@ export class QuoteRefusedError extends Error {
  * @param {string} [opts.tierId]
  * @returns {object} tier body, with the signed order attached non-enumerably
  */
-function buildTier(chosen, selection, units, { tierId } = {}) {
+async function buildTier(chosen, selection, units, { tierId, deps } = {}) {
   // depth: clamp. No premium cap here - see the note on buildQuote. boundBy
   // can only be 'requested' or 'collateral' in a quote.
-  const size = sizePosition(chosen.order, { units });
+  //
+  // The size is not merely computed - it is CONFIRMED against the chain before
+  // being quoted. Some orders reject sizes that arithmetic says are fine, with
+  // a custom error whose rule we could not establish (see fillableSize.js), so
+  // the sizes are probed by callStatic and the largest that passes is used.
+  //
+  // Doing this at QUOTE time rather than at fill time is the point: whatever
+  // the user is shown is a size the chain has already accepted, and any
+  // reduction is visible before they confirm rather than after.
+  const found = await findFillableSize(chosen.order, { units }, deps);
+
+  // No size at or below what was asked will fill. Refuse the tier rather than
+  // quoting the computed size - that size has just been measured as failing,
+  // and quoting it would move the revert to after the user confirms.
+  if (!found) return null;
+
+  const size = found.size;
 
   const { spot } = selection;
   const unprotectedUnits = Math.max(0, units - size.contracts);
@@ -142,6 +159,24 @@ function buildTier(chosen, selection, units, { tierId } = {}) {
       contractsRaw: size.contractsRaw.toString(),
       protectedUnits: size.protectedUnits,
       boundBy: size.boundBy,
+
+      // ------------------------------------------------------------------
+      // Set when the chain would not accept the size that was asked for, so
+      // a smaller one is being quoted. null when nothing was reduced.
+      //
+      // The interface MUST show this. Everything else in this tier - the
+      // premium, the payout, the protected amount - already describes the
+      // reduced position, so without it the user simply sees different
+      // numbers than they asked for and no reason why. That is the silent
+      // resize this field exists to prevent.
+      // ------------------------------------------------------------------
+      adjusted: found.adjusted ? {
+        requestedUnits: found.requestedUnits,
+        actualUnits: found.actualUnits,
+        statement:
+          `The market would not fill ${found.requestedUnits} at this floor, so ` +
+          `this covers ${found.actualUnits} instead. You pay for what is covered.`,
+      } : null,
     },
 
     cost: {
@@ -324,7 +359,16 @@ export async function buildQuote(asset, {
 
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + validitySeconds * 1000);
-  const body = buildTier(chosen, selection, units);
+  const body = await buildTier(chosen, selection, units);
+
+  // The book would not fill any size at or below what was asked at this
+  // floor. Refusing is the honest answer; quoting a size measured as failing
+  // would move the revert to after the user confirms (BR-44).
+  if (!body) {
+    throw new QuoteRefusedError('NO_TIERS',
+      `No fillable size for ${units} ${asset} at this floor right now.`,
+      { asset, units });
+  }
 
   const quote = {
     quoteId: randomUUID(),
@@ -532,8 +576,22 @@ export async function buildQuoteSet(asset, {
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + validitySeconds * 1000);
 
-  const tiers = selection.tiers.map((chosen) =>
-    buildTier(chosen, selection, units, { tierId: randomUUID() }));
+  // Tiers are built in parallel: each probes the chain for a fillable size,
+  // and doing that serially would put three round trips in the quote path.
+  const built = await Promise.all(selection.tiers.map((chosen) =>
+    buildTier(chosen, selection, units, { tierId: randomUUID() })));
+
+  // A tier with no fillable size is dropped rather than quoted. If that
+  // leaves nothing, the asset is genuinely unavailable at this size and the
+  // caller is told so, rather than being handed an empty list.
+  const tiers = built.filter(Boolean);
+
+  if (tiers.length === 0) {
+    throw new QuoteRefusedError('NO_TIERS',
+      `No fillable size for ${units} ${asset} right now. The market would not ` +
+      'accept any size at or below that amount.',
+      { asset, units, tiersConsidered: selection.tiers.length });
+  }
 
   return {
     quoteId: randomUUID(),
