@@ -9,8 +9,12 @@
 //
 //   option.getTWAP(addr)          REVERTS on an unsettled option:
 //                                 "execution reverted: TWAP calculation ...".
-//                                 Its behaviour AFTER settlement is still
-//                                 unverified - it may work, it may not.
+//                                 VERIFIED WORKING after settlement, 2 Sep
+//                                 2026: it returned $2,421.92256872 for the
+//                                 first option this project held to expiry,
+//                                 and is what recorded that settlement. The
+//                                 note here previously said its post-settlement
+//                                 behaviour was unknown. It is now known.
 //
 //   full.settlementPrice          DEAD. getFullOptionInfo returns exactly
 //   full.settlement.              { info, buyer, seller, isExpired, isSettled,
@@ -59,7 +63,19 @@ async function realClient() {
  */
 const WINDOW = 9;
 
-/** How far past expiry to look before giving up: 40 windows ~ 12 minutes. */
+/**
+ * How far past expiry to look before giving up: 40 windows ~ 12 minutes.
+ *
+ * MEASURED TOO NARROW, 2 Sep 2026. On the first real settlement the scan came
+ * back "nothing found in 40 windows" while the oracle answered fine - so the
+ * protocol settled somewhere later than twelve minutes past expiry, and the
+ * event sources contributed nothing.
+ *
+ * Left as-is deliberately: widening it multiplies free-tier eth_getLogs calls
+ * for a source that is corroboration rather than the answer, and getTWAP is
+ * now verified to carry it. If the events are ever wanted, find out when
+ * settlement actually happens first rather than guessing a bigger number.
+ */
 const MAX_WINDOWS = 40;
 
 /**
