@@ -238,6 +238,10 @@ export function nextExpiry(positions, verified) {
  * user to read it as cover they have. Pending is surfaced by
  * pendingProtectionCount, which is a count and not a promise.
  *
+ * Same judgement as gating the BaseScan link on verifiedOnChain rather than on
+ * a transaction hash. Reviewed and kept deliberately; held by the test
+ * 'PENDING protection gives no View target'.
+ *
  * `protectable` is false for USDC - it is the spending balance, not an exposure
  * to protect, and a "Buy Protection" button on a stablecoin is nonsense. It is
  * also false for any asset we cannot actually quote, so a holding never gets a
@@ -264,6 +268,9 @@ export function annotateHoldings(holdings, positions, verified, offeredSymbols) 
       // without it the View target would be decided by the order the database
       // happened to return rows in - stable today, and silently different the
       // first time a query gains an ORDER BY.
+      //
+      // Reviewed and kept deliberately. Held by the test
+      // 'the View target is stable when two positions share an expiry'.
       .sort((a, b) => String(a.expiry).localeCompare(String(b.expiry))
         || String(a.id).localeCompare(String(b.id)));
 
