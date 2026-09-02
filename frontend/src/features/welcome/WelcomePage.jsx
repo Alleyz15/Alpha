@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { animate } from 'animejs';
+import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ShieldIcon } from '../../components/Icons.jsx';
 import Button from '../../components/ui/Button.jsx';
 import RealityBadge from '../../components/ui/RealityBadge.jsx';
@@ -8,7 +9,7 @@ import SignalGrid from './SignalGrid.jsx';
 import WelcomeJourney from './WelcomeJourney.jsx';
 import useWelcomeAnimations, { pulseMarketSnapshot } from './useWelcomeAnimations.js';
 import useWelcomeMarket from './useWelcomeMarket.js';
-import { benefits, identityStatements, realityGroups, supportedAssets } from './welcomeContent.js';
+import { benefits, identityStatements, realityGroups } from './welcomeContent.js';
 
 function scrollTo(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -42,7 +43,7 @@ function MarketSnapshot({ market, state, retry, selectedSymbol, setSelectedSymbo
   return (
     <>
       <div className="welcome-snapshot__tabs" role="tablist" aria-label="Live market assets">
-        {supportedAssets.map((asset) => (
+        {market.assets.map((asset) => (
           <button
             type="button"
             role="tab"
@@ -61,7 +62,7 @@ function MarketSnapshot({ market, state, retry, selectedSymbol, setSelectedSymbo
           <strong data-market-value>{priceMissing ? '—' : selected.priceLabel}</strong>
           <span>{priceMissing ? 'Live price temporarily unavailable' : selected.updatedAtLabel}</span>
         </div>
-        <span className="welcome-token-mark" aria-hidden="true">{selected.symbol.slice(0, 1)}</span>
+        <AssetLogo symbol={selected.symbol} name={selected.name} imageUrl={selected.image} size="large" />
       </div>
       <dl className="welcome-snapshot__facts">
         <div>
@@ -123,7 +124,7 @@ function IdentityRotator() {
   );
 }
 
-function MarketCard({ asset }) {
+function MarketCard({ asset, onProtect, onViewAsset }) {
   const unavailableMessage = asset.malformed
     ? asset.unavailableReason
     : asset.unavailableReason || 'No protection is being offered for this asset right now.';
@@ -131,7 +132,7 @@ function MarketCard({ asset }) {
   return (
     <article className="welcome-market-card">
       <header>
-        <span className="welcome-token-mark" aria-hidden="true">{asset.symbol.slice(0, 1)}</span>
+        <AssetLogo symbol={asset.symbol} name={asset.name} imageUrl={asset.image} />
         <div><h3>{asset.name}</h3><p>{asset.symbol}</p></div>
         <StatusBadge tone={asset.protectionAvailable ? 'live' : 'neutral'}>
           {asset.protectionAvailable ? 'Available' : 'Unavailable'}
@@ -143,12 +144,27 @@ function MarketCard({ asset }) {
         <div><dt>Protection</dt><dd data-market-value>{asset.availabilityLabel}</dd></div>
       </dl>
       {!asset.protectionAvailable && <p className="welcome-market-card__reason">{unavailableMessage}</p>}
-      <footer>{asset.priceLabel === '—' ? 'Live price temporarily unavailable' : asset.updatedAtLabel}</footer>
+      <footer>
+        <span>{asset.priceLabel === '—' ? 'Live price temporarily unavailable' : asset.updatedAtLabel}</span>
+        <div className="welcome-market-card__actions">
+          <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={() => onViewAsset(asset.symbol)}>
+            Market details
+          </button>
+          <button
+            className="alpha-button alpha-button--ghost alpha-button--small"
+            type="button"
+            disabled={!asset.protectionAvailable || asset.priceLabel === '—'}
+            onClick={() => onProtect(asset.symbol)}
+          >
+            Protect {asset.symbol}
+          </button>
+        </div>
+      </footer>
     </article>
   );
 }
 
-function WelcomeHeader() {
+function WelcomeHeader({ onDashboard }) {
   return (
     <header className="welcome-header">
       <a className="welcome-brand" href="/" aria-label="Alpha home">
@@ -161,16 +177,16 @@ function WelcomeHeader() {
         <a href="#live-market">Live market</a>
         <a href="#product-reality">Product reality</a>
       </nav>
-      <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={() => scrollTo('live-market')}>
-        See live availability
+      <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onDashboard}>
+        My protection
       </button>
     </header>
   );
 }
 
-export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) {
+export default function WelcomePage({ apiClient, marketPollInterval = 30_000, onProtect = () => {}, onViewAsset = () => {}, onDashboard = () => {} }) {
   const rootRef = useRef(null);
-  const [selectedSymbol, setSelectedSymbol] = useState('BTC');
+  const [selectedSymbol, setSelectedSymbol] = useState('');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
   useWelcomeAnimations(rootRef);
 
@@ -178,10 +194,22 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
     if (market?.updatedAt) pulseMarketSnapshot(rootRef);
   }, [market?.updatedAt]);
 
+  useEffect(() => {
+    if (!market?.assets.length) return;
+    setSelectedSymbol((current) => (
+      market.assets.some((asset) => asset.symbol === current) ? current : market.assets[0].symbol
+    ));
+  }, [market]);
+
+  const selectedAsset = market?.assets.find((asset) => asset.symbol === selectedSymbol);
+  const selectedAssetAvailable = Boolean(
+    selectedAsset?.protectionAvailable && selectedAsset.priceLabel !== '—',
+  );
+
   return (
     <div className="welcome-page" ref={rootRef}>
       <div className="welcome-ambient" aria-hidden="true" />
-      <WelcomeHeader />
+      <WelcomeHeader onDashboard={onDashboard} />
 
       <main>
         <section className="welcome-hero" aria-labelledby="welcome-title">
@@ -193,15 +221,20 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
             </h1>
             <p className="welcome-hero__intro">Alpha turns live market protection into clear choices: how much is covered, your price floor, the amount paid, and the end date.</p>
             <div className="welcome-hero__actions">
-              <button className="alpha-button alpha-button--primary alpha-button--large" type="button" onClick={() => scrollTo('live-market')}>
-                See live availability <ArrowIcon />
+              <button
+                className="alpha-button alpha-button--primary alpha-button--large"
+                type="button"
+                disabled={!selectedAssetAvailable}
+                onClick={() => onProtect(selectedSymbol)}
+              >
+                {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Checking live availability'} <ArrowIcon />
               </button>
               <button className="alpha-button alpha-button--ghost alpha-button--large" type="button" onClick={() => scrollTo('how-it-works')}>
                 How Alpha works
               </button>
             </div>
             <dl className="welcome-hero__facts">
-              <div><dt>4</dt><dd>Supported assets</dd></div>
+              <div><dt>{market?.assets.length ?? '—'}</dt><dd>Supported assets</dd></div>
               <div><dt>Base</dt><dd>Execution network</dd></div>
               <div><dt>USDC</dt><dd>Settlement asset</dd></div>
             </dl>
@@ -271,7 +304,9 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
           {state === 'loading' && <div className="welcome-market-state" role="status"><span className="welcome-market-state__spinner" /><strong>Checking live market availability…</strong></div>}
           {market && (
             <div className="welcome-market__grid">
-              {market.assets.map((asset) => <MarketCard key={asset.symbol} asset={asset} />)}
+              {market.assets.map((asset) => (
+                <MarketCard key={asset.symbol} asset={asset} onProtect={onProtect} onViewAsset={onViewAsset} />
+              ))}
             </div>
           )}
           <p className="welcome-market__note"><span aria-hidden="true">◌</span> Protection duration and availability can change as the live market changes.</p>
@@ -329,7 +364,14 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000 }) 
             <h2 id="cta-title">Know your floor before the market tests it</h2>
             <p>See which supported assets currently have protection available. No sample choices and no hidden trading language.</p>
           </div>
-          <button className="alpha-button alpha-button--primary alpha-button--large" type="button" onClick={() => scrollTo('live-market')}>View live market <ArrowIcon /></button>
+          <button
+            className="alpha-button alpha-button--primary alpha-button--large"
+            type="button"
+            disabled={!selectedAssetAvailable}
+            onClick={() => onProtect(selectedSymbol)}
+          >
+            {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Protection unavailable'} <ArrowIcon />
+          </button>
         </section>
       </main>
 

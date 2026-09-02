@@ -86,15 +86,19 @@ export default function useWelcomeAnimations(rootRef) {
             });
           });
 
-          safely(() => {
-            animate('.welcome-market-card', {
-              opacity: [.62, 1],
-              y: [24, 0],
-              duration: 700,
-              delay: stagger(90),
-              autoplay: onScroll({ target: '.welcome-market__grid' }),
+          const marketCards = rootRef.current?.querySelectorAll('.welcome-market-card');
+          const marketGrid = rootRef.current?.querySelector('.welcome-market__grid');
+          if (marketCards?.length && marketGrid) {
+            safely(() => {
+              animate(marketCards, {
+                opacity: [.62, 1],
+                y: [24, 0],
+                duration: 700,
+                delay: stagger(90),
+                autoplay: onScroll({ target: marketGrid }),
+              });
             });
-          });
+          }
 
           safely(() => {
             animate('.welcome-reality-card', {
@@ -120,7 +124,9 @@ export function pulseMarketSnapshot(rootRef) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   try {
-    animate(rootRef.current.querySelectorAll('[data-market-value]'), {
+    const values = rootRef.current.querySelectorAll('[data-market-value]');
+    if (values.length === 0) return;
+    animate(values, {
       color: ['var(--signal)', 'var(--text)'],
       scale: [1.025, 1],
       duration: 700,

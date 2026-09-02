@@ -370,7 +370,16 @@ expiry      (+days)  1-strike  2-strike  3-strike
 2026-10-30   +60.4d       0        7         2
 ```
 
-**Vanilla puts stop at 2.4 days.** The long-dated orders are all multi-leg. And
+**The long-dated orders are all multi-leg, and that is OUR exclusion, not the
+market's ceiling.** The book carries expiries to two months. At three days and
+beyond, the buy-side puts are spreads - ETH shows a $2,440/$2,420 two-leg and a
+$2,050/$2,000/$1,950 three-leg at 58 days. A spread stops protecting below its
+lower strike, so the floor we would show would not be a floor. We buy single-leg
+only, and that is what limits our tenor.
+
+The single-leg maximum is not a fixed number either: every expiry is at 08:00
+UTC and the set rolls daily, so it sweeps from just under three days after a
+roll to about two before the next. And
 floors are shallow: ETH −0.4% to −6.1%, BTC −0.5% to −4.4%, SOL −0.7% to −7.5%.
 
 A 20% floor over 30 days is not available and never was.
@@ -627,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Thirteen instances now, one family.** The shape:
+**Seventeen instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -648,6 +657,10 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `stress.js` / `repay.js` | pure arithmetic, testable | imported the DB client at load, so the tests could not import them |
 | `RUNBOOK.md` | commands to run on the day | `npm run settle` did not exist, and `settle.js` writes nothing without `--confirm` |
 | `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
+| "XRP fails 6/6" | the protocol rejects XRP | our premium truncation; XRP fills 8/8 at exact sizes |
+| "vanilla puts stop at 2.4 days" | the market's ceiling | our own single-leg rule; the book reaches 2 months |
+| a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small |
+| `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -690,6 +703,37 @@ changed, left in place.
 - **Check the commit after making it.**
   `git show HEAD:path | grep "^export"` takes five seconds and catches a
   truncation that a diffstat reading "392 insertions" does not.
+
+#### A measurement taken through your own filters
+
+**Twice in one day, and both read as protocol limitations.**
+
+| We recorded | We concluded | It was actually |
+|---|---|---|
+| XRP 0/6, AVAX 2/6 in simulation | the protocol will not fill them | our premium truncation. `premiumRawFor` floors `contracts x price / 1e8`, and for cheap assets the lost fraction is worth hundreds of contract-units. XRP fills **8/8** when the product divides exactly |
+| vanilla puts stop at 2.4 days | the book has no longer tenors | the book carries expiries to **two months**. At 3 days and beyond the buy-side puts are spreads, and we exclude spreads by our own rule |
+
+Both numbers were honestly measured. Both described the funnel rather than the
+market, because every measurement ran through `getBuyablePutOrders`, which
+applies four filters before anything is counted.
+
+> **A measurement taken through your own filters describes your filters, not the
+> market.** The output is real; the noun attached to it is wrong. "XRP does not
+> work" and "XRP does not work through our sizing" are different claims, and only
+> one of them survives a judge who has seen a competitor do it.
+
+**What to do:** when an asset or a tenor looks unavailable, count it again with
+the filters removed, one at a time. The funnel per stage is four lines of code and
+says immediately where something is lost:
+
+```
+asset   feedMatch   isPut   isBuyer   singleStrike
+XRP     12          5       5         5              <- nothing lost to filters
+ETH@3d   5          1       1         0              <- lost at single-leg
+```
+
+The first line means the filters are innocent and the cause is downstream. The
+second names the exact rule responsible.
 
 #### A field read from a shape that does not exist
 
@@ -877,6 +921,132 @@ Format: symptom → cause → fix
 - **Every `VITE_` variable is `undefined` in the frontend** → Vite only reads `.env` from its own directory by default → add `envDir: '../'` to `frontend/vite.config.js`
 - **Script can't find `.env` after the restructure** → run it from inside `backend/`, and use the npm script where one exists → the npm entries carry `--env-file-if-exists=../.env`
 - **`npm init` in a folder that already has `package.json`** → silently overwrites it, dropping `"type": "module"` and the dependency list → run `npm install` instead; you only find out when `import` breaks
+
+---
+
+### An operation that reported what it did NOT do, and stayed silent about what it did
+
+**Seventeenth instance, and the inverse of every other one.** The rest claimed
+success they had not achieved. This one claimed *inaction it had not maintained*.
+
+`scripts/fill-position.js` was described as a dry run. Run without `--confirm`
+against a position whose order had left the book, it printed:
+
+```
+BLOCKED: the quoted order is no longer on the book — re-quote
+Nothing was broadcast. The row is left pending (BR-14).
+```
+
+The first line is true. The second was false: `prepareFill` had already called
+`failRefusedFill`, moving the position `pending → failed` and refunding 1.522569
+USDC. Someone reading it concluded the position was untouched. It had
+transitioned and returned money.
+
+Nothing was wrong with the *behaviour* — resolving a refused fill is correct,
+and leaving it `pending` was the gap we had closed the day before. The message
+had simply never been updated to match, and it described the chain while saying
+nothing about the database.
+
+> **"Nothing happened" is two claims, not one.** Nothing was broadcast, and
+> nothing was written. A message that verifies the first and asserts the second
+> is the easiest kind of lie to write, because the author is thinking about the
+> money and the reader is thinking about the row.
+
+**What to do:** when an operation has more than one kind of side effect, say
+something about each one every time — including "unchanged". All three
+non-broadcast exits in that script now state the database outcome explicitly,
+and the two that genuinely change nothing say so rather than leaving it to be
+inferred from silence.
+
+And do not call something a dry run if it can write. The flag now promises two
+separate things: without `--confirm` nothing is broadcast and no money is spent,
+**and** the database may still change when a position is unfillable.
+
+### A simulation inherits the constraints of whoever it simulates as
+
+**Sixteenth instance, and a new shape.** The others were things that reported
+success they had not achieved, or described something nobody checked. This one
+is a measurement that was *correct* and meant something other than what it
+appeared to.
+
+On 2 September we tried to confirm option sizes against the chain before quoting
+them, by simulating a fill with `eth_call`. An `eth_call` runs *as* an address,
+and that address has a USDC balance and an allowance. So a size could be refused
+for two entirely different reasons, and the simulation gives the same answer to
+both:
+
+```
+3 units, premium 6.6350, burner allowance 5.8637  ->  refused
+```
+
+The code then did the reasonable-looking thing and offered a smaller position —
+presenting **"our operator has not approved enough USDC"** to the user as
+**"the market will not fill this size"**. A reduced position looks like a
+legitimate result, so nothing about it would have looked wrong. The remedy is a
+larger approval, not selling someone less coverage than they asked for.
+
+It also silently dropped one of ETH's three tiers, reproducibly, because that
+tier's premium exceeded the allowance.
+
+> **A simulation answers "would this work, as me, right now" — never "is this
+> valid".** Any constraint attached to the simulating account, its balance, its
+> allowances, its nonce, comes back indistinguishable from a property of the
+> thing being tested.
+
+**What to do:** before treating a simulated refusal as a fact about the subject,
+rule out the simulator. Check the account's own constraints FIRST and report a
+shortfall as a shortfall — the pre-flight already does exactly this for
+allowances under BR-12, and the same check belonged in the probe.
+
+The work is on `feat/fillable-size`, committed and marked **DO NOT MERGE**, with
+the fix described in the commit message.
+
+---
+
+## Known design gaps
+
+Not bugs. Decisions with consequences we have not built around, written down so
+nobody has to discover them under questioning.
+
+### The operator model has no timeout
+
+`POST /api/purchase` writes the position row and debits the user's balance, then
+stops. A person runs `scripts/fill.js` afterwards. That separation is deliberate
+— the confirm button must not broadcast to mainnet (BR-51), and the reality block
+reports `fill: 'operator'` so the interface never claims otherwise.
+
+**But nothing reclaims a purchase the operator never executes.**
+
+A position created through the API and left unfilled:
+
+- stays `pending` forever — the settlement sweep selects `status = 'active'`, so
+  it is invisible to that process permanently, even after its expiry passes
+- holds the debit indefinitely — `findStandingDebits` reports it, but reporting
+  is all that happens; nothing acts on the report
+- shows on the dashboard as a position in progress that will never resolve
+
+Observed on 2 Sep: `fc08e2e3`, a BTC $76,500 put requested from the browser at
+16:46 the previous day, holding **1.522569 USDC** with no transaction behind it.
+The flow worked exactly as designed. There was simply no operator.
+
+**Why it matters beyond the demo.** Here it is simulated balance and a stuck card.
+In a real product it is a customer's money held against a purchase that never
+happened, with no expiry, no notification and no automatic reversal.
+
+**What a fix would look like** (not before the freeze):
+
+- a TTL on `pending` — after some interval with no `broadcast` event, transition
+  to `failed` and refund through the compensating path `failRefusedFill` already
+  uses
+- the sweep, or a second job, actually acting on `findStandingDebits` rather than
+  only listing them
+- the interface distinguishing "waiting for the operator" from "processing", so
+  the state is legible while it lasts
+
+**If a judge asks what happens when nobody executes:** the honest answer is that
+the funds stay held and a person has to notice. We know, it is written down, and
+the compensating-refund path that would fix it already exists and is tested — it
+is wiring, not design.
 
 ---
 

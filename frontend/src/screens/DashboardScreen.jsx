@@ -1,58 +1,120 @@
-import { ShieldIcon } from '../components/Icons.jsx';
+import AssetLogo, { getAssetIdentity } from '../components/AssetLogo.jsx';
 import RealityDisclosure from '../components/RealityDisclosure.jsx';
+import { ShieldIcon } from '../components/Icons.jsx';
+
+function shortenIdentifier(value) {
+  if (!value || value.length <= 16) return value;
+  return `${value.slice(0, 8)}…${value.slice(-6)}`;
+}
+
+function PositionCard({ position, isMock }) {
+  const identity = getAssetIdentity(position.asset);
+
+  return (
+    <article className="position-card">
+      <div className="position-identity">
+        <AssetLogo symbol={position.asset} name={identity.name} size="medium" />
+        <div className="position-identity__copy">
+          <span>{position.asset} · {position.positionRoleLabel}</span>
+          <strong>{identity.name}</strong>
+          <small>{position.amountLabel} {position.amountSummaryLabel}</small>
+        </div>
+      </div>
+
+      <div className="position-metric position-metric--primary">
+        <small>{position.primaryMetricLabel}</small>
+        <strong>{position.primaryMetricValueLabel}</strong>
+      </div>
+
+      <div className="position-metric">
+        <small>Ends</small>
+        <strong>{position.expiryLabel}</strong>
+      </div>
+
+      <div className="position-metric position-metric--payment">
+        <small>Payment</small>
+        <strong>{position.paymentStatusLabel}</strong>
+        {position.paymentStatus === 'paid' && position.premiumLabel ? <small>{position.premiumLabel}</small> : null}
+      </div>
+
+      <div className="position-evidence">
+        <RealityDisclosure variant="positionStatus" isMock={isMock} statusLabel={position.statusLabel} />
+        <RealityDisclosure
+          variant="transaction"
+          isMock={isMock}
+          fill={position.fill}
+          status={position.status}
+          paymentStatus={position.paymentStatus}
+          explorerUrl={position.explorerUrl}
+          compact
+        />
+        <span className="position-request-id" title={position.positionId}>
+          Request {shortenIdentifier(position.positionId)}
+        </span>
+      </div>
+    </article>
+  );
+}
 
 export default function DashboardScreen({ positions, state, isMock, reality, onExplore }) {
   return (
-    <section className="dashboard-page" aria-labelledby="dashboard-title">
-      <div className="dashboard-heading">
-        <div><span className="eyebrow">Your positions</span><h1 id="dashboard-title">Protection and upside</h1><p>Track each position’s purpose, threshold, end date and current status.</p></div>
-        <button className="primary-button compact" type="button" onClick={onExplore}>Add protection</button>
-      </div>
+    <section className="dashboard-page">
+      <header className="dashboard-heading">
+        <div>
+          <span className="eyebrow">Protection activity</span>
+          <h1>Protection and upside</h1>
+          <p>Track protection requests, operator fills, and verifiable on-chain positions in one place.</p>
+        </div>
+        <button className="alpha-button alpha-button--primary" type="button" onClick={onExplore}>
+          Explore protection
+        </button>
+      </header>
 
       <RealityDisclosure variant="dashboard" isMock={isMock} reality={reality} />
 
-      {state === 'loading' && <div className="empty-state">Loading your protection…</div>}
-      {state === 'error' && <div className="error-message">We could not load your protection right now.</div>}
-      {state === 'ready' && positions.length === 0 && (
-        <div className="empty-state">
-          <span className="empty-state-mark"><ShieldIcon size={38} /></span>
-          <span className="eyebrow">A clean slate</span>
-          <h2>No protection here yet</h2>
-          <p>Your first protection will appear here with its floor, end date and status.</p>
-          <button className="primary-button compact" type="button" onClick={onExplore}>Explore protection choices</button>
-        </div>
-      )}
+      {state === 'loading' ? (
+        <section className="empty-state" aria-live="polite">
+          <div className="empty-state-mark"><ShieldIcon /></div>
+          <h2>Loading positions</h2>
+          <p>Checking the latest status from the live backend.</p>
+        </section>
+      ) : null}
 
-      {state === 'ready' && positions.length > 0 && (
-        <div className="position-list">
-          {positions.map((position) => (
-            <article className="position-card" key={position.positionId}>
-              <div className="asset-token">Ξ</div>
-              <div className="position-title">
-                <span>Ethereum</span>
-                <strong>{position.amountLabel} {position.amountSummaryLabel}</strong>
-                <small>{position.positionRoleLabel}</small>
-              </div>
-              <div className="position-metric"><small>{position.primaryMetricLabel}</small><strong>{position.primaryMetricValueLabel}</strong></div>
-              <div className="position-metric"><small>End date</small><strong>{position.expiryLabel}</strong></div>
-              <div className="position-metric">
-                <small>Payment status</small>
-                <strong>
-                  {isMock ? 'Sample · ' : ''}{position.paymentStatusLabel}
-                  {position.paymentStatus === 'paid' ? ` · ${position.premiumLabel}` : ''}
-                </strong>
-              </div>
-              <RealityDisclosure variant="positionStatus" isMock={isMock} statusLabel={position.statusLabel} />
-              <RealityDisclosure variant="transaction" isMock={isMock} reality={reality} fill={position.fill} explorerUrl={position.explorerUrl} compact />
-            </article>
-          ))}
-        </div>
-      )}
+      {state === 'error' ? (
+        <section className="error-message" role="alert">
+          <strong>Positions are temporarily unavailable.</strong>
+          <span>The live backend could not return your position history. Please try again shortly.</span>
+        </section>
+      ) : null}
 
-      <div className="dashboard-note">
-        <ShieldIcon />
-        <p><strong>Read each position by its displayed purpose.</strong><span>Protection floors cover downside at expiry. Upside thresholds describe separate exposure and are never presented as protection.</span></p>
-      </div>
+      {state === 'ready' && positions.length === 0 ? (
+        <section className="empty-state">
+          <div className="empty-state-mark"><ShieldIcon /></div>
+          <h2>No protection requests yet</h2>
+          <p>Choose an asset to see live protection choices and create your first request.</p>
+          <button className="alpha-button alpha-button--primary" type="button" onClick={onExplore}>
+            Explore protection
+          </button>
+        </section>
+      ) : null}
+
+      {state === 'ready' && positions.length > 0 ? (
+        <section className="dashboard-positions" aria-labelledby="positions-heading">
+          <header className="dashboard-section-heading">
+            <div>
+              <h2 id="positions-heading">Recorded positions</h2>
+              <p>Only completed on-chain fills include a BaseScan verification link.</p>
+            </div>
+            <span>{positions.length} {positions.length === 1 ? 'position' : 'positions'}</span>
+          </header>
+
+          <div className="position-list">
+            {positions.map((position) => (
+              <PositionCard key={position.positionId} position={position} isMock={isMock} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }

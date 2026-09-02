@@ -1,3 +1,4 @@
+import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ClockIcon, ShieldIcon } from '../../components/Icons.jsx';
 import {
   Alert,
@@ -37,15 +38,16 @@ export default function ConfigureProtectionStep({
   const executionLabel = contextReality?.fill === 'operator'
     ? 'Operator executes purchase'
     : 'Backend executes purchase';
+  const hasUsableHolding = Number.isFinite(Number(asset.holdingUnits)) && Number(asset.holdingUnits) > 0;
 
   return (
     <>
-      <button className="protection-back" type="button" onClick={onExit}>← Back to asset</button>
+      <button className="protection-back" type="button" onClick={onExit}>← Back to Welcome</button>
 
       <div className="protection-config-topline">
         <header className="protection-heading">
           <div className="protection-asset-title">
-            <span className="protection-asset-mark" aria-hidden="true">{asset.symbol.slice(0, 1)}</span>
+            <AssetLogo symbol={asset.symbol} name={asset.name} size="large" />
             <div>
               <span className="protection-eyebrow">Alpha protection</span>
               <h1>Buy protection for {asset.name}</h1>
@@ -124,7 +126,8 @@ export default function ConfigureProtectionStep({
                   inputMode="decimal"
                   value={form.units}
                   onChange={onFieldChange}
-                  placeholder={`Up to ${asset.holdingUnits}`}
+                  placeholder={hasUsableHolding ? `Up to ${asset.holdingUnits}` : 'Holding unavailable'}
+                  disabled={!hasUsableHolding}
                   required
                 />
               </FormField>
@@ -173,7 +176,7 @@ export default function ConfigureProtectionStep({
                 size="large"
                 loading={quoteState === 'loading'}
                 loadingLabel="Getting live choices…"
-                disabled={!asset.protectionAvailable || asset.spotUsdc == null}
+                disabled={!asset.protectionAvailable || asset.spotUsdc == null || !hasUsableHolding}
               >
                 Get live quote <ArrowIcon />
               </Button>

@@ -3,9 +3,30 @@
 //   node --env-file-if-exists=../.env scripts/fill-position.js
 //       -> list the demo user's pending positions to choose from
 //   node --env-file-if-exists=../.env scripts/fill-position.js <positionId>
-//       -> dry run: verify + pre-flight checklist, broadcast nothing
+//       -> check: pre-flight checklist, broadcasts nothing. NOT a dry run - see
+//          below, it can resolve a position that cannot be filled.
 //   node --env-file-if-exists=../.env scripts/fill-position.js <positionId> --confirm
 //       -> SPENDS REAL USDC on a transaction that cannot be undone
+//
+// ---------------------------------------------------------------------------
+// TWO SEPARATE GUARANTEES. Do not collapse them into "dry run".
+// ---------------------------------------------------------------------------
+//
+//   Without --confirm, NOTHING IS BROADCAST and NO MONEY IS SPENT. Always.
+//
+//   Without --confirm, the DATABASE MAY STILL CHANGE. If the quoted order has
+//   left the book the position is resolved: marked `failed` and the user's hold
+//   refunded, through failRefusedFill.
+//
+// The second is deliberate. A refused fill has a known outcome - no transaction
+// exists to succeed or fail - so resolving it is correct, and leaving it
+// `pending` is the gap that made a position sit as "Processing" forever while
+// holding the user's money.
+//
+// It was called a dry run, and on 2 Sep someone ran it to inspect a position,
+// read "Nothing was broadcast", and reasonably concluded the row was untouched.
+// It had transitioned and refunded 1.522569 USDC. The statement was true about
+// the chain and silent about the database. The output now names both.
 //
 // ---------------------------------------------------------------------------
 // Why this script exists, and how it differs from fill.js
@@ -104,15 +125,39 @@ const prepared = await prepareFill(position.id);
 
 if (!prepared.preflight) {
   // The quoted order has left the book, so there is nothing to simulate (BR-44).
+  //
+  // This branch RESOLVES the position - prepareFill calls failRefusedFill, which
+  // marks it failed and refunds the hold. Saying only "nothing was broadcast"
+  // here was true and deeply misleading: the reader concluded the row was
+  // untouched when it had just transitioned and returned money.
   console.log(`  BLOCKED: ${prepared.reason}`);
-  console.log('\n  Nothing was broadcast. The row is left pending (BR-14) — re-quote if needed.\n');
+  console.log('');
+  console.log('  Nothing was broadcast, and NOTHING WAS SPENT.');
+  console.log('');
+  console.log('  But this DID change the database, because a refused fill has a');
+  console.log('  known outcome and leaving it pending is a position that never');
+  console.log('  resolves:');
+  console.log('');
+  console.log(`    position   ${prepared.position.id}`);
+  console.log(`    status     pending -> ${prepared.position.status}`);
+  console.log(`    refunded   ${Number(prepared.refunded ?? 0).toFixed(6)} USDC returned to the user`);
+  console.log('');
+  console.log('  The debit and the refund both stay in balance_events - a reversal');
+  console.log('  is a compensating write, never a deletion.');
+  console.log('');
+  console.log('  Re-quote if the user still wants protection.\n');
   process.exit(1);
 }
 
 console.log(formatPreflight(prepared.preflight));
 
 if (!prepared.ready) {
-  console.log('\n  Nothing was broadcast. The row is left pending (BR-14).\n');
+  // Distinct from the blocked branch above: the order is still on the book, so
+  // this is retryable and nothing is resolved. Say that the database is
+  // unchanged rather than leaving the reader to infer it.
+  console.log('\n  Nothing was broadcast, nothing was spent, and the database is');
+  console.log('  unchanged — the row stays `pending` (BR-14). The order is still on');
+  console.log('  the book, so a later run may pass once the checklist is satisfied.\n');
   process.exit(1);
 }
 
@@ -120,7 +165,7 @@ if (!confirmed) {
   const spend = (Number(prepared.usdcAmountRaw) / 1e6).toFixed(6);
   console.log('\n  DRY RUN — every check passed but --confirm was not given.');
   console.log(`  Re-run with --confirm to spend ${spend} USDC. This cannot be undone.`);
-  console.log('  The row is left pending until then.\n');
+  console.log('  The row stays `pending` and the database is unchanged.\n');
   process.exit(0);
 }
 

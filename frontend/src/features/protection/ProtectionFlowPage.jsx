@@ -5,7 +5,12 @@ import ConfigureProtectionStep from './ConfigureProtectionStep.jsx';
 import ProtectionStatusStep from './ProtectionStatusStep.jsx';
 import ReviewProtectionStep from './ReviewProtectionStep.jsx';
 import useMarketContext from './useMarketContext.js';
-import { getDateBounds, isSupportedAsset, validateConfiguration } from './protectionFlowUtils.js';
+import {
+  defaultProtectionUnits,
+  getDateBounds,
+  isKnownAsset,
+  validateConfiguration,
+} from './protectionFlowUtils.js';
 
 function UnsupportedAsset({ symbol, onExit }) {
   return (
@@ -14,15 +19,30 @@ function UnsupportedAsset({ symbol, onExit }) {
         <Card variant="glass" className="protection-route-error">
           <span className="protection-eyebrow">Unsupported asset</span>
           <h1>Alpha cannot configure protection for “{symbol}”.</h1>
-          <p>This checkout currently accepts ETH, BTC, BNB, or SOL. Return to the asset page and choose one of those supported assets.</p>
-          <Button onClick={onExit}>Back to asset</Button>
+          <p>This checkout does not recognize that asset. Return to Welcome and choose an asset offered by the live backend.</p>
+          <Button onClick={onExit}>Back to Welcome</Button>
         </Card>
       </div>
     </main>
   );
 }
 
-function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval }) {
+function AssetNotOffered({ symbol, onExit }) {
+  return (
+    <main className="protection-flow">
+      <div className="protection-container protection-container--state">
+        <Card variant="glass" className="protection-route-error">
+          <span className="protection-eyebrow">Not currently offered</span>
+          <h1>{symbol} protection is not available from Alpha right now.</h1>
+          <p>The asset is recognized, but it was not included in the latest live market-context response. No quote has been requested.</p>
+          <Button onClick={onExit}>Back to Welcome</Button>
+        </Card>
+      </div>
+    </main>
+  );
+}
+
+function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, marketPollInterval }) {
   const [step, setStep] = useState('Configure');
   const [form, setForm] = useState({ units: '', protectionPct: '10', targetDate: '' });
   const [errors, setErrors] = useState({});
@@ -62,6 +82,14 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval
     return rawAsset ? toMarketAssetViewModel(rawAsset, market.context.updatedAt) : null;
   }, [market.context, symbol]);
 
+  useEffect(() => {
+    if (!asset) return;
+    const defaultUnits = defaultProtectionUnits(asset.holdingUnits);
+    if (!defaultUnits) return;
+
+    setForm((current) => (current.units === '' ? { ...current, units: defaultUnits } : current));
+  }, [asset?.holdingUnits]);
+
   const selectedTier = useMemo(
     () => quote?.tiers.find((tier) => tier.tierId === selectedTierId) ?? null,
     [quote, selectedTierId],
@@ -97,18 +125,7 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval
   }
 
   if (!asset) {
-    return (
-      <main className="protection-flow">
-        <div className="protection-container protection-container--state">
-          <AsyncState
-            state="error"
-            errorTitle={`${symbol} is missing from the backend response`}
-            errorMessage="The page will not create a placeholder asset. Ask the backend team to inspect GET /api/market-context."
-            onRetry={market.retry}
-          />
-        </div>
-      </main>
-    );
+    return <AssetNotOffered symbol={symbol} onExit={onExit} />;
   }
 
   const dateBounds = getDateBounds(asset.longestProtectionDays);
@@ -240,6 +257,7 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval
             tier={selectedTier}
             purchase={purchase}
             onExit={onExit}
+            onViewDashboard={onViewDashboard}
           />
         )}
       </div>
@@ -250,10 +268,11 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, marketPollInterval
 export default function ProtectionFlowPage({
   symbol,
   apiClient,
-  onExit = () => window.history.back(),
+  onExit = () => window.location.assign('/'),
+  onViewDashboard = () => window.location.assign('/dashboard'),
   marketPollInterval = 30_000,
 }) {
-  if (!isSupportedAsset(symbol)) {
+  if (!isKnownAsset(symbol)) {
     return <UnsupportedAsset symbol={symbol} onExit={onExit} />;
   }
 
@@ -262,6 +281,7 @@ export default function ProtectionFlowPage({
       symbol={symbol}
       apiClient={apiClient}
       onExit={onExit}
+      onViewDashboard={onViewDashboard}
       marketPollInterval={marketPollInterval}
     />
   );

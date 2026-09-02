@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  defaultProtectionUnits,
   getDateBounds,
-  isSupportedAsset,
+  isKnownAsset,
   purchaseStatusView,
   validateConfiguration,
 } from './protectionFlowUtils.js';
@@ -12,9 +13,21 @@ const asset = {
 };
 
 describe('protection flow rules', () => {
-  it('accepts only the four backend-offered route symbols', () => {
-    expect(['ETH', 'BTC', 'BNB', 'SOL'].every(isSupportedAsset)).toBe(true);
-    expect(isSupportedAsset('AVAX')).toBe(false);
+  it('defaults to one quarter of each usable holding at fill precision', () => {
+    expect(defaultProtectionUnits(0.4)).toBe('0.1');
+    expect(defaultProtectionUnits(0.01)).toBe('0.0025');
+    expect(defaultProtectionUnits(10)).toBe('2.5');
+    expect(defaultProtectionUnits(1.5)).toBe('0.375');
+    expect(defaultProtectionUnits(4)).toBe('1');
+    expect(defaultProtectionUnits(1000)).toBe('250');
+    expect(defaultProtectionUnits(0)).toBe('');
+    expect(defaultProtectionUnits(null)).toBe('');
+    expect(defaultProtectionUnits(undefined)).toBe('');
+  });
+
+  it('recognizes six asset identities without claiming they are all currently offered', () => {
+    expect(['ETH', 'BTC', 'BNB', 'SOL', 'AVAX', 'XRP'].every(isKnownAsset)).toBe(true);
+    expect(isKnownAsset('DOGE')).toBe(false);
   });
 
   it('uses the live tenor to create date bounds, including today-only', () => {

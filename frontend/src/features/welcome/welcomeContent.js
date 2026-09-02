@@ -1,10 +1,3 @@
-export const supportedAssets = [
-  { symbol: 'BTC', name: 'Bitcoin' },
-  { symbol: 'ETH', name: 'Ethereum' },
-  { symbol: 'BNB', name: 'BNB' },
-  { symbol: 'SOL', name: 'Solana' },
-];
-
 export const benefits = [
   {
     number: '01',
@@ -34,7 +27,7 @@ export const journeySteps = [
   {
     number: '01',
     title: 'Read the live market',
-    body: 'Alpha checks current prices and protection availability for Bitcoin, Ethereum, BNB, and Solana.',
+    body: 'Alpha checks current prices and protection availability for every asset currently offered by the live backend.',
     label: 'Live market context',
   },
   {

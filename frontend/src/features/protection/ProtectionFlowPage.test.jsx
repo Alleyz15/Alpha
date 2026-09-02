@@ -88,6 +88,7 @@ function apiClient(overrides = {}) {
 
 async function completeConfiguration(user) {
   const amount = await screen.findByLabelText(/Amount to protect/);
+  await user.clear(amount);
   await user.type(amount, '0.005');
   const date = screen.getByLabelText(/Target date/);
   await user.type(date, date.min);
@@ -100,11 +101,34 @@ afterEach(() => {
 describe('ProtectionFlowPage', () => {
   it('rejects unsupported route assets without making a backend call', () => {
     const client = apiClient();
-    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+    render(<ProtectionFlowPage symbol="DOGE" apiClient={client} onExit={vi.fn()} />);
 
     expect(screen.getByText(/cannot configure protection/i)).toBeVisible();
     expect(client.getMarketContext).not.toHaveBeenCalled();
     expect(client.getDemoContext).not.toHaveBeenCalled();
+  });
+
+  it('recognizes prepared assets but does not quote one absent from market-context', async () => {
+    const client = apiClient();
+    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+
+    expect(await screen.findByText(/AVAX protection is not available/i)).toBeVisible();
+    expect(client.getMarketContext).toHaveBeenCalledTimes(1);
+    expect(client.createQuote).not.toHaveBeenCalled();
+  });
+
+  it('configures a prepared asset as soon as market-context offers it', async () => {
+    const context = marketContext();
+    context.assets.push({
+      symbol: 'AVAX', name: 'Avalanche', spotUsdc: 24.12, holdingUnits: 4,
+      protectionAvailable: true, longestProtectionDays: 2, strikesBelowSpot: 6, unavailableReason: null,
+    });
+    const client = apiClient({ getMarketContext: vi.fn().mockResolvedValue(context) });
+
+    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'Buy protection for Avalanche' })).toBeVisible();
+    expect(screen.getByLabelText('Selected asset')).toHaveTextContent('Avalanche');
   });
 
   it('uses the route asset as a read-only selection and renders live backend context', async () => {
@@ -118,6 +142,21 @@ describe('ProtectionFlowPage', () => {
     expect(screen.getByText('0.01 BTC')).toBeVisible();
     expect(screen.getByText('Live market price')).toBeVisible();
     expect(screen.getByText('Simulated holding')).toBeVisible();
+    await waitFor(() => expect(screen.getByLabelText(/Amount to protect/)).toHaveValue(0.0025));
+  });
+
+  it('leaves the amount empty and disables quoting when the holding is zero', async () => {
+    const context = marketContext();
+    context.assets[0] = { ...context.assets[0], holdingUnits: 0 };
+    const client = apiClient({ getMarketContext: vi.fn().mockResolvedValue(context) });
+
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+
+    const amount = await screen.findByLabelText(/Amount to protect/);
+    expect(amount).toHaveValue(null);
+    expect(amount).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Get live quote/ })).toBeDisabled();
+    expect(client.createQuote).not.toHaveBeenCalled();
   });
 
   it('shows the backend reason and disables quoting when protection is unavailable', async () => {
@@ -172,7 +211,8 @@ describe('ProtectionFlowPage', () => {
   it('reviews a backend tier and submits only its quote and tier identifiers', async () => {
     const user = userEvent.setup();
     const client = apiClient();
-    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+    const onViewDashboard = vi.fn();
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} onViewDashboard={onViewDashboard} />);
     await completeConfiguration(user);
 
     await user.click(screen.getByRole('button', { name: /Get live quote/ }));
@@ -194,6 +234,9 @@ describe('ProtectionFlowPage', () => {
     expect(screen.getByText('Funds locked')).toBeVisible();
     expect(screen.getByText(/No transaction hash was returned/)).toBeVisible();
     expect(screen.queryByRole('link', { name: /BaseScan/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'View my protection' }));
+    expect(onViewDashboard).toHaveBeenCalledTimes(1);
   });
 
   it('does not let an expired quote continue to Review', async () => {

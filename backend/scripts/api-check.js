@@ -110,7 +110,7 @@ try {
     q.tiers.map((t) => t.actual.tier).join(', '));
   check('no signed order leaks into the payload', q.tiers.every((t) => !('order' in t)));
 
-  // Derived, not hardcoded. Vanilla puts now stop at ~2.4 days, so a fixed
+  // Derived, not hardcoded. The longest single-leg put sweeps ~2 to 3 days as
   // date goes stale within a day and the failure looks like a code bug.
   const reachable = new Date(Date.now() + 20 * 3600_000).toISOString().slice(0, 10);
   const goal = await call('POST', '/api/quote', {

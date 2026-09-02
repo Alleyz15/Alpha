@@ -5,13 +5,20 @@
 // ---------------------------------------------------------------------------
 //
 // "This barely changes, cache it for a minute" is a reasonable-sounding
-// optimisation that would break this endpoint. It does change, daily and
-// silently:
+// optimisation that would break this endpoint.
 //
-//   Measured 1 Sep    ETH and BTC carried expiries out to 2.7 days.
-//                     SOL and BNB stopped at 1.7.
-//   Tomorrow          those become 1.7 and 0.7.
-//   By the 6th        every number on this page is different.
+// THE MECHANISM, rather than a number that was true once:
+//
+//   Every expiry on the book is at 08:00 UTC, and the set rolls forward daily.
+//   So the longest single-leg tenor is just under THREE days immediately after
+//   a roll and about TWO just before the next one - it sweeps a full day's
+//   range every twenty-four hours, and any figure written down is a snapshot of
+//   the hour it was taken.
+//
+// An earlier version of this comment said "ETH and BTC carry expiries out to
+// 2.7 days", which read as a property of the market and was a reading of one
+// afternoon. longestProtectionDays computes it live, per request, which is the
+// only way the number can be right.
 //
 // `longestProtectionDays` is what the date picker caps against. Serve a stale
 // one and a user picks a date that was valid an hour ago, then gets a refusal

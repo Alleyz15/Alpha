@@ -89,3 +89,101 @@ export function sumPayments(events) {
     refundedUsdc: Math.round(refunded * 1e6) / 1e6,
   };
 }
+
+/**
+ * How far a position got through EXECUTION.
+ *
+ * ---------------------------------------------------------------------------
+ * BROADCAST IS NOT CONFIRMED. That distinction is the point of this function.
+ * ---------------------------------------------------------------------------
+ *
+ * The existing `fill` field says 'onchain' whenever a tx_hash exists, which
+ * conflates two different states: we sent a transaction, and we verified it
+ * landed. Between them sits `pending_verification` - a hash exists and the
+ * outcome is unknown - which is precisely the state that must never be shown as
+ * a settled fact.
+ *
+ *   requested   the row exists, nothing was sent
+ *   broadcast   a transaction exists; confirmation is NOT established
+ *   confirmed   we saw a receipt with status 1 and wrote a `confirmed` event
+ *   failed      it will not happen
+ *
+ * Execution is a separate axis from settlement. A position that expired
+ * worthless still executed: it stays `confirmed` here, and its outcome lives in
+ * `status`.
+ *
+ * @param {object} position - a positions row
+ * @param {object[]} events - that position's position_events
+ */
+export function executionView(position, events = []) {
+  const has = (type) => events.some((e) => e.event_type === type);
+
+  let executionState;
+  if (position.status === 'failed') executionState = 'failed';
+  else if (has('confirmed')) executionState = 'confirmed';
+  else if (position.tx_hash || has('broadcast')) executionState = 'broadcast';
+  else executionState = 'requested';
+
+  // Only a confirmed event establishes this. A hash proves a transaction was
+  // sent, not that it succeeded - the frontend gates the BaseScan link on it.
+  const verifiedOnChain = executionState === 'confirmed';
+
+  // The EARLIEST confirmed event. Two positions carry a second one from later
+  // corrections - a premium adjustment and a contract-count alignment - and
+  // taking the last would report a correction as the moment of purchase.
+  const confirmedAt = events
+    .filter((e) => e.event_type === 'confirmed')
+    .map((e) => e.created_at)
+    .sort()[0] ?? null;
+
+  return {
+    executionState,
+    verifiedOnChain,
+    // When the user asked, and when it actually happened. Different questions,
+    // and for an operator-executed fill they can be minutes or hours apart.
+    createdAt: position.created_at,
+    purchasedAt: confirmedAt,
+    // The quote this came from. NULL for positions bought by script rather than
+    // through the API - the two vault calls. NEVER substitute the position id:
+    // they are different records and conflating them would make an order id
+    // that resolves to nothing.
+    orderId: position.quote_id ?? null,
+  };
+}
+
+/**
+ * The event trail, safe to send to a browser.
+ *
+ * ---------------------------------------------------------------------------
+ * PAYLOADS ARE NEVER RETURNED. Name and timestamp only.
+ * ---------------------------------------------------------------------------
+ *
+ * position_events payloads carry RPC error text, signed order fields, gas and
+ * block data, provider names and internal reasons. None of it belongs in a
+ * response, and the risk is not hypothetical: the `broadcast` payload contains
+ * the raw order the fill was built from.
+ *
+ * Internal event names are mapped to interface names as well, so renaming an
+ * event type later is not a breaking API change.
+ */
+const TIMELINE_NAMES = Object.freeze({
+  created: 'requested',
+  broadcast: 'operator_execution',
+  confirmed: 'confirmed_onchain',
+  settled: 'settled',
+  failed: 'failed',
+  flagged: 'needs_review',
+});
+
+/**
+ * @param {object[]} events - position_events rows
+ * @returns {Array<{event:string, at:string}>} oldest first
+ */
+export function timelineView(events = []) {
+  return [...events]
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    .map((e) => ({
+      event: TIMELINE_NAMES[e.event_type] ?? e.event_type,
+      at: e.created_at,
+    }));
+}
