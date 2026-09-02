@@ -1023,8 +1023,10 @@ rule out the simulator. Check the account's own constraints FIRST and report a
 shortfall as a shortfall — the pre-flight already does exactly this for
 allowances under BR-12, and the same check belonged in the probe.
 
-The work is on `feat/fillable-size`, committed and marked **DO NOT MERGE**, with
-the fix described in the commit message.
+**This is now fixed and merged.** `readSpendCapacity()` reads the wallet's
+allowance and balance once, up front, and takes the smaller; a premium above it
+is never probed. See "The allowance row is now closed" above for the shape of
+the fix and what it deliberately does *not* do.
 
 ---
 
