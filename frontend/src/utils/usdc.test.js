@@ -16,7 +16,7 @@ describe('USDC presentation', () => {
     ['paid', null, '—'],
     ['held', 1.25, 'Funds held'],
     ['refunded', 1.25, 'Refunded'],
-    ['none', 1.25, '—'],
+    ['none', 1.25, 'No user payment'],
     [null, 1.25, '—'],
   ])('presents %s from the single payment-status contract', (status, amount, expected) => {
     expect(getPremiumPresentation(status, amount)).toBe(expected);

@@ -58,7 +58,14 @@ describe('Phase 6 pages', () => {
       paymentStatus: 'refunded',
       verifiedOnChain: false,
     };
-    const positions = [protectedPosition, secondProtection, upsidePosition, failedPosition];
+    const completedPosition = {
+      ...protectedPosition,
+      positionId: 'ccdcbf28',
+      status: 'expired_worthless',
+      paymentStatus: 'none',
+      premiumPaidUsdc: null,
+    };
+    const positions = [failedPosition, completedPosition, protectedPosition, secondProtection, upsidePosition];
     const apiClient = {
       getPortfolio: vi.fn().mockResolvedValue(portfolio),
       getPositions: vi.fn().mockResolvedValue({ positions }),
@@ -82,12 +89,20 @@ describe('Phase 6 pages', () => {
     expect(within(table).getByText('Protected · 2 positions')).toBeVisible();
     expect(within(table).getByRole('button', { name: /View positions/ })).toBeVisible();
     expect(within(table).getByRole('button', { name: 'Buy protection' })).toBeVisible();
-    expect(screen.getByText(/Failed, refunded, and ended requests are intentionally excluded/)).toBeVisible();
+    expect(screen.getByText(/Open an asset to see its complete history, including settled and failed requests/)).toBeVisible();
 
     await user.click(within(table).getByRole('button', { name: /View positions/ }));
     expect(await screen.findByRole('heading', { name: 'Recorded positions' })).toBeVisible();
-    expect(screen.getByText('3 positions')).toBeVisible();
-    expect(screen.queryByText('Failed')).not.toBeInTheDocument();
+    expect(screen.getByText('5 positions')).toBeVisible();
+    expect(screen.getByText('Not needed')).toBeVisible();
+    expect(screen.getByText('Failed')).toBeVisible();
+    expect(screen.getByText('No user payment')).toBeVisible();
+
+    const cards = screen.getAllByRole('article').map((card) => card.textContent);
+    expect(cards.findIndex((text) => text.includes('Not needed')))
+      .toBeGreaterThan(cards.findLastIndex((text) => text.includes('Active')));
+    expect(cards.findIndex((text) => text.includes('Failed')))
+      .toBeGreaterThan(cards.findIndex((text) => text.includes('Not needed')));
   });
 
   it('renders the requested contract and order sections without payout or PnL cards', async () => {

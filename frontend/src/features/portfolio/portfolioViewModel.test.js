@@ -61,7 +61,7 @@ describe('protection detail view model', () => {
       timeline: [],
     });
 
-    expect(detail.premium.value).toBe('—');
+    expect(detail.premium.value).toBe('No user payment');
     expect(detail.entryPriceLabel).toBe('—');
     expect(detail.orderIdLabel).toBe('—');
     expect(detail.paymentMethodLabel).toBe('Operator purchase — no user payment');

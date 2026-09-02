@@ -18,5 +18,6 @@ export function getPremiumPresentation(paymentStatus, paidAmount) {
   if (paymentStatus === 'paid') return formatUsdc(paidAmount) ?? '—';
   if (paymentStatus === 'held') return 'Funds held';
   if (paymentStatus === 'refunded') return 'Refunded';
+  if (paymentStatus === 'none') return 'No user payment';
   return '—';
 }
