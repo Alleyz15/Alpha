@@ -18,10 +18,27 @@
 //
 //   - the orders ARE on the book, buy-side, single-leg, below spot
 //   - the multi-leg filter is not excluding them
-//   - the failure is a custom revert, 0xad4c3ef7, carrying two arguments that
-//     differ by exactly one
+//   - the failure is a custom revert, IDENTIFIED on 2 Sep as
+//
+//         InvalidNumContracts(uint256,uint256)   selector 0xad4c3ef7
+//
+//     found by brute-forcing 18,450 candidate signatures against the selector.
+//     It is in neither 4byte.directory nor openchain, so it is specific to
+//     Thetanuts' OptionBook (0x1bDff855d6811728acaDC00989e79143a2bdfDed).
+//     The two arguments are (requested, allowed) and ALWAYS differ by exactly
+//     one: we ask for n, the contract permits n-1.
 //   - it is SIZE-dependent AND ORDER-dependent: two AVAX orders with identical
 //     contract counts, one fills and one reverts
+//
+// THE ROUND TRIP, which is where the off-by-one comes from:
+//
+//     ours  premium   = floor(contracts x price / 1e8)     sizing.js
+//     SDK   contracts = floor(premium x 1e8 / price)       OptionBookModule
+//
+// Two floors compound, so the contract count the chain sees can be one below
+// the one we sized. What is NOT established is how the contract derives its
+// "allowed" figure - that needs the verified source, and the Etherscan V2 API
+// requires a key this project does not have.
 //
 // Three mechanisms were proposed and all three were disproved by measurement:
 //
@@ -31,15 +48,20 @@
 //                                            order, fails on ETH
 //   3. "recomputed contracts must equal      ETH is off by 1 and FILLS; AVAX
 //       what we asked"                       is off by 28 and REVERTS
+//   4. "the SDK's cap exceeds the chain's    the cap is never reached - sized
+//       by one"                              contracts sit far below
+//                                            calculateMaxContracts in every
+//                                            failing case
 //
-// So the condition is not understood. A fix would be a guess, and a guess here
-// changes the sizing of four assets that currently work in exchange for two
-// that nobody has asked for.
+// So the CONDITION is still not understood, even though the error now has a
+// name. A fix would be a guess, and a guess here changes the sizing of four
+// assets that work in exchange for two nobody has asked for.
 //
-// IF YOU ARE HERE TO FINISH THAT WORK: find out what 0xad4c3ef7 is first, from
-// the OptionBook source. Then change sizing, then run this file. If any
-// assertion below fails, the change is not safe regardless of how well it
-// works for AVAX and XRP.
+// IF YOU ARE HERE TO FINISH THAT WORK: get the verified OptionBook source and
+// read what raises InvalidNumContracts. Do not infer it from behaviour - four
+// attempts at that produced four plausible rules and all four were wrong.
+// Then change sizing, then run this file. If any assertion below fails, the
+// change is not safe regardless of how well it works for AVAX and XRP.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
