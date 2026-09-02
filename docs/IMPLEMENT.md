@@ -306,7 +306,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 6.5 | Public repo README | 🔄 | Audited against code and chain 1 Sep: eight transactions with what each proves, five option contracts, a simulated-vs-real table, and the setup section corrected (a fresh clone runs on mock data by default). **Demo section still to rewrite; video link still a placeholder** |
 | 6.6 | AI tool declaration | 🔄 | Table split per person. One row complete; **three carry a visible TODO** pending answers from the other developers. A blank is a disqualification risk and a guess is worse |
 | 6.7 | Devfolio submission | ⬜ | **Submit 4 Sep, not 5 Sep.** Leave a day of margin |
-| 6.8 | Q&A prep | ⬜ | Stop-loss vs put, odette.fi / collar difference, custody, seller side, why ETH only |
+| 6.8 | Q&A prep | 🔄 |  seeded with two verified answers from the 2 Sep investigation — why four assets, and why the tenor is short. **The rest is being written with the two presenters.** Still to cover: stop-loss vs put, collar difference, custody, seller side |
 
 ---
 
