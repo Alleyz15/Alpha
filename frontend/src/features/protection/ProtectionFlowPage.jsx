@@ -5,7 +5,12 @@ import ConfigureProtectionStep from './ConfigureProtectionStep.jsx';
 import ProtectionStatusStep from './ProtectionStatusStep.jsx';
 import ReviewProtectionStep from './ReviewProtectionStep.jsx';
 import useMarketContext from './useMarketContext.js';
-import { getDateBounds, isKnownAsset, validateConfiguration } from './protectionFlowUtils.js';
+import {
+  defaultProtectionUnits,
+  getDateBounds,
+  isKnownAsset,
+  validateConfiguration,
+} from './protectionFlowUtils.js';
 
 function UnsupportedAsset({ symbol, onExit }) {
   return (
@@ -76,6 +81,14 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, m
     const rawAsset = market.context?.assets?.find((item) => item.symbol === symbol);
     return rawAsset ? toMarketAssetViewModel(rawAsset, market.context.updatedAt) : null;
   }, [market.context, symbol]);
+
+  useEffect(() => {
+    if (!asset) return;
+    const defaultUnits = defaultProtectionUnits(asset.holdingUnits);
+    if (!defaultUnits) return;
+
+    setForm((current) => (current.units === '' ? { ...current, units: defaultUnits } : current));
+  }, [asset?.holdingUnits]);
 
   const selectedTier = useMemo(
     () => quote?.tiers.find((tier) => tier.tierId === selectedTierId) ?? null,

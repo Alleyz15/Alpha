@@ -26,6 +26,9 @@ async function request(path, options = {}) {
 export const liveApi = {
   getDemoContext: () => request('/api/demo-context'),
   getMarketContext: () => request('/api/market-context'),
+  getAssetsOverview: () => request('/api/assets/overview'),
+  getAssetCandles: (symbol, range = '1D') => request(`/api/assets/${encodeURIComponent(symbol)}/candles?range=${encodeURIComponent(range)}`),
+  getAssetOrderBook: (symbol) => request(`/api/assets/${encodeURIComponent(symbol)}/order-book`),
   createQuote: (body) => request('/api/quote', { method: 'POST', body: JSON.stringify(body) }),
   purchaseQuote: (body) => request('/api/purchase', { method: 'POST', body: JSON.stringify(body) }),
   getPositions: () => request('/api/positions'),

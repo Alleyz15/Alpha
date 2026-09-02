@@ -88,6 +88,7 @@ function apiClient(overrides = {}) {
 
 async function completeConfiguration(user) {
   const amount = await screen.findByLabelText(/Amount to protect/);
+  await user.clear(amount);
   await user.type(amount, '0.005');
   const date = screen.getByLabelText(/Target date/);
   await user.type(date, date.min);
@@ -141,6 +142,21 @@ describe('ProtectionFlowPage', () => {
     expect(screen.getByText('0.01 BTC')).toBeVisible();
     expect(screen.getByText('Live market price')).toBeVisible();
     expect(screen.getByText('Simulated holding')).toBeVisible();
+    await waitFor(() => expect(screen.getByLabelText(/Amount to protect/)).toHaveValue(0.0025));
+  });
+
+  it('leaves the amount empty and disables quoting when the holding is zero', async () => {
+    const context = marketContext();
+    context.assets[0] = { ...context.assets[0], holdingUnits: 0 };
+    const client = apiClient({ getMarketContext: vi.fn().mockResolvedValue(context) });
+
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+
+    const amount = await screen.findByLabelText(/Amount to protect/);
+    expect(amount).toHaveValue(null);
+    expect(amount).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Get live quote/ })).toBeDisabled();
+    expect(client.createQuote).not.toHaveBeenCalled();
   });
 
   it('shows the backend reason and disables quoting when protection is unavailable', async () => {

@@ -1,6 +1,7 @@
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
 import { Card } from './components/ui/index.js';
+import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
 import WelcomePage from './features/welcome/WelcomePage.jsx';
@@ -12,6 +13,7 @@ function WelcomeRoute() {
     <WelcomePage
       apiClient={liveApi}
       onProtect={(symbol) => navigate(`/protect/${symbol}`)}
+      onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
       onDashboard={() => navigate('/dashboard')}
     />
   );
@@ -27,6 +29,22 @@ function ProtectionRoute() {
       apiClient={liveApi}
       onExit={() => navigate('/')}
       onViewDashboard={() => navigate('/dashboard')}
+    />
+  );
+}
+
+function CoinDetailRoute() {
+  const navigate = useNavigate();
+  const { symbol = '' } = useParams();
+  const normalizedSymbol = decodeURIComponent(symbol).toUpperCase();
+
+  return (
+    <CoinDetailPage
+      symbol={normalizedSymbol}
+      apiClient={liveApi}
+      onBack={() => navigate('/#live-market')}
+      onDashboard={() => navigate('/dashboard')}
+      onProtect={() => navigate(`/protect/${normalizedSymbol}`)}
     />
   );
 }
@@ -51,6 +69,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<WelcomeRoute />} />
       <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
       <Route path="/protect/:symbol" element={<ProtectionRoute />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

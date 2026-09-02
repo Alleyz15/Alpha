@@ -17,6 +17,8 @@ const copy = Object.freeze({
   transaction: {
     mock: 'Sample only · nothing was sent to Base',
     operator: 'Waiting for the app’s operator to execute on Base',
+    failedRefunded: 'Execution failed · funds refunded',
+    failed: 'Execution failed',
     onchain: 'Purchased by the app’s wallet',
     link: 'Verify on BaseScan',
   },
@@ -71,6 +73,8 @@ export default function RealityDisclosure({
   floor,
   expiry,
   statusLabel,
+  status,
+  paymentStatus,
 }) {
   useEffect(() => {
     if (isMock && !mockWarningShown) {
@@ -136,6 +140,13 @@ export default function RealityDisclosure({
     }
 
     const isOnchain = fill === 'onchain' && Boolean(explorerUrl);
+    if (status === 'failed') {
+      const failureCopy = paymentStatus === 'refunded'
+        ? copy.transaction.failedRefunded
+        : copy.transaction.failed;
+      return <div className={`transaction-reality failed ${compact ? 'compact' : ''}`}>{failureCopy}</div>;
+    }
+
     if (!isOnchain) {
       return <div className={`transaction-reality operator ${compact ? 'compact' : ''}`}>{copy.transaction.operator}</div>;
     }
