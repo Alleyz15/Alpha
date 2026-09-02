@@ -65,6 +65,12 @@ export default function ReviewProtectionStep({
             </Alert>
           )}
 
+          {!tier.sizeConfirmed && (
+            <Alert tone="warning" title="Amount confirmation is incomplete">
+              {tier.sizeConfirmationMessage} The size shown is the backend’s computed amount, but it is not presented as chain-confirmed.
+            </Alert>
+          )}
+
           <div className="protection-meaning">
             <ShieldIcon />
             <div>

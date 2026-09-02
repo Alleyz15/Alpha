@@ -143,6 +143,15 @@ export function toQuoteViewModel(dto) {
       expiryLaterThanRequested: Boolean(tier.disclosure.expiryLaterThanRequested),
       paysIn: tier.settlement.paysIn,
       protectedValueAtFloor: formatUsdc(tier.payout.floorValueUsdc),
+      sizeConfirmed: tier.size.confirmed === true,
+      sizeConfirmationMessage: tier.size.unconfirmedReason === 'operator_spend_capacity'
+        ? 'Alpha could not confirm this amount against the operator’s current USDC spending capacity. Final safety checks may reject the request.'
+        : tier.size.unconfirmedReason === 'capacity_unreadable'
+          ? 'Alpha could not read the operator’s current USDC spending capacity. Final safety checks may reject the request.'
+          : tier.size.confirmed === true
+            ? null
+            : 'Alpha could not confirm this amount on-chain. Final safety checks may reject the request.',
+      sizeUnconfirmedReason: tier.size.unconfirmedReason ?? null,
       raw: tier,
     };
   });

@@ -464,3 +464,249 @@ Files updated:
 
 - The approved page content and product scope were implemented without deviation.
 - No new Anime.js dependency was installed because the frontend already contained Anime.js and its lockfile resolved to the current 4.5.0 release requested for this phase.
+
+## Phase 6 — Portfolio and Protection Details
+
+**Status:** Complete
+
+### Approved implementation plan
+
+Phase 6 builds the real-data Portfolio and Protection Details experience. It consumes the backend portfolio, position-list, position-detail, and candle endpoints without adding sample holdings, estimated payouts, or client-generated contract facts. The final navigation shell remains outside this phase; both pages use centered standalone layouts without a sidebar.
+
+1. Build `/portfolio` as the user's holdings and protection overview:
+   - Load `GET /api/portfolio` and `GET /api/positions` together.
+   - Show Portfolio Value with an explicit simulated-holdings label and never add a seven-day performance claim.
+   - Respect `totalValueComplete`; when it is false, identify `unpricedAssets` and label the displayed value as partial.
+   - Keep active and pending protection counts separate and show the backend's next confirmed expiry.
+   - Show the six protectable crypto assets returned as holdings while retaining USDC in the backend total only.
+   - Render one Protection Overview table with Asset, Holdings, Current Price, Protection, Expiry, and Action.
+   - Treat only downside positions with `status: active` and `verifiedOnChain: true` as protected. Calls are upside positions and never count as protection.
+   - Enforce exactly one action per row: View for an active or pending downside position, or Buy Protection when no current downside position exists.
+   - Add holdings-scoped search plus honest loading, error, empty, no-match, and missing-price states.
+2. Build `/protection/:positionId` as the calm single-contract tracker:
+   - Load `GET /api/positions/:positionId`; return an ownership-safe not-found message for a 404.
+   - Show the contract identity, status, order reference, expiry, Premium/Payment, and Time Left without a current-market-price summary card or estimated-payout card.
+   - Add Contract Overview with Asset, Contract Type, Quantity Covered, Entry Price, Strike Price, Purchase Date, Expiry Date, and Status.
+   - Add a separate live tracking request using the real 1W candle endpoint. Draw a price line, dashed strike reference, and protected-zone fill; show an explicit unavailable state if no real chart data exists.
+   - Keep only Market Price and Protection Status beneath the chart. Do not add Current PnL, Net Result, or Estimated Payout.
+   - Add Order Details with Buyer Name, Order ID, Account/Wallet, Order Created, Settlement Type, and Payment Method. State that the wallet is operator-controlled and never imply user self-custody.
+   - Show BaseScan only when `verifiedOnChain` is true and an explorer URL is supplied.
+   - Render the sanitized backend event timeline, a three-point contract progress display, plain-language “What this means for you” copy, View History, and Buy More Protection.
+   - Do not add a manual Claim / Settle action because the backend reports automatic settlement at expiry.
+3. Add compatibility for the backend's quote-size evidence:
+   - Carry `size.confirmed` and `size.unconfirmedReason` through the quote view model.
+   - Display operator-capacity or unreadable-capacity warnings on Configure and Review.
+   - Keep the computed size visible while clearly stating that it was not confirmed; never present the number as chain-confirmed.
+4. Add responsive, accessibility, and resilience behavior:
+   - Follow the Alpha design tokens, centered app-page width, narrow 880px tracker width, visible focus, monospaced financial values, readable mobile stacking, and table-local overflow.
+   - Keep contract content usable when the separate chart request fails.
+   - Add automated tests for protection truth, one-action table behavior, no-payment display, null formatting, removed metrics, chart success/failure, and unconfirmed quote-size disclosure.
+
+### Planned files
+
+New files:
+
+- `frontend/src/features/portfolio/PortfolioPage.jsx`
+- `frontend/src/features/portfolio/ProtectionDetailsPage.jsx`
+- `frontend/src/features/portfolio/ProtectionTrackingChart.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.js`
+- `frontend/src/features/portfolio/PortfolioPages.test.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.test.js`
+- `frontend/src/styles/portfolio.css`
+
+Updated files:
+
+- `frontend/src/App.jsx`
+- `frontend/src/api/client.js`
+- `frontend/src/adapters/quoteViewModel.js`
+- `frontend/src/adapters/quoteViewModel.test.js`
+- `frontend/src/features/protection/ConfigureProtectionStep.jsx`
+- `frontend/src/features/protection/ReviewProtectionStep.jsx`
+- `frontend/src/styles/protection-flow.css`
+- `frontend/src/index.css`
+- `docs/alpha-design-system.md`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Completion requirements
+
+- Portfolio and Protection Details routes render from real backend responses with no sample financial data.
+- Unverified positions are never labelled protected, calls are never treated as downside protection, and BaseScan is gated by `verifiedOnChain`.
+- Incomplete totals, null entry prices, no-payment operator purchases, missing wallet information, and missing chart feeds have explicit honest states.
+- The requested Contract Overview, Live Tracking, Order Details, Timeline, explanation, and actions are present; removed payout/PnL/current-price-summary/manual-settlement elements are absent.
+- All frontend tests and the production build pass.
+
+### Implementation result
+
+Completed on 2026-09-03.
+
+- Added `/portfolio` and `/protection/:positionId` to the application router and extended the live client with `getPortfolio()` and `getPositionDetail()`.
+- Built the centered Portfolio page with holdings search, two summary cards, incomplete-total disclosure, simulated-holding disclosure, and a single internally scrollable Protection Overview table.
+- Added deterministic position-to-holding matching that prefers confirmed active downside protection, then a pending downside request. Upside calls, settled positions, expired positions, and failed positions do not make an asset appear protected.
+- Included USDC in the backend's portfolio total but intentionally excluded it from the protection-action table.
+- Enforced exactly one row action. Active or pending downside records open their detail page; unprotected crypto holdings open the asset-specific protection checkout.
+- Built the narrow Protection Details tracker with the revised two-card summary, complete Contract Overview, live line chart, strike reference, protected-zone fill, two tracking stats, complete Order Details, operator-custody disclosure, sanitized event history, progress milestones, plain-language contract meaning, and approved actions.
+- Kept market tracking independent from contract loading. If a real candle feed is unavailable, the chart reports that no path was invented while every stored contract and order section remains usable.
+- Added truthful payment presentation for paid, held, refunded, and operator-no-payment positions. Missing entry price, order ID, wallet, market price, or date values render as an em dash or an explicit not-confirmed state rather than zero.
+- Added unconfirmed quote-size handling to Configure and Review. The frontend now distinguishes a backend-computed amount from an amount checked against current operator capacity and explains both supported failure reasons.
+- Updated the design-system action rule to reflect automatic settlement at expiry and remove the stale manual Claim / Settle control.
+- Installed the dependencies already declared by the frontend after the checkout was found to be missing router and chart packages; no package version or lockfile change was required and npm reported zero vulnerabilities.
+
+Files added:
+
+- `frontend/src/features/portfolio/PortfolioPage.jsx`
+- `frontend/src/features/portfolio/ProtectionDetailsPage.jsx`
+- `frontend/src/features/portfolio/ProtectionTrackingChart.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.js`
+- `frontend/src/features/portfolio/PortfolioPages.test.jsx`
+- `frontend/src/features/portfolio/portfolioViewModel.test.js`
+- `frontend/src/styles/portfolio.css`
+
+Files updated:
+
+- `frontend/src/App.jsx`
+- `frontend/src/api/client.js`
+- `frontend/src/adapters/quoteViewModel.js`
+- `frontend/src/adapters/quoteViewModel.test.js`
+- `frontend/src/features/protection/ConfigureProtectionStep.jsx`
+- `frontend/src/features/protection/ReviewProtectionStep.jsx`
+- `frontend/src/styles/protection-flow.css`
+- `frontend/src/index.css`
+- `docs/alpha-design-system.md`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Verification performed
+
+- Frontend dependency installation and audit: passed; six missing declared packages were restored and npm reported zero vulnerabilities.
+- Automated frontend tests: passed; 13 test files and 73 tests passed.
+- Phase 6 behavior coverage: passed for USDC exclusion from protectable rows, call exclusion, unverified-position wording, one action per holding, route navigation, no-payment display, null entry/order handling, all required detail sections, removed payout/PnL/manual-settlement controls, live chart rendering, and chart-failure resilience.
+- Quote evidence coverage: passed; an unconfirmed operator-capacity result remains unconfirmed in the view model and supplies the approved explanation.
+- Production frontend build: passed with 138 modules transformed.
+- Dependency audit: passed; npm reported zero vulnerabilities.
+
+### Deviations from plan
+
+- The approved product scope was implemented without deviation.
+- The final sidebar/global navigation remains intentionally absent because its design has not yet been provided. The pages use local back and route actions so Phase 6 can function independently.
+- AVAX and XRP detail charts depend on backend candle availability. Phase 6 implements the correct unavailable state and does not substitute chart data; the page will begin rendering those charts automatically when the same endpoint supports them.
+
+## Phase 7 — Home dashboard
+
+**Status:** Complete
+
+### Approved implementation plan
+
+Phase 7 replaces the legacy `/dashboard` position list with Alpha's daily-use Home page and adds `/home` as an equivalent direct route. The page follows `docs/alpha-design-system.md`, uses only live backend responses, and keeps the previously removed AI brief, watchlist, market movers, protection-coverage summary, estimated payout, and seven-day portfolio performance out of the interface.
+
+1. Build the fixed-viewport Home shell:
+   - Add the approved 76px navigation rail, centered 1400px content area, compact topbar, market search, Protection Overview action, and backend-derived avatar initials.
+   - Do not add a general Buy Protection navigation link or personalised greeting.
+   - Keep the desktop page within one viewport; allow only the trend strip and market table to scroll internally when necessary.
+2. Build the Portfolio Value card:
+   - Read `GET /api/portfolio` and show the current backend total in USDC.
+   - Label displayed holdings as simulated and include a View Full Portfolio action.
+   - Respect `totalValueComplete`; identify unpriced assets and call the number partial instead of presenting an incomplete sum as a complete value.
+   - Do not show a seven-day portfolio change, estimated payout, protection coverage percentage, or another portfolio snapshot card.
+3. Build Trending Now:
+   - Read real `priceChange24hPct` values from `GET /api/assets/overview`.
+   - Rank Alpha's four supported market assets by absolute 24-hour movement and state that limited scope directly.
+   - Keep unavailable movements unavailable rather than treating them as zero.
+   - Link each asset to its existing Coin Detail route.
+4. Build Top Cryptocurrencies:
+   - Show the four real overview assets with coin identity, aggregated USD price, 24-hour change, and market capitalization.
+   - Request `GET /api/assets/:symbol/candles?range=1W` and derive each small seven-day line only from returned Binance USDT closes.
+   - Label the USD/USDT source distinction and show an explicit per-asset unavailable state if a candle request fails.
+   - Filter the table locally from the topbar search without changing backend data.
+5. Add resilient live refresh behavior:
+   - Refresh portfolio and overview data about every 45 seconds while the page is visible.
+   - Preserve the last successful data on a refresh failure and show a warning.
+   - Keep Portfolio and Market failure boundaries separate so one provider cannot blank the other section.
+   - Use skeletons only for a true initial load and never render a temporary zero.
+6. Add Anime.js as progressive enhancement:
+   - Use the already bundled Anime.js dependency with a root-scoped timeline and cleanup.
+   - Add a staged dashboard entrance, a rotating live-data orbit, pulsing verification nodes, live indicators, and a restrained row refresh accent.
+   - Keep all financial values and content synchronously visible, catch animation failures, and respect reduced-motion preferences.
+7. Add responsive and automated verification:
+   - Preserve the approved colors, typography, spacing, table rules, badges, visible focus, and numeric formatting.
+   - Collapse the rail and stacked layout on compact screens while keeping horizontal market data accessible.
+   - Test real-data rendering, source labels, ranking, search, partial totals, provider isolation, missing candles, routing, removed content, and route integration.
+
+### Planned files
+
+New files:
+
+- `frontend/src/features/home/HomePage.jsx`
+- `frontend/src/features/home/HomePage.test.jsx`
+- `frontend/src/features/home/MarketSparkline.jsx`
+- `frontend/src/features/home/homeViewModel.js`
+- `frontend/src/features/home/homeViewModel.test.js`
+- `frontend/src/features/home/useHomeAnimations.js`
+- `frontend/src/features/home/useHomeData.js`
+- `frontend/src/styles/home.css`
+
+Updated files:
+
+- `frontend/src/App.jsx`
+- `frontend/src/App.test.jsx`
+- `frontend/src/index.css`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Completion requirements
+
+- `/dashboard` and `/home` render the approved Home page using the live client.
+- Portfolio value, 24-hour ranking, market prices, market caps, and seven-day trend paths come from their documented backend responses with no sample values.
+- USD market data, USDT candles, and USDC portfolio valuation remain clearly distinguished.
+- A failure in one source does not remove valid data from another source, and stale refresh data is disclosed.
+- Removed Home features and personalised greeting copy are absent.
+- Anime.js remains optional, scoped, cleaned up, and reduced-motion safe.
+- Automated tests, production build, live integration, visual review, styling checks, and Git checks pass.
+
+### Implementation result
+
+Completed on 2026-09-03.
+
+- Replaced the legacy `/dashboard` page with the new Home dashboard and added `/home` as an alias. The previous dashboard component remains untouched but is no longer mounted by these routes.
+- Added the approved navigation rail and topbar without a general Buy Protection link. Home, Portfolio, Markets, Product Reality, Protection Overview, and asset-detail navigation use existing application routes.
+- Changed the Welcome page's “My protection” action to open `/portfolio`, matching the action's meaning now that Phase 6 exists.
+- Built the live Portfolio Value card with a prominent USDC total, simulated-holdings disclosure, partial-total handling, unpriced-asset names, and View Full Portfolio action. No portfolio-performance claim is made.
+- Built Trending Now from backend 24-hour percentages and made the ranking rule explicit: largest absolute movement first across Alpha's four market assets.
+- Built the Top Cryptocurrencies table using CoinGecko USD price/change/market-cap fields and separate Binance USDT seven-day closes. Each asset name and trending card opens Coin Detail.
+- Added small responsive SVG sparklines calculated only from returned candle closes. A failed or insufficient candle response produces “Unavailable” and never a fabricated line.
+- Added a 45-second visible-page refresh for summary data, a longer candle refresh path, last-successful-value preservation, and separate Portfolio/Market initial error states.
+- Added an original live-data orbit around the Portfolio Value card. Anime.js provides the scoped entrance sequence, continuous orbit, verification-node pulses, live-dot pulses, and market refresh accents. All content is visible without animation, reduced motion is respected, errors are isolated, and scope cleanup runs on unmount.
+- Applied the Alpha token palette, Space Grotesk/Inter/JetBrains Mono roles, 76px rail, centered 1400px layout, internal scrolling, table styling, semantic change chips, source disclosures, keyboard focus, and compact-screen stacking.
+- Kept “Good Morning, Demo User”, AI Market Brief, Favorites/Watchlist, Market Movers, Estimated Payout, Protection Coverage, and seven-day portfolio-change content out of the page.
+
+Files added:
+
+- `frontend/src/features/home/HomePage.jsx`
+- `frontend/src/features/home/HomePage.test.jsx`
+- `frontend/src/features/home/MarketSparkline.jsx`
+- `frontend/src/features/home/homeViewModel.js`
+- `frontend/src/features/home/homeViewModel.test.js`
+- `frontend/src/features/home/useHomeAnimations.js`
+- `frontend/src/features/home/useHomeData.js`
+- `frontend/src/styles/home.css`
+
+Files updated:
+
+- `frontend/src/App.jsx`
+- `frontend/src/App.test.jsx`
+- `frontend/src/index.css`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Verification performed
+
+- Backend prerequisite tests: passed; all 170 backend tests passed before implementation.
+- Live backend prerequisite check: passed; portfolio value was complete, all four overview assets returned non-null price, 24-hour change, and market cap, and ETH/BTC/SOL/BNB each returned 168 real one-hour candles for `range=1W`.
+- Automated frontend tests: passed after final visual polish; 15 test files and 83 tests passed, including 10 new Home tests.
+- Phase 7 behavior coverage: passed for real portfolio and market rendering, USD/USDT/USDC source distinction, absolute-movement ranking, search filtering, qualified partial values, isolated market failure, missing-candle behavior, Portfolio and Coin Detail navigation, and absence of removed content.
+- Production build: passed after final visual polish with 139 modules transformed.
+- Dependency audit: passed; npm reported zero vulnerabilities.
+- Desktop live-data visual review: passed at 1440×900. The centered content fills one viewport, all four ranked assets and market rows are readable, and every real sparkline renders.
+- Compact live-data visual review: passed at 500×900. Controls stack cleanly, the trend strip remains horizontally accessible, and the market table uses local horizontal scrolling.
+- Failure-state visual review: passed. Portfolio and market provider failures are explicit, no blank panels or sample figures appear, and live-status wording is removed when a source is unavailable.
+
+### Deviations from plan
+
+- No product-scope deviation. The Home page contains only the approved sections and capabilities.
+- The market sections intentionally remain four-asset views because `/api/assets/overview` and the candle endpoint currently support ETH, BTC, SOL, and BNB. AVAX and XRP portfolio holdings are not relabelled as Home market-data support.
