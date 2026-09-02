@@ -1,9 +1,9 @@
 // Quote engine exercise script (IMPLEMENT.md Phase 1).
 //
 // Read-only: no wallet, no signing, no transactions.
-// Covers tasks 1.1, 1.2 and 1.3 so far. Grows as 1.4-1.8 land.
+// Covers tasks 1.1 to 1.6 so far. Grows as 1.7-1.8 land.
 //
-//   node --env-file-if-exists=../.env scripts/quote.js [ASSET]
+//   node --env-file-if-exists=../.env scripts/quote.js [ASSET] [TARGET_DAYS]
 //
 // This is an internal dev tool, so options terminology is fine here.
 // BR-3 forbids it in user-facing output only.
@@ -13,13 +13,16 @@ import { listSupportedAssets } from '../src/thetanuts/assets.js';
 import { getSpotPrice } from '../src/thetanuts/market.js';
 import { getBuyablePutOrders } from '../src/thetanuts/orders.js';
 import { toHumanOrder, toPayoutContracts, payoutToUsdc } from '../src/thetanuts/decimals.js';
+import { listExpiries, selectProtectionTiers } from '../src/thetanuts/selection.js';
+import { sizePosition, maxContractsFor } from '../src/thetanuts/sizing.js';
+import { buildQuote, isQuoteFresh, QuoteRefusedError } from '../src/thetanuts/quote.js';
 
 const asset = (process.argv[2] || 'ETH').toUpperCase();
 
-// Default protection level, BR-4. Deriving the target strike properly is task
-// 1.4 - this is here only to show how far the book's real strikes sit from
-// what a user would ask for (BR-6).
-const PROTECTION_PCT = Number(process.env.DEFAULT_PROTECTION_PCT ?? 20);
+// Target tenor in days. 25 by default because the buyable book tops out around
+// 26 days (BR-52) - a 30-day target has no answer under BR-6, which the run
+// below demonstrates.
+const TARGET_DAYS = Number(process.argv[3] ?? 25);
 
 const usd = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -77,20 +80,20 @@ row('premium', r.price, 'fromPriceDecimals', `${human.premiumPerContract} USDC p
 console.log(`             hand check: ${r.price} / 1e8 = ${Number(r.price) / 1e8}`);
 console.log(`             WRONG (6dp): ${r.price} / 1e6 = ${Number(r.price) / 1e6}   <-- the 100x error`);
 
-row('numContracts', r.numContracts, 'fromBigInt(_, 6)', `${human.numContracts} contracts`);
-console.log(`             hand check: ${r.numContracts} / 1e6 = ${Number(r.numContracts) / 1e6}`);
-
 row('available', sample.availableAmount, 'fromBigInt(_, 6)', `${usd(human.availableCollateralUsdc)} USDC`);
 console.log(`             hand check: ${sample.availableAmount} / 1e6 = ${Number(sample.availableAmount) / 1e6}`);
 
 row('expiry', r.expiry, 'new Date(_ * 1000)', human.expiry.toISOString());
 console.log(`             ${human.daysToExpiry.toFixed(1)} days out`);
 
-// Cross-check: premium x contracts should equal the collateral on the order.
-const implied = human.premiumPerContract * human.numContracts;
-console.log(`\ncross-check: premium ${human.premiumPerContract} x ${human.numContracts} contracts = ` +
-  `${usd(implied)} vs available ${usd(human.availableCollateralUsdc)}  ` +
-  `${Math.abs(implied - human.availableCollateralUsdc) < 1 ? 'ok' : 'MISMATCH'}`);
+// Cross-check: the maker's collateral must cover the maximum payout, so
+// maxContracts x strike should equal availableAmount.
+const maxC = Number(maxContractsFor(sample)) / 1e6;
+console.log(`\ncross-check: maxContracts ${maxC.toFixed(6)} x strike ${usd(human.strike)} = ` +
+  `${usd(maxC * human.strike)} vs available ${usd(human.availableCollateralUsdc)}  ` +
+  `${Math.abs(maxC * human.strike - human.availableCollateralUsdc) < 1 ? 'ok' : 'MISMATCH'}`);
+console.log(`note: order.numContracts is ${Number(r.numContracts) / 1e6} — NOT a size limit, ` +
+  `it is availableAmount/price. The real cap is ${maxC.toFixed(6)}.`);
 
 // --- The numContracts scale trap --------------------------------------------
 //
@@ -101,51 +104,195 @@ console.log(`\ncross-check: premium ${human.premiumPerContract} x ${human.numCon
 const settleAt = human.strike - 250;
 const settle8 = BigInt(Math.round(settleAt * 1e8));
 
-const wrong = client.utils.calculatePayoutAtPrice(sample.order, r.numContracts, settle8);
-const right = client.utils.calculatePayoutAtPrice(sample.order, toPayoutContracts(r.numContracts), settle8);
+// One whole contract, as the Order struct scales it (6dp).
+const oneContract6 = 10n ** 6n;
+const wrong = client.utils.calculatePayoutAtPrice(sample.order, oneContract6, settle8);
+const right = client.utils.calculatePayoutAtPrice(sample.order, toPayoutContracts(oneContract6), settle8);
 
 console.log(`\n--- numContracts scale: Order struct 6dp vs payout helpers 18dp ---\n`);
-console.log(`payout if ${asset} settles at ${usd(settleAt)} (strike ${usd(human.strike)}, $250 in the money):`);
-console.log(`  hand:               ${human.numContracts} contracts x $250 = ${usd(human.numContracts * 250)}`);
+console.log(`payout on 1 contract if ${asset} settles at ${usd(settleAt)} ` +
+  `(strike ${usd(human.strike)}, $250 in the money):`);
+console.log(`  hand:               1 contract x $250 = ${usd(250)}`);
 console.log(`  passed as-is (6dp):  raw ${String(wrong).padStart(13)} = ${payoutToUsdc(wrong)} USDC` +
   `   <-- 10^12 too small, and it does not throw`);
 console.log(`  rescaled to 18dp:    raw ${String(right).padStart(13)} = ${payoutToUsdc(right)} USDC` +
   `   <-- correct`);
 
-// --- Strike depth per expiry ------------------------------------------------
-//
-// How thin is the book? If an expiry offers only a couple of strikes, BR-6's
-// "closest available" can land a long way from what the user asked for, and
-// the UI has to say so.
+// --- Task 1.4: expiries and protection tiers --------------------------------
 
-const targetStrike = spot * (1 - PROTECTION_PCT / 100);
-console.log(`\n--- strike depth by expiry ---`);
-console.log(`a ${PROTECTION_PCT}% floor on ${asset} at ${usd(spot)} wants a strike near ${usd(targetStrike)}\n`);
+const { expiries } = await listExpiries(asset);
 
-const byExpiry = new Map();
-for (const o of puts.map(toHumanOrder)) {
-  if (!byExpiry.has(o.expiryUnix)) byExpiry.set(o.expiryUnix, []);
-  byExpiry.get(o.expiryUnix).push(o.strike);
+console.log(`\n--- 1.4 expiries with buyable puts below spot ---\n`);
+for (const e of expiries) {
+  const lo = e.strikes.at(-1).strike;
+  const hi = e.strikes[0].strike;
+  console.log(
+    `${e.expiry.toISOString().slice(0, 10)}  (+${e.daysToExpiry.toFixed(1).padStart(5)} days)  ` +
+    `${String(e.strikes.length).padStart(2)} strikes  ${usd(lo)} - ${usd(hi)}  ` +
+    `(floors ${(((spot - hi) / spot) * 100).toFixed(1)}% - ${(((spot - lo) / spot) * 100).toFixed(1)}%)`,
+  );
 }
 
-for (const expiryUnix of [...byExpiry.keys()].sort((a, b) => a - b)) {
-  const strikes = [...new Set(byExpiry.get(expiryUnix))].sort((a, b) => a - b);
-  const days = ((expiryUnix * 1000 - Date.now()) / 86_400_000).toFixed(1);
+const showTiers = (result) => {
+  const { selection } = result;
 
-  // Closest available strike to the target, and how far off it lands.
-  const closest = strikes.reduce((best, s) =>
-    Math.abs(s - targetStrike) < Math.abs(best - targetStrike) ? s : best);
-  const gapPct = ((closest - targetStrike) / targetStrike) * 100;
-  const realFloorPct = ((spot - closest) / spot) * 100;
+  if (!result.expiry) {
+    console.log(`  no expiry available on or after ` +
+      `${selection.requestedDate.toISOString().slice(0, 10)} — ${selection.reason}`);
+    if (selection.longestAvailable) {
+      console.log(`  longest available: ${selection.longestAvailable.expiry.toISOString().slice(0, 10)} ` +
+        `(+${selection.longestAvailable.daysToExpiry.toFixed(1)} days), ` +
+        `${selection.shortfallDays.toFixed(1)} days short of the target`);
+    }
+    return;
+  }
 
-  console.log(
-    `${new Date(expiryUnix * 1000).toISOString().slice(0, 10)}  (+${days.padStart(5)} days)  ` +
-    `${String(strikes.length).padStart(2)} strikes  ` +
-    `${usd(strikes[0])} - ${usd(strikes.at(-1))}`,
-  );
-  console.log(
-    `    closest to target: ${usd(closest)}  ` +
-    `(${gapPct >= 0 ? '+' : ''}${gapPct.toFixed(1)}% off target, ` +
-    `a real floor of ${realFloorPct.toFixed(1)}% down)`,
-  );
+  console.log(`  expiry ${result.expiry.expiry.toISOString().slice(0, 10)} ` +
+    `(+${result.expiry.daysToExpiry.toFixed(1)} days), ` +
+    `${result.availableStrikes} strikes below spot, ` +
+    `${selection.gapDays.toFixed(1)} days after the target`);
+  console.log();
+  console.log(`    ${'tier'.padEnd(10)}${'floor'.padStart(12)}${'protection'.padStart(12)}` +
+    `${'cost / unit'.padStart(14)}${'% of spot'.padStart(11)}`);
+  console.log('    ' + '-'.repeat(59));
+  for (const t of result.tiers) {
+    console.log(
+      `    ${(t.label + (t.recommended ? ' *' : '')).padEnd(10)}` +
+      `${usd(t.floorUsd).padStart(12)}` +
+      `${('-' + t.protectionPct.toFixed(1) + '%').padStart(12)}` +
+      `${(t.costPerUnit.toFixed(4) + ' USDC').padStart(14)}` +
+      `${(t.costPctOfSpot.toFixed(2) + '%').padStart(11)}`,
+    );
+  }
+  console.log(`    * recommended (BR-41: middle tier preselected)`);
+};
+
+console.log(`\n--- 1.4 tiers for a ${TARGET_DAYS}-day target ---`);
+showTiers(await selectProtectionTiers(asset, TARGET_DAYS));
+
+// BR-6 is strict: an expiry is never earlier than the target date. The buyable
+// book tops out around 26 days (BR-52), so anything longer has no answer at
+// all - including the 30 days the product has been describing.
+console.log(`\n--- 1.4 BR-6 check: a 30-day target ---`);
+showTiers(await selectProtectionTiers(asset, 30));
+
+console.log(`\n--- 1.4 BR-6 check: a 62-day target ---`);
+showTiers(await selectProtectionTiers(asset, 62));
+
+// --- Task 1.5: size the position --------------------------------------------
+//
+// Every limit is passed in. The premium cap comes from the environment (BR-33)
+// so it can be tightened without a code review; the minimum fillable size is
+// still unknown, so it is reported rather than enforced.
+
+const MAX_PREMIUM = Number(process.env.MAX_PREMIUM_PER_FILL_USDC ?? 5);
+
+const sized = await selectProtectionTiers(asset, TARGET_DAYS);
+
+if (sized.tiers.length > 0) {
+  const tier = sized.tiers.find((t) => t.recommended) ?? sized.tiers[0];
+
+  console.log(`\n--- 1.5 sizing the ${tier.label} tier ` +
+    `(floor ${usd(tier.floorUsd)}, ${usd(tier.costPerUnit)} per unit) ---`);
+  console.log(`premium cap ${usd(MAX_PREMIUM)} (BR-33, from the environment)\n`);
+
+  console.log(`  ${'holding'.padStart(9)}${'contracts'.padStart(12)}${'premium'.padStart(11)}` +
+    `${'protected'.padStart(12)}${'max payout'.padStart(13)}   bound by`);
+  console.log('  ' + '-'.repeat(72));
+
+  for (const units of [0.1, 0.5, 1, 5, 100]) {
+    const s = sizePosition(tier.order, { units, maxPremiumUsdc: MAX_PREMIUM });
+    console.log(
+      `  ${(units + ' ' + asset).padStart(9)}` +
+      `${s.contracts.toFixed(6).padStart(12)}` +
+      `${usd(s.premiumUsdc).padStart(11)}` +
+      `${(s.protectedUnits.toFixed(4) + ' ' + asset).padStart(12)}` +
+      `${usd(s.maxPayoutUsdc).padStart(13)}   ${s.boundBy}`,
+    );
+  }
+
+  console.log(`\n  limits on this order: collateral backs ` +
+    `${sizePosition(tier.order, { units: 1e9, maxPremiumUsdc: MAX_PREMIUM }).limits.byCollateral.toFixed(6)} contracts, ` +
+    `the ${usd(MAX_PREMIUM)} cap allows ` +
+    `${sizePosition(tier.order, { units: 1e9, maxPremiumUsdc: MAX_PREMIUM }).limits.byPremiumCap.toFixed(6)}`);
+
+  // BR-15 keeps trades at 1-3 USDC. What does that actually buy here?
+  console.log(`\n  BR-15 check — what 1-3 USDC buys at this tier:`);
+  for (const budget of [1, 2, 3]) {
+    const s = sizePosition(tier.order, { units: 1e9, maxPremiumUsdc: budget });
+    console.log(`    ${usd(budget).padStart(6)} -> ${s.contracts.toFixed(6)} contracts, ` +
+      `protecting ${s.protectedUnits.toFixed(4)} ${asset} ` +
+      `(${usd(s.protectedUnits * spot)} of holdings) with a ${usd(s.maxPayoutUsdc)} floor`);
+  }
+}
+
+// --- Task 1.6: the quote object ---------------------------------------------
+
+const HOLDING = 1;
+const BALANCE = 2;   // seeded, simulated (UC-0, BR-51)
+
+console.log(`\n--- 1.6 quote object ---`);
+console.log(`holding ${HOLDING} ${asset}, recorded balance ${BALANCE} ${asset}, ` +
+  `${TARGET_DAYS}-day target`);
+console.log(`the premium cap is NOT applied when quoting — it guards broadcasting,`);
+console.log(`not pricing (BR-33, Phase 3.5b)\n`);
+
+try {
+  const q = await buildQuote(asset, {
+    units: HOLDING,
+    balance: BALANCE,
+    targetDate: TARGET_DAYS,
+    // No maxPremiumUsdc: buildQuote does not apply the premium cap. The cap
+    // guards broadcasting, not pricing (BR-33) — see the note printed above.
+    validitySeconds: Number(process.env.QUOTE_VALIDITY_SECONDS ?? 60),
+  });
+
+  console.log(`  quote ${q.quoteId}`);
+  console.log(`  valid for ${q.validForSeconds}s, until ${q.expiresAt}   fresh: ${isQuoteFresh(q)}`);
+  console.log(`\n  protection`);
+  console.log(`    floor              ${usd(q.actual.floorUsdc)}  (-${q.actual.protectionPct}%)`);
+  console.log(`    expires            ${q.actual.expiry.slice(0, 10)}  ` +
+    `(${q.actual.daysToExpiry} days, ${q.actual.expiryGapDays} after the target)`);
+  console.log(`    covers             ${q.size.protectedUnits} of ${q.requested.units} ${asset}` +
+    `   (limited by: ${q.size.boundBy})`);
+  console.log(`\n  cost`);
+  console.log(`    premium            ${usd(q.cost.premiumUsdc)}  ` +
+    `(${usd(q.cost.premiumPerContractUsdc)}/contract, ${q.cost.premiumPctOfSpot}% of spot)`);
+  console.log(`\n  maximum loss (BR-2 — three different questions)`);
+  console.log(`    on the protection  ${usd(q.maxLoss.onProtection).padStart(10)}   the premium, and nothing more`);
+  console.log(`    on this purchase   ${usd(q.maxLoss.onProtectedPortion).padStart(10)}   <-- forConfirmation`);
+  console.log(`    on the holding     ${usd(q.maxLoss.onWholeHolding).padStart(10)}   includes pre-existing exposure`);
+  console.log(`\n  disclosure`);
+  console.log(`    size reduced       ${q.disclosure.sizeReduced}`);
+  console.log(`    unprotected        ${q.disclosure.unprotectedUnits} ${asset} = ` +
+    `${usd(q.disclosure.unprotectedValueUsdc)}`);
+  console.log(`    expiry later       ${q.disclosure.expiryLaterThanRequested}`);
+  console.log(`\n  if ${asset} goes to zero, the floor pays ${usd(q.payout.maxPayoutUsdc)}`);
+
+  // The frontend consumes JSON. Nothing here may be a BigInt or a Date.
+  const json = JSON.stringify(q);
+  console.log(`\n  JSON-safe: ${json.length} bytes, ` +
+    `raw order excluded: ${!('order' in JSON.parse(json))}, ` +
+    `order still reachable server-side: ${q.order !== undefined}`);
+} catch (e) {
+  if (e instanceof QuoteRefusedError) {
+    console.log(`  refused [${e.code}]: ${e.message}`);
+  } else throw e;
+}
+
+// The three limits behave differently on purpose.
+console.log(`\n--- 1.6 refuse vs clamp ---`);
+for (const [label, opts] of [
+  ['balance exceeded (refuse)', { units: 5, balance: 2 }],
+  ['collateral depth (clamp)', { units: 1e6, balance: 1e9 }],
+  ['unreachable expiry (refuse)', { units: 1, balance: 2, targetDate: 62 }],
+]) {
+  try {
+    const q = await buildQuote(asset, { targetDate: TARGET_DAYS, ...opts });
+    console.log(`  ${label.padEnd(30)} -> quoted ${q.size.protectedUnits} ${asset}, ` +
+      `premium ${usd(q.cost.premiumUsdc)}, boundBy ${q.size.boundBy}`);
+  } catch (e) {
+    if (!(e instanceof QuoteRefusedError)) throw e;
+    console.log(`  ${label.padEnd(30)} -> refused [${e.code}]`);
+  }
 }

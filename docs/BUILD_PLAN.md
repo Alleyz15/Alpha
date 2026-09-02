@@ -493,7 +493,7 @@ This phase therefore sends no transactions. No signing, no gas. It reads chain s
 
 Deliverables:
 
-- Settlement status read from `getOptionInfo().settled`.
+- Settlement status read from `getFullOptionInfo().isSettled`.
 - Payout amount read from `calculatePayout`, a view call.
 - A scheduler loop that finds expired positions and updates their status.
 - Failed-settlement detection.

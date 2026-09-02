@@ -1,0 +1,61 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toPositionViewModel } from '../../adapters/quoteViewModel.js';
+import { liveApi } from '../../api/client.js';
+import AppHeader from '../../components/AppHeader.jsx';
+import RealityDisclosure from '../../components/RealityDisclosure.jsx';
+import DashboardScreen from '../../screens/DashboardScreen.jsx';
+
+export default function DashboardPage({ apiClient = liveApi }) {
+  const navigate = useNavigate();
+  const [demoContext, setDemoContext] = useState(null);
+  const [positions, setPositions] = useState([]);
+  const [positionsState, setPositionsState] = useState('loading');
+
+  const load = useCallback(async () => {
+    setPositionsState('loading');
+
+    const [contextResult, positionsResult] = await Promise.allSettled([
+      apiClient.getDemoContext(),
+      apiClient.getPositions(),
+    ]);
+
+    setDemoContext(contextResult.status === 'fulfilled' ? contextResult.value : null);
+
+    if (positionsResult.status === 'fulfilled') {
+      setPositions(positionsResult.value.positions.map(toPositionViewModel));
+      setPositionsState('ready');
+    } else {
+      setPositions([]);
+      setPositionsState('error');
+    }
+  }, [apiClient]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function navigateLegacyHeader(view) {
+    navigate(view === 'dashboard' ? '/dashboard' : '/');
+  }
+
+  return (
+    <div className="app-shell dashboard-shell">
+      <AppHeader activeView="dashboard" onNavigate={navigateLegacyHeader} demoContext={demoContext} />
+
+      <main>
+        <DashboardScreen
+          positions={positions}
+          state={positionsState}
+          isMock={false}
+          reality={demoContext?.reality}
+          onExplore={() => navigate('/')}
+        />
+      </main>
+
+      <footer className="site-footer">
+        <RealityDisclosure variant="footer" isMock={false} reality={demoContext?.reality} />
+      </footer>
+    </div>
+  );
+}

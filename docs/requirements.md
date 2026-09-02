@@ -248,7 +248,7 @@ Settlement           real          protocol-driven
 
 1. Scheduler runs on interval (BR-11)
 2. Query DB for `active` positions with expiry ≤ now
-3. For each position, call `client.option.getOptionInfo(optionAddress)` and check `.settled`
+3. For each position, call `client.option.getFullOptionInfo(optionAddress)` and check `.isSettled`
 4. If not yet settled on-chain, leave as `active` and retry next run (BR-27)
 5. If settled, read the payout amount with `client.option.calculatePayout(optionAddress, settlementPrice)` (view call)
 6. **If payout > 0:** set status `settled`, record payout amount and settlement price
@@ -380,7 +380,7 @@ The premium comes from the live book, so the rate moves with the market. It is f
 | **BR-49** | Protection is only quoted against a balance the system holds a record of, and never exceeds it. A larger position would be a directional bet dressed as insurance — the exact thing this product exists to avoid. |
 | **BR-50** | This is a prototype. There is no user deposit flow and users never transfer assets to us. Balances are seeded. Do not build a deposit path; if one becomes necessary, propose it rather than assuming. |
 | **BR-51** | The boundary between simulated and real must be stated wherever a user or a judge can see it (BR-37). Balances are simulated; quotes, fills and settlement are real and verifiable on BaseScan. Blurring the two is worse than either alone. |
-| **BR-52** | Expiry availability is measured against the **buyable** book, not the raw book. Orders that exist but sit on the forbidden side do not count as liquidity. As of 30 Aug the raw book carries a +62 day expiry but none of it is buyable — the longest protection we can actually deliver is ~26 days. |
+| **BR-52** | Expiry availability is measured against the book we will actually buy from, which is narrower than the raw book **by our own decision, not by any limit of the protocol**. The raw book carries expiries out to two months. We buy the buy side only (BR-1) and **single-leg only** — and at three days and beyond, the buy-side puts are spreads. A $2,440/$2,420 spread stops protecting below $2,420, so the floor we would show would not be a floor, which is worse than no floor because the user believes they are covered. The longest tenor we offer is therefore the longest plain vanilla put on the book. That figure is not fixed: every expiry is at 08:00 UTC and the set rolls daily, so it sweeps from just under three days after a roll to about two before the next. It is computed live and never stored. |
 | **BR-48** | **A loan's maturity must equal the expiry of the put backing it.** The collateral floor only exists at expiry — before that, the put's market value is not its strike. A loan that can come due earlier than its protection has no floor at the moment it matters, and the product's central claim collapses. |
 | **BR-42** | No user-facing screen offers a sell action on an option. Buyers have capped losses; sellers do not. If a second action is needed, it is borrowing or depositing — both keep the user on the buy side (BR-1). |
 | **BR-43** | A protection level is a floor, not a guarantee against all loss. Screens must make clear that movement above the floor is carried by the user, or someone who drops 10% under a 20% floor will ask why nothing paid out. |
@@ -452,7 +452,7 @@ Judging is **"does it work"** and **"would anyone use it"** — not complexity. 
 1. ✅ **Resolved:** custodial, single burner wallet operated by Alvin. See §0.
 2. ✅ **Resolved:** OptionBook only. RFQ is out of scope for the MVP — too much demo risk. See §0.
 3. ✅ **Resolved:** settlement is fully automatic via the factory callback. `payout()` is deprecated and throws. UC-3 is read-only — no transaction, no gas.
-4. What's the minimum fillable size? Constrains BR-15 and the demo script.
+4. ✅ **Resolved:** fractional fills work. Thetanuts confirmed it, and Shawn has filled with **0.01 USDC**. `calculateNumContracts` round-trips exactly at 6dp granularity, so BR-15's 1–3 USDC sizing is comfortable — 1 USDC buys ~0.1 contracts at the 26-day expiry. `sizePosition()` still takes `minContracts` as a parameter in case a floor appears later; it currently reports rather than refuses.
 5. How many demo users to seed — see `DATABASE.md` open questions. There is no login either way.
 
 ---
@@ -483,9 +483,9 @@ Verified by introspecting `client` at runtime and reading `node_modules/@thetanu
 - `validateBuySlippage` / `validateOrderExpiry` / `validateFillSize` — exported helpers (BR-29)
 
 **Settlement (UC-3) — all read-only**
-- `option.getOptionInfo(addr)` → `.settled` ← **authoritative settlement status**
+- `option.getFullOptionInfo(addr)` → `.isSettled` ← **authoritative settlement status**. `getOptionInfo()` does NOT exist; it was in this appendix from 30 Aug to 1 Sep and reached the README
 - `option.calculatePayout(addr, settlementPrice)` — view call, payout amount
-- `option.isExpired(addr)` / `option.isSettled(addr)`
+- `option.isExpired(addr)` — note `isSettled` is a FIELD on `getFullOptionInfo()`, not a client method
 - `events.getOptionPayoutEvents(addr)` — actual payout events
 - `events.getOptionSettlementFailedEvents(addr)` — failure monitoring (BR-27)
 - ❌ `option.payout(addr)` — **deprecated, throws `INVALID_PARAMS`.** Removed in audit fix TNU-AUDIT-0046. Do not call it.

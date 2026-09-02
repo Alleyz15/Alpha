@@ -2,7 +2,7 @@
 
 **Project:** MUBA Hacks 2026 — Thetanuts Track 01
 **Repo:** github.com/Alleyz15/Alpha
-**Last updated:** 29 Aug 2026
+**Last updated:** 30 Aug 2026
 
 ---
 
@@ -30,25 +30,61 @@ Before implementing anything, the assistant must:
 |---|---|
 | ✅ | Done and verified |
 | 🔄 | In progress |
-| ⬜ | Not started |
+| ⬜ | Not started — no decision against it, just not built yet |
 | ⛔ | Blocked |
-| ❌ | Cut from scope |
+| ❌ | **Cut — do not build.** A decision was made against it. The note says when and why. |
+| ↩️ | **Back in scope after being cut.** The note says what changed. |
 
 ---
 
 ## Where we are right now
 
-**Phase 0 complete. Phase 1 is next.**
+**Last verified against the code and the chain on 31 Aug, not against this file.**
 
-Working: repo, secrets hygiene, Alchemy RPC, Thetanuts SDK connected to Base mainnet, live order book readable, SDK surface mapped.
+**A full purchase has happened on Base mainnet.** tx `0x6420c71c…`, an ETH put with a
+$2,320 floor expiring 2 Sep, 0.495926 USDC. We hold the buyer side, confirmed on
+chain. See `docs/ONCHAIN-EVIDENCE.md`.
 
-Not started: database, quote engine, any transaction, any frontend.
+Working: quote engine (1.1–1.7), database with RLS and seeds, HTTP API, the fill
+path with its ten-item pre-flight, and the settlement scheduler.
 
-**Nothing is blocked.** All open questions from requirements.md §7 are resolved.
+Not started: 7.5 no-liquidation demo. Back in scope after being cut: 7.4
+repayment and 8.6 vault maturity (1 Sep).
 
-**Scope:** all four ideas are being built. Idea 2+4 (one product, two entry points) is the engine; Phase 7 lending and Phase 8 vault build on top of it. The ordering is a dependency chain, not a priority ranking. See `IDEA.md`.
+5.7 front-to-back integration is verified as of 1 Sep.
 
----
+### The product changed shape on 31 Aug
+
+Two bugs in the order filter were found while trying to fill (see Phase 3). Once
+corrected, the book looks nothing like what the earlier documents describe:
+
+| | Was believed | Actually |
+|---|---|---|
+| Longest tenor | ~26 days | **the longest single-leg put on the book** — sweeps ~2 to just under 3 days as expiries roll at 08:00 UTC. The raw book reaches 2 months; those are spreads, which we exclude (BR-52) |
+| Deepest floor | 20%+ | **~6%** |
+| Tradable assets | ETH, BTC | **ETH, BTC, SOL, BNB** (+AVAX partial) |
+
+**So the product is event protection, not long-horizon insurance:** *hold your floor
+through tonight, settles in two days.* The scenario is "there is a CPI print tonight
+and I want to sleep", not "my rent is due next month".
+
+**The shallow floor is the advantage, and it leads.** A 20% floor over 30 days
+rarely triggers, so the insurance never pays. A 6% floor over two days pays often,
+because ETH moves 6% in two days routinely — and it is why a full lifecycle can be
+demonstrated at all.
+
+Entry point B (income/rent hedging) moves to roadmap: two days cannot carry "next
+month", and rolling is not built.
+
+⚠️ **Settlement lands 2026-09-02 08:00 UTC = 16:00 MYT, Tuesday afternoon.** See
+Phase 4.
+
+**Nothing is blocked.** 5.7 was the last one and cleared on 1 Sep: the interface
+gained its third state and the purchase path became real, and the two together
+were verified end to end against a live fill.
+
+**Scope:** Phase 8 is cut — see Phase 8. Phase 7 lending is unassessed against the
+corrected book.
 
 ## Phase 0 — Foundation ✅
 
@@ -61,7 +97,7 @@ Not started: database, quote engine, any transaction, any frontend.
 | Thetanuts SDK installed | ✅ | `thetanuts-client`, `ethers`, `dotenv` |
 | Connectivity check passing | ✅ | ~320 live orders, prices for 6 assets |
 | Order book structure documented | ✅ | See SETUP.md |
-| Expiries mapped | ✅ | +1 to +62 days; +27 has 49 orders |
+| Expiries mapped | ✅ | Raw book +1 to +62 days. Single-leg buy-side puts reach ~2–3 days; everything longer is a spread and excluded by our own rule, not the protocol (BR-52) — see SETUP.md |
 | SDK method surface mapped | ✅ | See requirements.md appendix |
 | Requirements written | ✅ | requirements.md |
 | Custodial vs non-custodial decided | ✅ | Custodial; the backend developer operates the wallet |
@@ -74,7 +110,7 @@ Not started: database, quote engine, any transaction, any frontend.
 
 ---
 
-## Phase 1 — Quote engine ⬜
+## Phase 1 — Quote engine ✅
 
 **Goal:** given an asset, an amount and a protection level, return a real quote from the live book. Read-only — no wallet, no transactions.
 
@@ -82,14 +118,14 @@ Not started: database, quote engine, any transaction, any frontend.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 1.1 | Fetch spot price for an asset | ⬜ | `getMarketData()` returns ETH price, converted to a plain number |
-| 1.2 | Filter book to puts on one asset | ⬜ | Given ETH, returns only ETH puts, count printed |
-| 1.3 | Convert raw order fields to human values | ⬜ | strike/premium correct at 8 decimals, expiry as a Date |
-| 1.4 | Select best order for a target strike + expiry | ⬜ | Given "20% protection, 30 days", returns one order with the actual strike and days |
-| 1.5 | Size the position | ⬜ | `calculateNumContracts` used; respects `availableAmount` |
-| 1.6 | Produce a quote object | ⬜ | Returns: premium, protected floor, expiry, max loss, actual vs requested protection |
-| 1.7 | Goal-based input path | ⬜ | "I need $2,000 by 1 Nov" resolves to the same quote object |
-| 1.8 | Scenario preview | ⬜ | `utils.calculatePayoutAtPrice` gives outcomes at several prices |
+| 1.1 | Fetch spot price for an asset | ✅ | `src/thetanuts/market.js` — `getSpotPrice(asset)`. Prices are already plain numbers |
+| 1.2 | Filter book to puts on one asset | ✅ | `src/thetanuts/orders.js` — `getBuyablePutOrders(asset)`. Buy-side only (BR-1) |
+| 1.3 | Convert raw order fields to human values | ✅ | `src/thetanuts/decimals.js` — `toHumanOrder()`. Verified by hand against the live book |
+| 1.4 | Select expiry + derive protection tiers | ✅ | `src/thetanuts/selection.js` — `selectProtectionTiers()`. Tiers from real strikes (BR-41); BR-6 strict on expiry |
+| 1.5 | Size the position | ✅ | `src/thetanuts/sizing.js` — `sizePosition()`. All limits are parameters. The premium cap is for the fill path only, not quoting (BR-33) |
+| 1.6 | Produce a quote object | ✅ | `src/thetanuts/quote.js` — `buildQuote()`. JSON-safe DTO; BR-2's two losses kept apart; BR-8 validity |
+| 1.7 | Goal-based input path | ✅ | `buildQuoteSet({ mode: 'goal' })` — strike = target ÷ units (BR-5). NO_EXPIRY carries `longestAvailableDate`. Frontend still needs a date-picker cap |
+| 1.8 | Scenario preview | ✅ | `buildScenarios()` in `quote.js` — up/flat/atFloor/down via `calculatePayoutAtPrice`, rescaled 6dp→18dp at the boundary |
 
 **Definition of done:** `node quote.js` prints a complete, correct quote for ETH using live data.
 
@@ -97,7 +133,16 @@ Not started: database, quote engine, any transaction, any frontend.
 
 ---
 
-## Phase 2 — Database ⬜
+## Phase 2 — Database ✅
+
+> **User payment added 1 Sep.** `balances` now carries USDC alongside the asset
+> holdings, and buying protection debits it. `balance_events` is append-only:
+> a refund is a compensating write, never a deletion, so the trail reads
+> `debit → fill failed → refund`. `debit_balance()` locks the row so the check
+> and the decrement are one operation. A timeout leaves the debit **held** —
+> the balance-side word for `pending_verification`, deliberately not a second
+> vocabulary — and `npm run reconcile` surfaces both held and refund-due.
+
 
 **Goal:** persist users, quotes and positions. See DATABASE.md for the schema.
 
@@ -105,19 +150,19 @@ Not started: database, quote engine, any transaction, any frontend.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 2.1 | Supabase project created | ⬜ | Region: Singapore. Keys in `.env` |
-| 2.2 | Migration tooling set up | ⬜ | `supabase/migrations/` exists, first migration applies cleanly |
-| 2.3 | Core tables created | ⬜ | Per DATABASE.md |
-| 2.4 | RLS enabled on every table | ⬜ | BR-16 — verify with a publishable key that nothing leaks |
-| 2.5 | DB access layer | ⬜ | Insert/update/query helpers, secret key server-side only |
-| 2.6 | Seed a demo user | ⬜ | Demo works without a login flow |
-| 2.7 | Seed demo balances | ⬜ | Each demo user holds a balance per asset; quotes refuse to exceed it (BR-49) |
+| 2.1 | Supabase project created | ✅ | `gphzqvsdubygvijunobj`, region ap-southeast-1 (Singapore) |
+| 2.2 | Migration tooling set up | ✅ | `supabase/migrations/`, **14** migrations applied and recorded. Two were missing from the directory until 1 Sep — see DATABASE.md on MCP-applied migrations not writing files |
+| 2.3 | Core tables created | ✅ | users, balances, quotes, positions, position_events + DR-3/DR-7/DR-8/DR-10 constraints |
+| 2.4 | RLS enabled on every table | ✅ | All five; anon blocked by RLS *and* absent grants — verified with a publishable key |
+| 2.5 | DB access layer | ✅ | `src/db/` — secret key server-side only; no bare position update exists |
+| 2.6 | Seed a demo user | ✅ | Two users, fixed UUIDs, idempotent (BR-31) |
+| 2.7 | Seed demo balances | ✅ | 0.4 ETH and 0.15 ETH, `source=demo_seed` (BR-49, BR-50) |
 
 **Definition of done:** a fresh machine can run the migrations and get an identical database.
 
 ---
 
-## Phase 3 — Buy execution ⬜ ← highest risk
+## Phase 3 — Buy execution 🔄 ← first fill done
 
 **Goal:** actually fill an order on Base mainnet with real USDC.
 
@@ -125,17 +170,17 @@ Not started: database, quote engine, any transaction, any frontend.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 3.1 | Create burner wallet | ⬜ | Fresh wallet, key only in `.env` (BR-30) |
-| 3.2 | Fund it | ⬜ | A few USDC + cents of ETH on Base |
-| 3.3 | Balance checks | ⬜ | Refuses to proceed without enough USDC and gas (BR-10) |
-| 3.4 | Exact-amount approval | ⬜ | `ensureAllowance`, never MaxUint256 (BR-12) |
-| 3.5 | Dry run the fill | ⬜ | `callStaticFillOrder` passes before anything is broadcast (BR-28) |
-| 3.5b | Pre-flight checklist as code | ⬜ | A single function that must return pass before any fill; any failure aborts |
-| 3.6 | Write pending row, then broadcast | ⬜ | DB row exists before the transaction is sent (BR-14) |
-| 3.7 | **First real on-chain fill** | ⬜ | Transaction confirmed, visible on BaseScan, ~1–3 USDC (BR-15) |
-| 3.8 | Record the result | ⬜ | Row updated to `active` with tx hash, option address, real fill price |
-| 3.9 | Handle failure paths | ⬜ | Revert → `failed`; timeout → `pending_verification`, never blind-retry |
-| 3.10 | Reconciliation script | ⬜ | Rebuilds all position facts from chain and diffs against the DB |
+| 3.1 | Create burner wallet | ✅ | `0x4fB77837bf2A0B86D167627Ded2E894f92F15127`, key only in `.env` (BR-30) |
+| 3.2 | Fund it | ✅ | ~9.89 USDC + 0.00445 ETH on Base |
+| 3.3 | Balance checks | ✅ | `src/thetanuts/wallet.js` — refuses on either; reports USDC remaining after the fill |
+| 3.4 | Exact-amount approval | ✅ | `src/thetanuts/allowance.js` + `scripts/approve.js`. MaxUint256 refused, 100 USDC sanity cap |
+| 3.5 | Dry run the fill | ✅ | `callStaticFillOrder` wired as check 9. **Fails until an approval exists** — see below |
+| 3.5b | Pre-flight checklist as code | ✅ | `src/thetanuts/preflight.js` — ten items plus a `pending_verification` hard block. Reports every item, not just the first failure |
+| 3.6 | Write pending row, then broadcast | ✅ | Row written by the purchase path; check 10 verifies it is `pending` before any broadcast (BR-14) |
+| 3.7 | **First real on-chain fill** | ✅ | tx `0x6420c71c…` block 50670079, 0.495926 USDC. See `docs/ONCHAIN-EVIDENCE.md` |
+| 3.8 | Record the result | ✅ | Row `active` with tx hash, option `0xa609b6fb…`, real premium 0.495926 (fee included) |
+| 3.9 | Handle failure paths | ✅ | Revert → `failed`, timeout → `pending_verification`, never retried. **Implemented, not yet exercised** — the one fill succeeded |
+| 3.10 | Reconciliation script | ✅ | `resolveUnverified()` in `src/thetanuts/reconcile.js`, section 3 of `scripts/reconcile.js`. Ran clean 1 Sep — no unresolved fills, no drift |
 
 **Definition of done:** a BaseScan link to our own transaction. **Save the hash — it's the proof the whole submission rests on.**
 
@@ -181,37 +226,65 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 4 — Settlement ⬜
+## Phase 4 — Settlement 🔄
 
 **Goal:** reflect on-chain settlement in our database. Read-only — settlement is automatic (requirements.md UC-3).
 
+> ⚠️ **Every row below is ✅, and none of this has ever executed.** No position
+> has reached a terminal status — `settled`, `expired_worthless` and
+> `needs_review` have never once been written. The first options this project has
+> held to expiry mature 2 and 3 Sep, so **2 Sep 16:00 MYT is the first real run**.
+>
+> What HAS been verified, and how far it goes:
+>
+> - the read path works against all five live options, and the buyer and size
+>   match the chain (BR-31)
+> - `transition_position` accepts all three terminal statuses — probed against
+>   the live database in rolled-back transactions
+> - the settled branch has never run, because it requires a settled option
+>
+> Two of the three price sources were found broken on 1 Sep precisely because
+> nothing had reached them: `getTWAP` reverts on an unsettled option, and
+> `full.settlementPrice` was read from a shape `getFullOptionInfo` does not
+> return. Dead code in a path that has never executed is indistinguishable from
+> working code.
+
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 4.1 | Query settlement status | ⬜ | `getOptionInfo().settled` read correctly |
-| 4.2 | Read the payout | ⬜ | `calculatePayout` view call returns the amount |
-| 4.3 | Scheduler loop | ⬜ | Finds expired positions, updates status (BR-11) |
-| 4.4 | Failed-settlement detection | ⬜ | Unsettled past threshold → `needs_review` (BR-27) |
-| 4.5 | Catch-up on restart | ⬜ | Processes overdue positions first |
+| 4.1 | Query settlement status | ✅ | `getFullOptionInfo(addr).isSettled` — a FIELD, not a method. Neither `getOptionInfo().settled` nor `option.isSettled()` exists. One call returns expiry, settled, buyer and size |
+| 4.2 | Read the payout | ✅ | `calculatePayout()` verified against the real position: $2,000 → 44.79968 USDC |
+| 4.3 | Scheduler loop | ✅ | `src/scheduler/` — hourly (BR-11), read-only client so it structurally cannot spend |
+| 4.4 | Failed-settlement detection | ✅ | Time threshold `SETTLEMENT_GRACE_HOURS` (default 6) → `needs_review`. An event path now exists after all — `settlementSources.js` scans 9-block `eth_getLogs` cap) |
+| 4.5 | Catch-up on restart | ✅ | Startup sweep, oldest expiry first |
 
 **Definition of done:** a position bought in Phase 3 reaches a terminal status automatically.
 
-> ⚠️ **Timing:** the shortest expiry is 1 day. To demo a real settlement, **the position must be bought at least a day before demo day.** Buy a short-dated one by 3 Sep at the latest, or the settlement path will only ever be shown as a simulation.
+> ⚠️ **OUR POSITION EXPIRES 2026-09-02 08:00 UTC = 16:00 MYT, Tuesday afternoon.**
+>
+> If the loop is not running as a daemon by then, **someone runs `node scripts/settle.js --confirm` by hand that Tuesday afternoon.** "2 Sep" gets remembered as "sometime Tuesday"; 16:00 MYT does not.
+>
+> No second purchase is needed — this position settles four days before the pitch.
+>
+> **After the sweep, save the settled row and the BaseScan state to `docs/ONCHAIN-EVIDENCE.md`.** A position that completed the full lifecycle — bought, expired, settled, recorded — is the strongest artefact this project will produce, and it exists for exactly one moment.
+
+> ⚠️ **BR-27 cannot be implemented as written.** It specifies detecting failed settlement via `OptionSettlementFailed` events, but Alchemy's free tier caps `eth_getLogs` at a **9-block range** (~18 seconds of history). Scanning from our fill to head already needs ~500 requests and grows. `isSettled()` is a plain contract read and is unaffected, so primary detection works; only the failure path falls back to a time threshold. Upgrading Alchemy to PAYG would restore the rule as written.
 
 ---
 
-## Phase 5 — Frontend ⬜
+## Phase 5 — Frontend 🔄
 
 **Owner:** teammates. Backend exposes the API.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 5.1 | API contract agreed | ⬜ | Endpoint shapes written down **before either side builds** |
-| 5.2 | CORS configured | ⬜ | 5173 → 3000. Requests are blocked without it and the error doesn't say so |
-| 5.3 | Quote screen | ⬜ | No options jargon anywhere (BR-3) |
-| 5.4 | Confirmation screen | ⬜ | Shows max loss explicitly (BR-2, US-9) |
-| 5.5 | Position dashboard | ⬜ | Status, floor, expiry, BaseScan link |
-| 5.6 | Custody disclosure | ⬜ | Visible in the UI, not buried (BR-32) |
-| 5.7 | Front-to-back integration verified | ⬜ | Both running together on one machine, full flow works |
+| 5.1 | API contract agreed | ✅ | Backend half built — `src/api/`. **8** endpoints. Contracts handed over: `docs/API-LOAN-STRESS.md` (7.5), `docs/API-MARKET-CONTEXT.md`, `docs/API-COIN-DETAIL.md` |
+| 5.2 | CORS configured | ✅ | `http://localhost:5173` named explicitly, preflight handled, unknown origins not echoed — verified in `api:check` |
+| 5.3 | Quote screen | ✅ | `frontend/src/screens/QuoteScreen.jsx`, both entry modes, no options jargon (BR-3) |
+| 5.4 | Confirmation screen | ✅ | `ConfirmationScreen.jsx` — shows max loss via `maxLoss.forConfirmation` (BR-2) |
+| 5.5 | Position dashboard | 🔄 | `DashboardScreen.jsx` renders status, floor, expiry and the BaseScan link. **Two known defects, both introduced by the API change on 1 Sep and both in the frontend developer's files:** a vault call shows `$0.00 USDC` because `formatUsdc(null)` returns zero, and three positions still read "Payment status unavailable" because `paymentStatus: 'none'` is not in `paymentStatusCopy` |
+| 5.6 | Custody disclosure | ✅ | `RealityDisclosure.jsx` — "Who holds the funds?", shown not buried (BR-32) |
+| 5.8 | Coin Detail market data | 🔄 | **Backend done 1 Sep**, scope added by team decision. Three read-only endpoints in `src/marketdata/` — CoinGecko overview, Binance candles and depth snapshot. Display only, enforced by a test, not a comment. **No streaming endpoint**: polling depth every 2–3s is visually identical over a demo and cannot leave a stale panel looking live. The chart itself is the frontend developer's half, and the frontend has no charting library yet |
+| 5.7 | Front-to-back integration verified | ✅ | Verified 1 Sep against a real fill, tx `0x64e37010…`. Quote to broadcast took 140.7s — at least two book re-signings — so the fill went through economic matching, not the signature fast path. See ONCHAIN-EVIDENCE.md §6 |
 
 **Stack:** Vite + React + anime.js. Nothing else — no component library, no state manager, no router.
 
@@ -230,28 +303,28 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 6.2 | Demo script rehearsed | ⬜ | Fits in 5 minutes, run end to end at least 3 times |
 | 6.3 | Demo can be re-run live | ⬜ | Judges may ask to see it twice |
 | 6.4 | 3–5 min video | ⬜ | YouTube or Loom, unlisted is fine |
-| 6.5 | Public repo README | ⬜ | Description, problem, chain, contract addresses, setup, team |
-| 6.6 | AI tool declaration | ⬜ | Every tool used, as required by the rules |
+| 6.5 | Public repo README | 🔄 | Audited against code and chain 1 Sep: eight transactions with what each proves, five option contracts, a simulated-vs-real table, and the setup section corrected (a fresh clone runs on mock data by default). **Demo section still to rewrite; video link still a placeholder** |
+| 6.6 | AI tool declaration | 🔄 | Table split per person. One row complete; **three carry a visible TODO** pending answers from the other developers. A blank is a disqualification risk and a guess is worse |
 | 6.7 | Devfolio submission | ⬜ | **Submit 4 Sep, not 5 Sep.** Leave a day of margin |
-| 6.8 | Q&A prep | ⬜ | Stop-loss vs put, odette.fi / collar difference, custody, seller side, why ETH only |
+| 6.8 | Q&A prep | 🔄 |  seeded with two verified answers from the 2 Sep investigation — why four assets, and why the tenor is short. **The rest is being written with the two presenters.** Still to cover: stop-loss vs put, collar difference, custody, seller side |
 
 ---
 
-## Phase 7 — Options-powered lending ⬜
+## Phase 7 — Options-powered lending 🔄
 
 **Depends on Phases 1–4.** The put that acts as a collateral floor is bought and settled by the same code the core product uses, so that code must work first. This is a dependency, not a priority ranking.
 
-**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `IDEA.md` Idea 1.
+**Why it's viable:** we're already custodial, so we can be the lender ourselves. No smart contract needed — the put is a real on-chain position and the USDC transfer is a real on-chain transaction. Both verifiable on BaseScan. See `PRODUCT-THINKING.md` Idea 1.
 
 **Why it's cheap once the core works:** it reuses ~90% of the existing code. Buying, settlement, database and scheduler are unchanged — what's new is a `loans` table and two flows.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 7.1 | `loans` table + migration | ⬜ | Per DATABASE.md conventions |
-| 7.2 | Credit limit derived from strike | ⬜ | `credit_limit = strike × num_contracts`, read from the filled put. No haircut, no ratio (BR-39) |
-| 7.3 | Disburse USDC on-chain | ⬜ | Real transfer to the user's address, tx hash recorded |
-| 7.4 | Repayment flow | ⬜ | Repay principal + interest, ETH released |
-| 7.5 | No-liquidation demo | ⬜ | Two positions side by side, price fed to 350, one flags, one doesn't |
+| 7.1 | `loans` table + migration | ✅ | Triggers enforce BR-39 and BR-48 — a ratio cannot be inserted |
+| 7.2 | Credit limit derived from strike | ✅ | `src/lending/credit.js` — strike × contracts in bigint, no configurable factor |
+| 7.3 | Disburse USDC on-chain | ✅ | tx `0x29165d16…`, 4.597700 USDC = 2300 × 0.001999. See ONCHAIN-EVIDENCE.md |
+| 7.4 | Repayment flow | ✅ | Verify-and-record: the borrower signs, we verify on chain. tx `0x02c37705…`, 4.599411 owed. Seven checks; check 5 refused a wrong-direction transfer on first use. See ONCHAIN-EVIDENCE.md §4 |
+| 7.5 | No-liquidation demo | 🔄 | **Backend done, screen not built.** `src/lending/stress.js` + `GET /api/loans/:id/stress`, nine tests, both `as-disbursed` and `current` rule views. The side-by-side visualisation is the frontend developer's file; contract handed over in `docs/API-LOAN-STRESS.md` |
 
 **Definition of done:** a BaseScan link to a USDC disbursement whose size is provably derived from an on-chain put's strike.
 
@@ -259,37 +332,56 @@ Implement as one function. Every item must pass; any failure aborts before broad
 
 ---
 
-## Phase 8 — 26-day principal protection ⬜
+## Phase 8 — Two-day principal protection 🔄
 
-> ⚠️ **Repositioned 30 Aug.** The buyable book tops out at ~26 days — the +62 day
-> expiry exists but every order on it is on the forbidden side (BR-52). Over 26
-> days the yield portion generates ~0.34 USDC, which buys 7–11 USDC of exposure:
-> a **participation rate of 4–7%, not 10–16%**.
->
-> The product is therefore named and pitched as **"26-day principal protection with
-> a small share of the upside"**, not as a savings vault. The guarantee is the
-> product; the upside is a bonus. Displaying 4–7% honestly is required (BR-38) —
-> a judge will calculate it.
+**Cut on 31 Aug, reinstated the same day.** The analysis that led to the cut still
+stands and is recorded below; the team decided it ships anyway, with a real
+on-chain call like everything else.
 
-**Depends on Phases 1–4**, for the same reason as Phase 7: it buys and settles an option, only a call instead of a put.
-
-**The constraint that shapes it:** the longest *buyable* expiry is ~26 days. Over 26 days, 95 USDC at 5% generates ~0.34 USDC, which buys 7–11 USDC of exposure. **Participation rate is 4–7%.** That number goes on screen.
-
-**What's real:** the call, on Base mainnet, BaseScan verifiable.
-**What's simulated:** yield accrual, labelled as such in the UI.
+**What it is, named honestly:** *two-day principal protection with a small share of
+the upside.* Not a savings vault — over two days there is nothing for principal
+protection to protect against, and calling it savings would invite an arithmetic
+question we would lose.
 
 | # | Task | Status | Acceptance |
 |---|---|---|---|
-| 8.1 | `vaults` table + migration | ⬜ | Per DATABASE.md conventions |
-| 8.2 | Deposit split logic | ⬜ | `yield_portion = principal ÷ (1 + rate × days/365)`, solved backwards so protection is exact |
-| 8.3 | Buy a real call on Thetanuts | ⬜ | BaseScan verifiable. **Longest buyable expiry is ~26 days**, not 62 (BR-52) |
-| 8.4 | Simulated yield accrual | ⬜ | Labelled as simulated in the UI, not hidden (BR-37) |
-| 8.5 | Participation rate displayed | ⬜ | `exposure ÷ principal`, from the real premium paid (BR-38). See requirements.md for the full formula |
-| 8.6 | Maturity flow | ⬜ | Principal returned plus any call payout |
+| 8.1 | `vaults` table + migration | ✅ | `yield_is_simulated` pinned true by CHECK; maturity must equal the call expiry |
+| 8.2 | Deposit split logic | ✅ | `splitDeposit()` solves backwards from the guarantee, so protection is exact |
+| 8.3 | Buy a real call on Thetanuts | ✅ | tx `0x7930bc42…`, strike 2660, buyer side, 9347 raw contracts. See ONCHAIN-EVIDENCE.md §5 |
+| 8.4 | Simulated yield accrual | ✅ | `yieldIsSimulated` carried as data; `scripts/vault.js` labels it SIMULATED on the line the number is printed and again in the summary (BR-37). No frontend vault screen exists, so the CLI is where the number appears |
+| 8.5 | Participation rate displayed | ✅ | `participationFor()` — from the real premium paid, never hardcoded (BR-38) |
+| 8.6 | Maturity flow | 🔄 | **Code done 1 Sep.** `src/vault/maturity.js`, `npm run mature`, nine checks, eight tests. Resize tx `0xd7fec53c…`, participation 23.5422% (§7). **The transfer executes 3 Sep after 16:00 MYT** — see `docs/RUNBOOK.md` |
 
-**Definition of done:** a BaseScan link to a real call purchase, with the interface stating the participation rate and labelling the simulated yield.
+**Non-negotiable in the copy** — a judge will do the arithmetic:
+
+- participation rate computed from the **real premium paid**, never hardcoded (BR-38)
+- the yield portion labelled **simulated at the point the number appears** (BR-37)
+- the **two-day tenor stated**, not implied
+- **not** retitled "principal-protected savings"
+
+### The arithmetic, and why it was nearly cut
+
+Measured 31 Aug rather than assumed. Vanilla buy-side ETH calls exist:
+
+```
+2026-09-02 (+2.3d)  9 strikes 2420-2580   premium $3.47-39.71/unit
+```
+
+A $100 deposit at 5%/yr over 2.3 days sets aside $99.97 and spends **$0.03** on a
+call, which buys ~$21 of exposure — **participation ~21%**, higher than the 4–7%
+once feared.
+
+**The honest problem is the other half.** Over 2.3 days the yield given up is three
+cents. The guarantee protects against a risk that barely exists at that horizon, so
+the number is correct and the product it describes is thin. That is why the copy
+constraints above are not optional: state the tenor, label the simulation, and
+derive the rate from what was actually paid.
+
+**Definition of done:** a BaseScan link to a real call purchase, with the interface
+stating the participation rate and labelling the simulated yield.
 
 ---
+
 
 ## Timeline
 
@@ -333,7 +425,6 @@ Recorded so nobody quietly starts one of these:
 - RFQ flow (§0 decision)
 - Non-custodial wallet integration
 - Hosted deployment — the demo runs locally
-- Principal-protected vault (Idea 3) — needs an RWA yield source, and its value only shows after a year
 - **Writing our own smart contracts** — mainnet deployment costs real gas and Thetanuts has no testnet, so there is nowhere to deploy them
 - Rolling or cancelling protection before expiry
 - Notifications
