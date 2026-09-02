@@ -220,6 +220,7 @@ export default function ConfigureProtectionStep({
                       <span className="protection-tier-stat"><small>Protected amount</small><strong>{tier.protectedAmount}</strong></span>
                       <span className="protection-tier-stat"><small>Premium</small><MonoValue as="strong">{tier.cost}</MonoValue></span>
                       <span className="protection-tier-stat"><small>End date</small><strong>{tier.expiry}</strong></span>
+                      {!tier.sizeConfirmed && <span className="protection-tier-size-warning">Size check incomplete</span>}
                     </button>
                   ))}
                 </div>
@@ -233,6 +234,11 @@ export default function ConfigureProtectionStep({
               {selectedTier?.sizeReduced && (
                 <Alert tone="warning" title="Part of the holding remains unprotected">
                   {selectedTier.unprotectedAmount}, currently valued at {selectedTier.unprotectedValue}, is outside this choice.
+                </Alert>
+              )}
+              {selectedTier && !selectedTier.sizeConfirmed && (
+                <Alert tone="warning" title="This amount is not confirmed against operator capacity">
+                  {selectedTier.sizeConfirmationMessage}
                 </Alert>
               )}
             </section>

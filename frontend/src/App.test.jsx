@@ -10,6 +10,7 @@ const liveApi = vi.hoisted(() => ({
   getAssetCandles: vi.fn(),
   getAssetOrderBook: vi.fn(),
   getPositions: vi.fn(),
+  getPortfolio: vi.fn(),
   createQuote: vi.fn(),
   purchaseQuote: vi.fn(),
 }));
@@ -75,17 +76,28 @@ describe('application routes', () => {
     liveApi.getMarketContext.mockResolvedValue(marketContext);
     liveApi.getDemoContext.mockResolvedValue(demoContext);
     liveApi.getPositions.mockResolvedValue({ positions: [] });
+    liveApi.getPortfolio.mockResolvedValue({
+      totalValueUsdc: 4703.2,
+      totalValueComplete: true,
+      unpricedAssets: [],
+      activeProtectionCount: 2,
+      pendingProtectionCount: 0,
+      nextExpiry: '2026-09-03T08:00:00.000Z',
+      holdings: [],
+      simulated: true,
+    });
     liveApi.getAssetsOverview.mockResolvedValue(assetOverview);
     liveApi.getAssetCandles.mockResolvedValue(candles);
     liveApi.getAssetOrderBook.mockResolvedValue(orderBook);
   });
 
-  it('opens /dashboard directly on the live position list instead of Legacy Explore', async () => {
+  it('opens /dashboard directly on the real-data Home page', async () => {
     render(<MemoryRouter initialEntries={['/dashboard']}><App /></MemoryRouter>);
 
-    expect(await screen.findByRole('heading', { name: 'Protection and upside' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Portfolio value' })).toBeVisible();
+    expect(screen.getByText('$4,703.20 USDC')).toBeVisible();
     expect(screen.queryByRole('heading', { name: /Build your protection/i })).not.toBeInTheDocument();
-    expect(liveApi.getPositions).toHaveBeenCalledTimes(1);
+    expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);
   });
 
   it('navigates from the selected Welcome asset into its protection flow without a reload', async () => {
@@ -99,13 +111,13 @@ describe('application routes', () => {
     expect(await screen.findByRole('heading', { name: 'Buy protection for Ethereum' })).toBeVisible();
   });
 
-  it('navigates from Welcome to My protection', async () => {
+  it('navigates from Welcome to the Portfolio from My protection', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
 
     await user.click(screen.getByRole('button', { name: 'My protection' }));
 
-    expect(await screen.findByRole('heading', { name: 'Protection and upside' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'My Crypto' })).toBeVisible();
     expect(liveApi.getPositions).toHaveBeenCalledTimes(1);
   });
 

@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Sixteen instances now, one family.** The shape:
+**Nineteen instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -659,12 +659,127 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
 | "XRP fails 6/6" | the protocol rejects XRP | our premium truncation; XRP fills 8/8 at exact sizes |
 | "vanilla puts stop at 2.4 days" | the market's ceiling | our own single-leg rule; the book reaches 2 months |
-| a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small |
+| a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small (**fixed** — see below) |
+| `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
+| `approve 9 --confirm` | one transaction, raising 5.86 to 9 | **two**; the reset landed and the raise ran out of gas, leaving 0 |
+| the CoinGecko overview | six assets, all priced | four; `per_page=4` dropped the two smallest, which rendered as coins with no data |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+#### Degrading gracefully means degrading quietly
+
+The Coin Detail overview fetches every asset in one CoinGecko call. `per_page`
+was hardcoded to `4` while the list held four assets. Adding AVAX and XRP made
+it six ids into a four-row page, and with `order=market_cap_desc` the provider
+returned the four largest and dropped SOL and AVAX.
+
+They came back as coins with **every field null** — no price, no market cap, no
+all-time high. Nothing threw. Nothing logged. The page rendered.
+
+That is because the code does something deliberately kind:
+
+```js
+// Our order, not the provider's, and an asset the provider omitted comes
+// back with null fields rather than vanishing from the list.
+normaliseOverview(byId.get(asset.coingeckoId) ?? {}, asset, updatedAt)
+```
+
+That fallback is correct and worth keeping. A provider genuinely missing a coin
+should not blank the page. But it makes "the provider had no data" and "we
+never asked properly" **indistinguishable in the output** — and the second one
+is our bug wearing the first one's clothes.
+
+> **Degrading gracefully means degrading quietly.** Every fallback that keeps a
+> page rendering also removes the signal that something is wrong. The kinder the
+> failure mode, the more it needs a separate alarm.
+
+Two consequences, both applied:
+
+**The omission is now logged.** The response still renders; the gap leaves a
+trace someone can find.
+
+**The test asserts the REQUEST, not the response.** This is the part that
+generalises. No assertion about the returned assets could have caught this — the
+shape was right, the count was right, the fields were merely null, which is a
+legitimate state. The bug was a page too small to hold the list, and that is
+only visible in the URL. So the test stubs `fetch`, calls `fetchOverview()`, and
+checks `per_page` equals `MARKET_ASSETS.length`.
+
+**And it was verified by reinstating the literal `4` and watching it fail.**
+Second time that has been necessary this week — see the `modules-link` test,
+which was proved by restoring the truncated file. A regression test that has
+never seen the regression is a hypothesis.
+
+#### An estimate is a measurement of a state you are about to leave
+
+Raising the approval from 5.863744 to 9 USDC on 2 Sep 2026 left the wallet
+approved for **zero**, unable to fill anything.
+
+`ensureAllowance` sends **two** transactions, because USDC-style tokens want the
+allowance reset before it is changed:
+
+```
+block 50787961   approve(0)   nonce 13   status 1   5.863744 -> 0
+block 50787962   approve(9)   nonce 14   status 0   OUT OF GAS
+                              gasUsed 46207 of gasLimit 46444  (99.5%)
+```
+
+Replaying the second call unconstrained by gas *succeeds*, which is the tell. It
+was never invalid — it was underfunded. Writing an allowance slot from a
+non-zero value costs about 2,900 gas; writing it from zero is a cold SSTORE at
+about 20,000. Both transactions were estimated up front, **while the slot still
+held 5.863744**, so the second one was priced for the cheap write it would have
+been if the first had not run. Measured after the fact: the estimate against the
+zero state is 56,240, against the 46,444 the transaction actually carried.
+
+The SDK's 20% buffer was not the problem and did not fail — the successful
+retry used 55,437 of 67,488, so the buffer was working. A 20% buffer cannot
+absorb a 21% state change. **No buffer can, because the error is not noise.**
+
+> **An estimate is a measurement of the state at the moment you took it.** Any
+> transaction that changes that state between the estimate and the send has
+> invalidated it, and a percentage buffer hides the small cases while leaving
+> the structural ones exactly as broken.
+
+**This one failed loudly**, which is why it is recorded here rather than in the
+table above as a silent success — the script threw and printed a stack trace.
+That is the good outcome. The bad part is what it left behind: a zero allowance
+and no instruction, on a command the runbook hands to someone who has never run
+it. **The remedy is in RUNBOOK.md, not in code**: re-running the command is
+safe and fixes it, because from a zero allowance there is no reset step and the
+estimate is taken against the state it will execute in. Verified by doing
+exactly that — `status 1`, allowance `9000000`, confirmed by a direct
+`allowance()` read rather than by the script's own report.
+
+Total cost of the episode: 0.00000082 ETH.
+
+#### The allowance row is now closed, and the fix is the general lesson
+
+`findFillableSize` simulates the fill **as the filling wallet**, so it inherits
+that wallet's USDC allowance and balance. A premium above either reverts inside
+the ERC-20 transfer, and `staticCall` reports that identically to a size
+refusal. The step-down then walked until the premium fitted under our own
+approval — and quoted the result as *"the market would not fill that much"*.
+
+Measured: 3 contracts, premium 6.6350 USDC, allowance 5.8637 → silently reduced
+to 2. The book had said nothing.
+
+The fix is not a better error parser. It is **reading the simulator's own limits
+before asking it anything**: `readSpendCapacity()` takes the smaller of allowance
+and balance, and a premium above it is reported as a shortfall (`verified:
+false`, with `boundBy: 'allowance' | 'balance'`) with the requested size left
+**standing and unprobed**. Nothing is reduced on evidence we did not have.
+
+Note the asymmetry that makes this safe: an unverified size is quoted as-is, and
+the pre-flight's BR-12 allowance check still refuses the fill before any
+broadcast. The unknown surfaces to the *operator*, where a short approval
+belongs — never to the user as a market fact.
+
+> **Rule out your own instrument before attributing a reading to the world.**
+> A measurement taken through a limit you imposed measures the limit.
 
 The two newest are different in kind, and worth naming separately.
 
@@ -923,6 +1038,44 @@ Format: symptom → cause → fix
 
 ---
 
+### An operation that reported what it did NOT do, and stayed silent about what it did
+
+**Seventeenth instance, and the inverse of every other one.** The rest claimed
+success they had not achieved. This one claimed *inaction it had not maintained*.
+
+`scripts/fill-position.js` was described as a dry run. Run without `--confirm`
+against a position whose order had left the book, it printed:
+
+```
+BLOCKED: the quoted order is no longer on the book — re-quote
+Nothing was broadcast. The row is left pending (BR-14).
+```
+
+The first line is true. The second was false: `prepareFill` had already called
+`failRefusedFill`, moving the position `pending → failed` and refunding 1.522569
+USDC. Someone reading it concluded the position was untouched. It had
+transitioned and returned money.
+
+Nothing was wrong with the *behaviour* — resolving a refused fill is correct,
+and leaving it `pending` was the gap we had closed the day before. The message
+had simply never been updated to match, and it described the chain while saying
+nothing about the database.
+
+> **"Nothing happened" is two claims, not one.** Nothing was broadcast, and
+> nothing was written. A message that verifies the first and asserts the second
+> is the easiest kind of lie to write, because the author is thinking about the
+> money and the reader is thinking about the row.
+
+**What to do:** when an operation has more than one kind of side effect, say
+something about each one every time — including "unchanged". All three
+non-broadcast exits in that script now state the database outcome explicitly,
+and the two that genuinely change nothing say so rather than leaving it to be
+inferred from silence.
+
+And do not call something a dry run if it can write. The flag now promises two
+separate things: without `--confirm` nothing is broadcast and no money is spent,
+**and** the database may still change when a position is unfillable.
+
 ### A simulation inherits the constraints of whoever it simulates as
 
 **Sixteenth instance, and a new shape.** The others were things that reported
@@ -959,8 +1112,10 @@ rule out the simulator. Check the account's own constraints FIRST and report a
 shortfall as a shortfall — the pre-flight already does exactly this for
 allowances under BR-12, and the same check belonged in the probe.
 
-The work is on `feat/fillable-size`, committed and marked **DO NOT MERGE**, with
-the fix described in the commit message.
+**This is now fixed and merged.** `readSpendCapacity()` reads the wallet's
+allowance and balance once, up front, and takes the smaller; a premium above it
+is never probed. See "The allowance row is now closed" above for the shape of
+the fix and what it deliberately does *not* do.
 
 ---
 

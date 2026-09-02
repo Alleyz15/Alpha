@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assessAsset, OFFERED_ASSETS } from '../src/api/marketContext.js';
+import { resolveMarket } from '../src/marketdata/assets.js';
 
 const DAY = 86_400_000;
 const now = 1_788_000_000_000;
@@ -77,9 +78,20 @@ test('an expiry already past reports zero days, not a negative', () => {
   assert.equal(r.longestProtectionDays, 0);
 });
 
-test('the offered set is the four verified assets, and excludes AVAX and XRP', () => {
-  const symbols = OFFERED_ASSETS.map((a) => a.symbol);
-  assert.deepEqual(symbols, ['ETH', 'BTC', 'SOL', 'BNB']);
-  assert.ok(!symbols.includes('AVAX'), 'AVAX scored 2/6 in simulation');
-  assert.ok(!symbols.includes('XRP'), 'XRP scored 0/6 in simulation');
+test('the offered set is the six assets quote sizing can confirm', () => {
+  // AVAX and XRP were excluded while sizes were computed and sent unverified.
+  // findFillableSize now confirms every size against the chain before quoting,
+  // so the reason for excluding them is gone. See OFFERED_ASSETS.
+  assert.deepEqual(OFFERED_ASSETS.map((a) => a.symbol), ['ETH', 'BTC', 'SOL', 'BNB', 'AVAX', 'XRP']);
+});
+
+test('every offered asset has market data, so no holding gets a dead Coin Detail', () => {
+  // The two lists are separate constants in separate directories and drifted
+  // apart once: six assets were quotable while only four had charts, so AVAX
+  // and XRP got a portfolio row, a Buy Protection button that could not
+  // complete, and a 404 for candles. A half-wired asset is worse than an
+  // absent one - a smaller scope is coherent, a broken one is not.
+  for (const { symbol } of OFFERED_ASSETS) {
+    assert.ok(resolveMarket(symbol), `${symbol} is offered but has no market-data mapping`);
+  }
 });

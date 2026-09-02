@@ -7,14 +7,21 @@
 
 import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
 import { stressLoanById } from '../lending/stress.js';
-import { insertPurchasedTier } from '../db/quotes.js';
+import { insertPurchasedTier, getQuote } from '../db/quotes.js';
 import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
+import { getPosition, listEventsForPositions } from '../db/positions.js';
 import { debitBalance, listBalanceEventsForPositions } from '../db/balances.js';
 import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
-import { strikeView, paymentView, sumPayments } from './positionView.js';
-import { buildMarketContext } from './marketContext.js';
+import {
+  strikeView, paymentView, sumPayments, executionView, timelineView, usdcOrNull,
+} from './positionView.js';
+import {
+  buildHoldings, summariseValue, countProtection, nextExpiry, annotateHoldings,
+} from './portfolioView.js';
+import { getSpotPrices } from '../thetanuts/market.js';
+import { buildMarketContext, OFFERED_ASSETS } from './marketContext.js';
 import { resolveMarket, resolveRange, MARKET_ASSETS, RANGE_KEYS } from '../marketdata/assets.js';
 import { fetchOverview, fetchCandles, fetchDepth } from '../marketdata/providers.js';
 
@@ -259,6 +266,11 @@ export async function getPositions() {
   // is not the same as saying the user got their money back.
   const payments = await listPaymentsForPositions(rows.map((p) => p.id));
 
+  // One query for every position's events, not one per row. Needed for
+  // executionState and purchasedAt, which cannot be derived from the row
+  // alone - a tx_hash says a transaction exists, not that it confirmed.
+  const eventsByPosition = await listEventsForPositions(rows.map((p) => p.id));
+
   return {
     positions: rows.map((p) => ({
       positionId: p.id,
@@ -279,7 +291,14 @@ export async function getPositions() {
       ...strikeView(p.option_type, p.strike),
 
       expiry: p.expiry,
-      premiumPaidUsdc: p.premium_paid === null ? 0 : Number(p.premium_paid),
+      // NULL when nothing was paid, never 0.
+      //
+      // A missing premium rendered as $0.00 says the protection was free. The
+      // frontend takes the copy from paymentStatus instead: 'none' has nothing
+      // to show, 'held' means charged but not filled, 'paid' means filled.
+      // Absent is not zero - the same rule as an unpriced holding in the
+      // portfolio and a call's null protection floor.
+      premiumPaidUsdc: usdcOrNull(p.premium_paid),
       status: p.status,
       payoutUsdc: p.payout === null ? null : Number(p.payout),
       settlementPriceUsdc: p.settlement_price === null ? null : Number(p.settlement_price),
@@ -305,6 +324,7 @@ export async function getPositions() {
       // say so - it is the difference between "we lost your order" and "we lost
       // your order and gave your money back".
       ...paymentView(payments.get(p.id), p),
+      ...executionView(p, eventsByPosition.get(p.id) ?? []),
     })),
   };
 }
@@ -485,4 +505,173 @@ export async function getAssetOrderBook(symbol) {
   } catch (error) {
     throw asMarketDataError(error);
   }
+}
+
+/**
+ * GET /api/positions/:positionId
+ *
+ * Everything the Protection Details page needs, from data we already hold.
+ *
+ * ---------------------------------------------------------------------------
+ * OWNERSHIP IS CHECKED SERVER-SIDE. The client never names the user.
+ * ---------------------------------------------------------------------------
+ *
+ * The demo user is resolved here, exactly as every other endpoint does, and a
+ * position belonging to anyone else returns 404 rather than 403 - a 403 would
+ * confirm the id exists, which is itself a leak. On chain one wallet owns every
+ * position, so `positions.user_id` is the only record of who a position belongs
+ * to (BR-31); getting this check wrong is not recoverable from chain data.
+ */
+/**
+ * GET /api/portfolio
+ *
+ * What the user holds and how much of it is protected. Read-only: it prices
+ * nothing for trade and writes nothing.
+ *
+ * ---------------------------------------------------------------------------
+ * THE THREE THINGS THIS ENDPOINT MUST NOT DO
+ * ---------------------------------------------------------------------------
+ *
+ *   1. Present a partial total as complete. `totalValueComplete` and
+ *      `unpricedAssets` travel with every total, always.
+ *   2. Count a pending position as active protection. A debited balance is not
+ *      a filled option; `activeProtectionCount` requires a confirmed event.
+ *   3. Report a call's expiry as when protection ends. `nextExpiry` looks at
+ *      active downside protection and nothing else.
+ *
+ * Each of the three is a way to make the product look better than it is, which
+ * is exactly why they are named rather than left to a reviewer to notice.
+ *
+ * NOT INCLUDED, deliberately: the 7-day change in portfolio value. We have no
+ * price history - only a live feed - so any such figure would be computed from
+ * a number we never recorded. See docs/API-PORTFOLIO.md.
+ */
+export async function getPortfolio() {
+  const user = await getDemoUser();
+
+  const [balances, positions] = await Promise.all([
+    listBalances(user.id),
+    listPositionsByUser(user.id),
+  ]);
+
+  // Only what is actually held, and USDC never needs the feed.
+  const priced = balances
+    .filter((b) => b.asset !== 'USDC' && Number(b.amount) > 0)
+    .map((b) => b.asset);
+
+  // One market-data call, and it does not throw - a dead feed makes the total
+  // incomplete, not absent.
+  const prices = await getSpotPrices(priced);
+
+  // verifiedOnChain comes from the event trail, never from tx_hash. One query
+  // for every position rather than one per row.
+  const eventsByPosition = await listEventsForPositions(positions.map((p) => p.id));
+  const verified = (p) => executionView(p, eventsByPosition.get(p.id) ?? []).verifiedOnChain;
+
+  // protectable comes from the offered set rather than being restated here.
+  // Two lists of assets drift apart; one does not.
+  const holdings = annotateHoldings(
+    buildHoldings(balances, prices),
+    positions,
+    verified,
+    OFFERED_ASSETS.map((a) => a.symbol),
+  );
+
+  return {
+    ...summariseValue(holdings),
+    ...countProtection(positions, verified),
+
+    // Earliest expiry among ACTIVE downside protection. Null means the user has
+    // no protection running - which the interface renders as that, never as a
+    // blank date.
+    nextExpiry: nextExpiry(positions, verified),
+
+    holdings,
+
+    // BR-50/51: the balances are seeded, not deposited, and the total is
+    // therefore a total of simulated holdings. The positions they relate to are
+    // real. Saying so here means the interface does not have to remember.
+    simulated: true,
+  };
+}
+
+export async function getPositionDetail(positionId) {
+  const user = await getDemoUser();
+  const position = await getPosition(positionId);
+
+  // Same answer for "does not exist" and "is not yours".
+  if (!position || position.user_id !== user.id) {
+    throw new ApiError('NOT_FOUND', `No position ${positionId}.`);
+  }
+
+  const events = (await listEventsForPositions([position.id])).get(position.id) ?? [];
+  const payments = await listPaymentsForPositions([position.id]);
+  const payment = paymentView(payments.get(position.id), position);
+
+  // What the asset was worth when this was bought, from the quote the user was
+  // actually shown - not from today's feed, and not recomputed.
+  //
+  // NULL when there is no quote row, which is not an edge case: the two vault
+  // calls were bought by script and never had one. A recomputed entry price
+  // would look identical to a recorded one and be a different number, so the
+  // absence is reported as an absence.
+  const quote = position.quote_id ? await getQuote(position.quote_id) : null;
+  const entryPriceUsdc = quote?.spot_price === null || quote?.spot_price === undefined
+    ? null
+    : Number(quote.spot_price);
+
+  return {
+    positionId: position.id,
+    asset: position.asset,
+    protectedAmount: Number(position.num_contracts_raw) / 1e6,
+    ...strikeView(position.option_type, position.strike),
+    expiry: position.expiry,
+    status: position.status,
+
+    // Null, never 0 - see the note on getPositions.
+    premiumPaidUsdc: usdcOrNull(position.premium_paid),
+    payoutUsdc: position.payout === null ? null : Number(position.payout),
+    settlementPriceUsdc: position.settlement_price === null ? null : Number(position.settlement_price),
+
+    txHash: position.tx_hash,
+    optionAddress: position.option_address,
+    explorerUrl: position.tx_hash ? `https://basescan.org/tx/${position.tx_hash}` : null,
+
+    // Spot at the moment of the quote. Null when no quote row exists.
+    entryPriceUsdc,
+
+    ...executionView(position, events),
+    ...payment,
+
+    // Sanitised: event name and timestamp only. Raw payloads carry RPC errors,
+    // signed order data and provider detail, and none of it goes to a browser.
+    timeline: timelineView(events),
+
+    buyer: {
+      displayName: user.display_name,
+    },
+
+    account: {
+      // Public address, and what it is. The user does not hold this position in
+      // their own wallet and the interface must not imply otherwise (BR-32).
+      walletAddress: process.env.THETANUTS_WALLET_ADDRESS ?? null,
+      controlledBy: 'operator',
+    },
+
+    order: {
+      settlementType: 'automatic_at_expiry',
+      settlementAsset: 'USDC',
+      // What actually paid for this. 'none' means no debit exists - the
+      // position was bought by the operator directly, before or outside the
+      // user-payment path - and saying so is more honest than implying the
+      // demo balance covered it.
+      paymentMethod: payment.paymentStatus === 'none'
+        ? 'operator_no_user_payment'
+        : 'simulated_usdc_balance',
+    },
+
+    // Deliberately absent: entryPriceUsdc and estimatedPayoutUsdc. The first
+    // needs a quotes join for one field; the second is an estimate, and the
+    // real payout is known only at expiry. Render them as an em dash.
+  };
 }
