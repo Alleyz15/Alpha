@@ -9,6 +9,7 @@ import { startSweeping, stopSweeping } from './quoteStore.js';
 import {
   getDemoContext, postQuote, postPurchase, getPositions, getLoanStress, getMarketContext,
   getAssetsOverview, getAssetCandles, getAssetOrderBook,
+  getPositionDetail,
 } from './routes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
@@ -94,6 +95,12 @@ const routes = [
     pattern: new RegExp('^/api/assets/([A-Za-z]{2,10})/order-book$'),
     path: '/api/assets/:symbol/order-book',
     handler: (_body, { params }) => getAssetOrderBook(params[0]),
+  },
+  {
+    method: 'GET',
+    pattern: new RegExp('^/api/positions/([0-9a-fA-F-]{36})$'),
+    path: '/api/positions/:positionId',
+    handler: (_body, { params }) => getPositionDetail(params[0]),
   },
 ];
 

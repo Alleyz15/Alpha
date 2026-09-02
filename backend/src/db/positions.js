@@ -228,3 +228,31 @@ export async function listUnresolvedPositions() {
     'listUnresolvedPositions',
   );
 }
+
+/**
+ * Every event for a set of positions, grouped by position id.
+ *
+ * One query rather than one per position. Ordered oldest first so callers can
+ * take the earliest of a repeated event type without re-sorting - which
+ * matters: a `confirmed` event can appear twice when a row is corrected after
+ * the fill, and the first one is the purchase.
+ *
+ * @param {string[]} positionIds
+ * @returns {Promise<Map<string, object[]>>}
+ */
+export async function listEventsForPositions(positionIds) {
+  const out = new Map();
+  if (!Array.isArray(positionIds) || positionIds.length === 0) return out;
+
+  const rows = unwrap(
+    await db.from('position_events')
+      .select('position_id, event_type, created_at')
+      .in('position_id', positionIds)
+      .order('created_at', { ascending: true }),
+    'listEventsForPositions',
+  );
+
+  for (const id of positionIds) out.set(id, []);
+  for (const row of rows) out.get(row.position_id)?.push(row);
+  return out;
+}
