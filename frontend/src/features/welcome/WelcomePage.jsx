@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { animate } from 'animejs';
+import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ShieldIcon } from '../../components/Icons.jsx';
 import Button from '../../components/ui/Button.jsx';
 import RealityBadge from '../../components/ui/RealityBadge.jsx';
@@ -8,7 +9,7 @@ import SignalGrid from './SignalGrid.jsx';
 import WelcomeJourney from './WelcomeJourney.jsx';
 import useWelcomeAnimations, { pulseMarketSnapshot } from './useWelcomeAnimations.js';
 import useWelcomeMarket from './useWelcomeMarket.js';
-import { benefits, identityStatements, realityGroups, supportedAssets } from './welcomeContent.js';
+import { benefits, identityStatements, realityGroups } from './welcomeContent.js';
 
 function scrollTo(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -42,7 +43,7 @@ function MarketSnapshot({ market, state, retry, selectedSymbol, setSelectedSymbo
   return (
     <>
       <div className="welcome-snapshot__tabs" role="tablist" aria-label="Live market assets">
-        {supportedAssets.map((asset) => (
+        {market.assets.map((asset) => (
           <button
             type="button"
             role="tab"
@@ -61,7 +62,7 @@ function MarketSnapshot({ market, state, retry, selectedSymbol, setSelectedSymbo
           <strong data-market-value>{priceMissing ? '—' : selected.priceLabel}</strong>
           <span>{priceMissing ? 'Live price temporarily unavailable' : selected.updatedAtLabel}</span>
         </div>
-        <span className="welcome-token-mark" aria-hidden="true">{selected.symbol.slice(0, 1)}</span>
+        <AssetLogo symbol={selected.symbol} name={selected.name} imageUrl={selected.image} size="large" />
       </div>
       <dl className="welcome-snapshot__facts">
         <div>
@@ -131,7 +132,7 @@ function MarketCard({ asset, onProtect }) {
   return (
     <article className="welcome-market-card">
       <header>
-        <span className="welcome-token-mark" aria-hidden="true">{asset.symbol.slice(0, 1)}</span>
+        <AssetLogo symbol={asset.symbol} name={asset.name} imageUrl={asset.image} />
         <div><h3>{asset.name}</h3><p>{asset.symbol}</p></div>
         <StatusBadge tone={asset.protectionAvailable ? 'live' : 'neutral'}>
           {asset.protectionAvailable ? 'Available' : 'Unavailable'}
@@ -180,13 +181,20 @@ function WelcomeHeader({ onDashboard }) {
 
 export default function WelcomePage({ apiClient, marketPollInterval = 30_000, onProtect = () => {}, onDashboard = () => {} }) {
   const rootRef = useRef(null);
-  const [selectedSymbol, setSelectedSymbol] = useState('BTC');
+  const [selectedSymbol, setSelectedSymbol] = useState('');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
   useWelcomeAnimations(rootRef);
 
   useEffect(() => {
     if (market?.updatedAt) pulseMarketSnapshot(rootRef);
   }, [market?.updatedAt]);
+
+  useEffect(() => {
+    if (!market?.assets.length) return;
+    setSelectedSymbol((current) => (
+      market.assets.some((asset) => asset.symbol === current) ? current : market.assets[0].symbol
+    ));
+  }, [market]);
 
   const selectedAsset = market?.assets.find((asset) => asset.symbol === selectedSymbol);
   const selectedAssetAvailable = Boolean(
@@ -221,7 +229,7 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000, on
               </button>
             </div>
             <dl className="welcome-hero__facts">
-              <div><dt>4</dt><dd>Supported assets</dd></div>
+              <div><dt>{market?.assets.length ?? '—'}</dt><dd>Supported assets</dd></div>
               <div><dt>Base</dt><dd>Execution network</dd></div>
               <div><dt>USDC</dt><dd>Settlement asset</dd></div>
             </dl>

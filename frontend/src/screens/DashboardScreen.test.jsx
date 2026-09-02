@@ -35,7 +35,42 @@ describe('DashboardScreen position roles', () => {
     expect(screen.getByText('$2,680.00 USDC')).toBeVisible();
     expect(screen.getByText('1 ETH upside exposure active')).toBeVisible();
     expect(screen.getByText('Not charged to demo balance')).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Ethereum' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Verify on BaseScan' })).toHaveAttribute('href', 'https://basescan.org/tx/0xabc');
     expect(screen.queryByText('Protection floor')).not.toBeInTheDocument();
     expect(screen.queryByText('1 ETH protected')).not.toBeInTheDocument();
+  });
+
+  it('labels an operator request as requested and never exposes a BaseScan link', () => {
+    const position = toPositionViewModel({
+      positionId: 'pending-avax-1',
+      asset: 'AVAX',
+      protectedAmount: 2,
+      role: 'protection',
+      protectionFloorUsdc: 21,
+      upsideThresholdUsdc: null,
+      expiry: '2026-09-04T08:00:00.000Z',
+      premiumPaidUsdc: 0.2,
+      status: 'pending_fill',
+      payoutUsdc: null,
+      fill: 'operator',
+      paymentStatus: 'held',
+      explorerUrl: null,
+    });
+
+    render(
+      <DashboardScreen
+        positions={[position]}
+        state="ready"
+        isMock={false}
+        reality={{ balance: 'simulated', quote: 'live', fill: 'operator', settlement: 'live' }}
+        onExplore={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('2 AVAX protection requested')).toBeVisible();
+    expect(screen.getByText('Funds locked')).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Avalanche' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Verify on BaseScan' })).not.toBeInTheDocument();
   });
 });

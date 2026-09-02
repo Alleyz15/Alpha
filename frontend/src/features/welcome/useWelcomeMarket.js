@@ -1,35 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toMarketAssetViewModel } from '../../adapters/quoteViewModel.js';
-import { supportedAssets } from './welcomeContent.js';
 
 function normaliseMarket(payload) {
   if (!Array.isArray(payload?.assets)) {
     throw new Error('Market context did not contain an asset list');
   }
 
-  const received = new Map(payload.assets.map((asset) => [asset?.symbol, asset]));
-  const assets = supportedAssets.map((supported) => {
-    const asset = received.get(supported.symbol);
-    if (!asset || typeof asset !== 'object') {
-      return {
-        ...supported,
-        malformed: true,
-        priceLabel: '—',
-        holdingLabel: '—',
-        availabilityLabel: 'Market information unavailable for this asset',
-        unavailableReason: 'Market information unavailable for this asset',
-        protectionAvailable: false,
-        updatedAtLabel: 'Update time unavailable',
-      };
+  const assets = payload.assets.flatMap((asset) => {
+    if (!asset || typeof asset !== 'object' || typeof asset.symbol !== 'string' || !asset.symbol.trim()) {
+      return [];
     }
 
-    const holdingUnits = Number(asset.holdingUnits);
-    return toMarketAssetViewModel({
+    const symbol = asset.symbol.trim().toUpperCase();
+    const holdingUnits = asset.holdingUnits == null ? null : Number(asset.holdingUnits);
+    return [toMarketAssetViewModel({
       ...asset,
-      name: asset.name || supported.name,
-      holdingUnits: Number.isFinite(holdingUnits) ? holdingUnits : 0,
-    }, payload.updatedAt);
+      symbol,
+      name: asset.name || symbol,
+      holdingUnits: Number.isFinite(holdingUnits) ? holdingUnits : null,
+    }, payload.updatedAt)];
   });
+
+  if (assets.length === 0) {
+    throw new Error('Market context did not contain a usable asset');
+  }
 
   return { assets, updatedAt: payload.updatedAt, reality: payload.reality };
 }

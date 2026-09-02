@@ -35,7 +35,7 @@ describe('WelcomePage', () => {
     render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
 
     expect(screen.getByRole('heading', { name: /Crypto moves.*Your plans should not have to/i })).toBeVisible();
-    expect(await screen.findAllByText('$77,487.38 USDC')).toHaveLength(2);
+    expect(await screen.findAllByText('$2,850.00 USDC')).toHaveLength(2);
     expect(screen.getAllByText('0.01 BTC').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Protection available up to 2 days').length).toBeGreaterThan(0);
     expect(screen.getByText('Alpha simulates the user holding—not the live protection market.')).toBeVisible();
@@ -49,12 +49,34 @@ describe('WelcomePage', () => {
     const user = userEvent.setup();
     const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
     render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
-    await screen.findAllByText('$77,487.38 USDC');
+    await screen.findAllByText('$2,850.00 USDC');
 
-    await user.click(screen.getByRole('tab', { name: 'ETH' }));
-    expect(screen.getByRole('tab', { name: 'ETH' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getAllByText('$2,850.00 USDC').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('0.4 ETH').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('tab', { name: 'BTC' }));
+    expect(screen.getByRole('tab', { name: 'BTC' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByText('$77,487.38 USDC').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('0.01 BTC').length).toBeGreaterThan(0);
+  });
+
+  it('renders every asset returned by market-context without a fixed four-asset limit', async () => {
+    const context = marketContext();
+    context.assets.push(
+      {
+        symbol: 'AVAX', name: 'Avalanche', spotUsdc: 24.12, holdingUnits: null,
+        protectionAvailable: false, longestProtectionDays: null, unavailableReason: 'Not offered yet.',
+      },
+      {
+        symbol: 'XRP', name: 'XRP', spotUsdc: 1.98, holdingUnits: null,
+        protectionAvailable: true, longestProtectionDays: 1, unavailableReason: null,
+      },
+    );
+    const client = { getMarketContext: vi.fn().mockResolvedValue(context) };
+
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+
+    expect(await screen.findByRole('tab', { name: 'AVAX' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'XRP' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Avalanche' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'XRP' })).toBeVisible();
   });
 
   it('shows the backend reason for an unavailable asset instead of hiding it', async () => {

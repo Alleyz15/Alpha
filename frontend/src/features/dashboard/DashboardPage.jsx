@@ -40,7 +40,7 @@ export default function DashboardPage({ apiClient = liveApi }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell dashboard-shell">
       <AppHeader activeView="dashboard" onNavigate={navigateLegacyHeader} demoContext={demoContext} />
 
       <main>
