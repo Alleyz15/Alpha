@@ -31,8 +31,8 @@ describe('formatUsdc', () => {
 });
 
 describe('payment status copy', () => {
-  it('uses the shared placeholder for none', () => {
-    expect(toPaymentStatusLabel('none')).toBe('—');
+  it('explains that none means the user was not charged', () => {
+    expect(toPaymentStatusLabel('none')).toBe('No user payment');
   });
 
   it('keeps a neutral fallback for unknown values', () => {
@@ -49,7 +49,7 @@ describe('payment status copy', () => {
     });
 
     expect(view.paymentStatus).toBe('none');
-    expect(view.paymentStatusLabel).toBe('—');
+    expect(view.paymentStatusLabel).toBe('No user payment');
   });
 
   it('does not infer paid from an explicit unknown future status', () => {

@@ -183,7 +183,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                   </div>
                 )}
                 <p className="portfolio-position-scope">
-                  This holdings summary shows active and pending positions. Failed, refunded, and ended requests are intentionally excluded.
+                  This holdings summary counts active and pending positions. Open an asset to see its complete history, including settled and failed requests.
                 </p>
               </Card>
             </>
