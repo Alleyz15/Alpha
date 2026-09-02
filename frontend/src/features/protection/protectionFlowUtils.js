@@ -4,6 +4,19 @@ export function isKnownAsset(symbol) {
   return KNOWN_ASSETS.includes(symbol);
 }
 
+const CONTRACT_UNIT_DECIMALS = 6;
+
+export function defaultProtectionUnits(holdingUnits) {
+  const numericHolding = Number(holdingUnits);
+  if (!Number.isFinite(numericHolding) || numericHolding <= 0) return '';
+
+  const quarterHolding = Math.round(numericHolding * 0.25 * (10 ** CONTRACT_UNIT_DECIMALS))
+    / (10 ** CONTRACT_UNIT_DECIMALS);
+  if (quarterHolding <= 0) return '';
+
+  return quarterHolding.toFixed(CONTRACT_UNIT_DECIMALS).replace(/\.?0+$/, '');
+}
+
 export function dateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');

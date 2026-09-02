@@ -233,6 +233,11 @@
   color: var(--warning);
 }
 
+.dashboard-shell .transaction-reality.compact.failed {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .dashboard-shell .transaction-reality.real .icon-link {
   color: var(--signal);
 }

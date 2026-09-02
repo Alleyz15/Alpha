@@ -38,6 +38,7 @@ export default function ConfigureProtectionStep({
   const executionLabel = contextReality?.fill === 'operator'
     ? 'Operator executes purchase'
     : 'Backend executes purchase';
+  const hasUsableHolding = Number.isFinite(Number(asset.holdingUnits)) && Number(asset.holdingUnits) > 0;
 
   return (
     <>
@@ -125,7 +126,8 @@ export default function ConfigureProtectionStep({
                   inputMode="decimal"
                   value={form.units}
                   onChange={onFieldChange}
-                  placeholder={`Up to ${asset.holdingUnits}`}
+                  placeholder={hasUsableHolding ? `Up to ${asset.holdingUnits}` : 'Holding unavailable'}
+                  disabled={!hasUsableHolding}
                   required
                 />
               </FormField>
@@ -174,7 +176,7 @@ export default function ConfigureProtectionStep({
                 size="large"
                 loading={quoteState === 'loading'}
                 loadingLabel="Getting live choices…"
-                disabled={!asset.protectionAvailable || asset.spotUsdc == null}
+                disabled={!asset.protectionAvailable || asset.spotUsdc == null || !hasUsableHolding}
               >
                 Get live quote <ArrowIcon />
               </Button>

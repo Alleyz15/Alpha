@@ -43,6 +43,8 @@ function PositionCard({ position, isMock }) {
           variant="transaction"
           isMock={isMock}
           fill={position.fill}
+          status={position.status}
+          paymentStatus={position.paymentStatus}
           explorerUrl={position.explorerUrl}
           compact
         />

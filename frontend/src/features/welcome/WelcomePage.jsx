@@ -124,7 +124,7 @@ function IdentityRotator() {
   );
 }
 
-function MarketCard({ asset, onProtect }) {
+function MarketCard({ asset, onProtect, onViewAsset }) {
   const unavailableMessage = asset.malformed
     ? asset.unavailableReason
     : asset.unavailableReason || 'No protection is being offered for this asset right now.';
@@ -146,14 +146,19 @@ function MarketCard({ asset, onProtect }) {
       {!asset.protectionAvailable && <p className="welcome-market-card__reason">{unavailableMessage}</p>}
       <footer>
         <span>{asset.priceLabel === '—' ? 'Live price temporarily unavailable' : asset.updatedAtLabel}</span>
-        <button
-          className="alpha-button alpha-button--ghost alpha-button--small"
-          type="button"
-          disabled={!asset.protectionAvailable || asset.priceLabel === '—'}
-          onClick={() => onProtect(asset.symbol)}
-        >
-          Protect {asset.symbol}
-        </button>
+        <div className="welcome-market-card__actions">
+          <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={() => onViewAsset(asset.symbol)}>
+            Market details
+          </button>
+          <button
+            className="alpha-button alpha-button--ghost alpha-button--small"
+            type="button"
+            disabled={!asset.protectionAvailable || asset.priceLabel === '—'}
+            onClick={() => onProtect(asset.symbol)}
+          >
+            Protect {asset.symbol}
+          </button>
+        </div>
       </footer>
     </article>
   );
@@ -179,7 +184,7 @@ function WelcomeHeader({ onDashboard }) {
   );
 }
 
-export default function WelcomePage({ apiClient, marketPollInterval = 30_000, onProtect = () => {}, onDashboard = () => {} }) {
+export default function WelcomePage({ apiClient, marketPollInterval = 30_000, onProtect = () => {}, onViewAsset = () => {}, onDashboard = () => {} }) {
   const rootRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
@@ -299,7 +304,9 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000, on
           {state === 'loading' && <div className="welcome-market-state" role="status"><span className="welcome-market-state__spinner" /><strong>Checking live market availability…</strong></div>}
           {market && (
             <div className="welcome-market__grid">
-              {market.assets.map((asset) => <MarketCard key={asset.symbol} asset={asset} onProtect={onProtect} />)}
+              {market.assets.map((asset) => (
+                <MarketCard key={asset.symbol} asset={asset} onProtect={onProtect} onViewAsset={onViewAsset} />
+              ))}
             </div>
           )}
           <p className="welcome-market__note"><span aria-hidden="true">◌</span> Protection duration and availability can change as the live market changes.</p>

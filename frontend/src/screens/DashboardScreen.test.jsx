@@ -73,4 +73,33 @@ describe('DashboardScreen position roles', () => {
     expect(screen.getByRole('img', { name: 'Avalanche' })).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Verify on BaseScan' })).not.toBeInTheDocument();
   });
+
+  it('describes a refunded failure as finished instead of waiting for execution', () => {
+    const position = toPositionViewModel({
+      positionId: 'failed-refunded-1', asset: 'ETH', protectedAmount: 0.02,
+      role: 'protection', protectionFloorUsdc: 2320, upsideThresholdUsdc: null,
+      expiry: '2026-09-04T08:00:00.000Z', premiumPaidUsdc: 0,
+      status: 'failed', payoutUsdc: null, fill: 'operator', paymentStatus: 'refunded', explorerUrl: null,
+    });
+
+    render(<DashboardScreen positions={[position]} state="ready" isMock={false} reality={{ fill: 'operator' }} onExplore={vi.fn()} />);
+
+    expect(screen.getByText('Execution failed · funds refunded')).toBeVisible();
+    expect(screen.queryByText(/Waiting for the app’s operator/i)).not.toBeInTheDocument();
+  });
+
+  it('describes an unrefunded failure without claiming a refund', () => {
+    const position = toPositionViewModel({
+      positionId: 'failed-held-1', asset: 'ETH', protectedAmount: 0.02,
+      role: 'protection', protectionFloorUsdc: 2320, upsideThresholdUsdc: null,
+      expiry: '2026-09-04T08:00:00.000Z', premiumPaidUsdc: 0,
+      status: 'failed', payoutUsdc: null, fill: 'operator', paymentStatus: 'held', explorerUrl: null,
+    });
+
+    render(<DashboardScreen positions={[position]} state="ready" isMock={false} reality={{ fill: 'operator' }} onExplore={vi.fn()} />);
+
+    expect(screen.getByText('Execution failed')).toBeVisible();
+    expect(screen.queryByText(/funds refunded/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Waiting for the app’s operator/i)).not.toBeInTheDocument();
+  });
 });
