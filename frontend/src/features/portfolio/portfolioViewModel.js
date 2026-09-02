@@ -24,6 +24,7 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 });
 
 const pendingStatuses = new Set(['pending', 'pending_fill', 'pending_verification']);
+const currentPositionStatuses = new Set(['active', ...pendingStatuses]);
 
 export function formatUnits(value, symbol) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
@@ -61,6 +62,11 @@ export function buildPortfolioRows(holdings = [], positions = []) {
     .filter((holding) => holding.asset !== 'USDC')
     .map((holding) => {
       const identity = getAssetIdentity(holding.asset);
+      const currentPositions = positions.filter((position) => (
+        position.asset === holding.asset
+        && currentPositionStatuses.has(position.status)
+        && position.paymentStatus !== 'refunded'
+      ));
       const matchingPositions = positions
         .filter((position) => position.asset === holding.asset && position.role === 'protection')
         .sort((a, b) => {
@@ -70,6 +76,10 @@ export function buildPortfolioRows(holdings = [], positions = []) {
         });
       const position = matchingPositions.find((candidate) => getProtectionState(candidate) !== 'none') ?? null;
       const protectionState = getProtectionState(position);
+      const activeProtectionCount = matchingPositions.filter((candidate) => getProtectionState(candidate) === 'active').length;
+      const pendingProtectionCount = matchingPositions.filter((candidate) => getProtectionState(candidate) === 'pending').length;
+      const protectionCount = activeProtectionCount || pendingProtectionCount;
+      const protectionCountLabel = protectionCount === 1 ? '1 position' : `${protectionCount} positions`;
 
       return {
         ...holding,
@@ -79,12 +89,13 @@ export function buildPortfolioRows(holdings = [], positions = []) {
         valueLabel: displayUsdc(holding.valueUsdc),
         protectionState,
         protectionLabel: protectionState === 'active'
-          ? 'Protected'
+          ? `Protected · ${protectionCountLabel}`
           : protectionState === 'pending'
-            ? 'Being set up'
+            ? `Being set up · ${protectionCountLabel}`
             : 'Not protected',
         expiryLabel: position ? formatDate(position.expiry) : '—',
         positionId: position?.positionId ?? null,
+        currentPositionCount: currentPositions.length,
       };
     });
 }

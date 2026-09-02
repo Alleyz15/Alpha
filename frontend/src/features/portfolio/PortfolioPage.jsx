@@ -163,8 +163,12 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                             <td>{row.expiryLabel}</td>
                             <td className="portfolio-action-cell">
                               {row.positionId ? (
-                                <Button variant="ghost" size="small" onClick={() => navigate(`/protection/${row.positionId}`)}>
-                                  View <ArrowIcon size={14} />
+                                <Button
+                                  variant="ghost"
+                                  size="small"
+                                  onClick={() => navigate(row.currentPositionCount > 1 ? `/positions/${row.symbol}` : `/protection/${row.positionId}`)}
+                                >
+                                  {row.currentPositionCount > 1 ? 'View positions' : 'View'} <ArrowIcon size={14} />
                                 </Button>
                               ) : (
                                 <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
@@ -178,6 +182,9 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                     </table>
                   </div>
                 )}
+                <p className="portfolio-position-scope">
+                  This holdings summary shows active and pending positions. Failed, refunded, and ended requests are intentionally excluded.
+                </p>
               </Card>
             </>
           )}

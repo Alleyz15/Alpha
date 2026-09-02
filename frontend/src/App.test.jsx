@@ -91,8 +91,8 @@ describe('application routes', () => {
     liveApi.getAssetOrderBook.mockResolvedValue(orderBook);
   });
 
-  it('opens /dashboard directly on the real-data Home page', async () => {
-    render(<MemoryRouter initialEntries={['/dashboard']}><App /></MemoryRouter>);
+  it('opens /markets directly on the real-data markets page', async () => {
+    render(<MemoryRouter initialEntries={['/markets']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'Portfolio value' })).toBeVisible();
     expect(screen.getByText('$4,703.20 USDC')).toBeVisible();
@@ -111,14 +111,31 @@ describe('application routes', () => {
     expect(await screen.findByRole('heading', { name: 'Buy protection for Ethereum' })).toBeVisible();
   });
 
-  it('navigates from Welcome to the Portfolio from My protection', async () => {
+  it('navigates from Welcome to the Portfolio', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
 
-    await user.click(screen.getByRole('button', { name: 'My protection' }));
+    await user.click(screen.getByRole('button', { name: 'My Portfolio' }));
 
     expect(await screen.findByRole('heading', { name: 'My Crypto' })).toBeVisible();
     expect(liveApi.getPositions).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigates from Welcome to Markets', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
+
+    await user.click(screen.getByRole('button', { name: 'Markets' }));
+
+    expect(await screen.findByRole('heading', { name: 'Portfolio value' })).toBeVisible();
+    expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);
+  });
+
+  it('redirects the legacy /dashboard route to Markets', async () => {
+    render(<MemoryRouter initialEntries={['/dashboard']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: 'Portfolio value' })).toBeVisible();
+    expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);
   });
 
   it('navigates from a Welcome market card to Coin Detail without a reload', async () => {
