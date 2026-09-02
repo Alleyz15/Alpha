@@ -922,6 +922,53 @@ Format: symptom → cause → fix
 
 ---
 
+## Known design gaps
+
+Not bugs. Decisions with consequences we have not built around, written down so
+nobody has to discover them under questioning.
+
+### The operator model has no timeout
+
+`POST /api/purchase` writes the position row and debits the user's balance, then
+stops. A person runs `scripts/fill.js` afterwards. That separation is deliberate
+— the confirm button must not broadcast to mainnet (BR-51), and the reality block
+reports `fill: 'operator'` so the interface never claims otherwise.
+
+**But nothing reclaims a purchase the operator never executes.**
+
+A position created through the API and left unfilled:
+
+- stays `pending` forever — the settlement sweep selects `status = 'active'`, so
+  it is invisible to that process permanently, even after its expiry passes
+- holds the debit indefinitely — `findStandingDebits` reports it, but reporting
+  is all that happens; nothing acts on the report
+- shows on the dashboard as a position in progress that will never resolve
+
+Observed on 2 Sep: `fc08e2e3`, a BTC $76,500 put requested from the browser at
+16:46 the previous day, holding **1.522569 USDC** with no transaction behind it.
+The flow worked exactly as designed. There was simply no operator.
+
+**Why it matters beyond the demo.** Here it is simulated balance and a stuck card.
+In a real product it is a customer's money held against a purchase that never
+happened, with no expiry, no notification and no automatic reversal.
+
+**What a fix would look like** (not before the freeze):
+
+- a TTL on `pending` — after some interval with no `broadcast` event, transition
+  to `failed` and refund through the compensating path `failRefusedFill` already
+  uses
+- the sweep, or a second job, actually acting on `findStandingDebits` rather than
+  only listing them
+- the interface distinguishing "waiting for the operator" from "processing", so
+  the state is legible while it lasts
+
+**If a judge asks what happens when nobody executes:** the honest answer is that
+the funds stay held and a person has to notice. We know, it is written down, and
+the compensating-refund path that would fix it already exists and is tested — it
+is wiring, not design.
+
+---
+
 ## Environment variables
 
 `backend/.env` — copy from `.env.example` and fill in.

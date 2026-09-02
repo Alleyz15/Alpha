@@ -71,6 +71,33 @@ it prints.
 
 ---
 
+## "What happens if nobody executes the purchase?"
+
+**Short answer, speakable as-is:**
+
+> The confirm button doesn't send a transaction — it records the request and
+> holds the funds, and a person executes it. That's deliberate, because we won't
+> have a browser click broadcast to mainnet. The gap is that nothing reclaims a
+> purchase the operator never gets to: the funds stay held until someone notices.
+> We know, it's written up, and the refund path that would close it already
+> exists and is tested — it's wiring, not design.
+
+**If they push:**
+
+- We have a live example: a request from the browser yesterday afternoon, holding
+  1.52 USDC, with no transaction behind it. The flow did exactly what it should.
+  There was no operator.
+- The fix is a timeout on the pending state that refunds through the same
+  compensating path a refused fill already uses. We chose not to add it two days
+  before the deadline.
+
+**What NOT to say:** that it's handled, or that it can't happen. It happened
+yesterday.
+
+**Evidence:** `docs/SETUP.md`, "Known design gaps".
+
+---
+
 ## The pattern behind both
 
 Worth having ready, because it is the honest version of "why did you get this
