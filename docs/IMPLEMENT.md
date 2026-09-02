@@ -60,7 +60,7 @@ corrected, the book looks nothing like what the earlier documents describe:
 
 | | Was believed | Actually |
 |---|---|---|
-| Longest tenor | ~26 days | **2.4 days** (vanilla puts) |
+| Longest tenor | ~26 days | **the longest single-leg put on the book** — sweeps ~2 to just under 3 days as expiries roll at 08:00 UTC. The raw book reaches 2 months; those are spreads, which we exclude (BR-52) |
 | Deepest floor | 20%+ | **~6%** |
 | Tradable assets | ETH, BTC | **ETH, BTC, SOL, BNB** (+AVAX partial) |
 
@@ -97,7 +97,7 @@ corrected book.
 | Thetanuts SDK installed | ✅ | `thetanuts-client`, `ethers`, `dotenv` |
 | Connectivity check passing | ✅ | ~320 live orders, prices for 6 assets |
 | Order book structure documented | ✅ | See SETUP.md |
-| Expiries mapped | ✅ | Raw book +1 to +62 days. **Buyable puts stop at ~26 days** (BR-52) — see SETUP.md |
+| Expiries mapped | ✅ | Raw book +1 to +62 days. Single-leg buy-side puts reach ~2–3 days; everything longer is a spread and excluded by our own rule, not the protocol (BR-52) — see SETUP.md |
 | SDK method surface mapped | ✅ | See requirements.md appendix |
 | Requirements written | ✅ | requirements.md |
 | Custodial vs non-custodial decided | ✅ | Custodial; the backend developer operates the wallet |
