@@ -170,6 +170,16 @@ async function buildTier(chosen, selection, units, { tierId, deps } = {}) {
       // numbers than they asked for and no reason why. That is the silent
       // resize this field exists to prevent.
       // ------------------------------------------------------------------
+      // Whether the size above was CONFIRMED against the chain or merely
+      // computed. False when the filling wallet's own USDC allowance or
+      // balance was below the premium, so the simulation could not be run -
+      // see fillableSize.js. A false here is an operations problem, never a
+      // market one, and the pre-flight (BR-12) refuses the fill before
+      // anything is broadcast. Additive: the interface may ignore it, but
+      // nothing may report an unconfirmed size as confirmed.
+      confirmed: found.verified !== false,
+      unconfirmedReason: found.verified === false ? found.unverified.reason : null,
+
       adjusted: found.adjusted ? {
         requestedUnits: found.requestedUnits,
         actualUnits: found.actualUnits,

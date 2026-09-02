@@ -659,13 +659,38 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `full.settlementPrice` | the settled price | the field does not exist on `getFullOptionInfo`; it could only return `undefined` |
 | "XRP fails 6/6" | the protocol rejects XRP | our premium truncation; XRP fills 8/8 at exact sizes |
 | "vanilla puts stop at 2.4 days" | the market's ceiling | our own single-leg rule; the book reaches 2 months |
-| a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small |
+| a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small (**fixed** — see below) |
 | `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+#### The allowance row is now closed, and the fix is the general lesson
+
+`findFillableSize` simulates the fill **as the filling wallet**, so it inherits
+that wallet's USDC allowance and balance. A premium above either reverts inside
+the ERC-20 transfer, and `staticCall` reports that identically to a size
+refusal. The step-down then walked until the premium fitted under our own
+approval — and quoted the result as *"the market would not fill that much"*.
+
+Measured: 3 contracts, premium 6.6350 USDC, allowance 5.8637 → silently reduced
+to 2. The book had said nothing.
+
+The fix is not a better error parser. It is **reading the simulator's own limits
+before asking it anything**: `readSpendCapacity()` takes the smaller of allowance
+and balance, and a premium above it is reported as a shortfall (`verified:
+false`, with `boundBy: 'allowance' | 'balance'`) with the requested size left
+**standing and unprobed**. Nothing is reduced on evidence we did not have.
+
+Note the asymmetry that makes this safe: an unverified size is quoted as-is, and
+the pre-flight's BR-12 allowance check still refuses the fill before any
+broadcast. The unknown surfaces to the *operator*, where a short approval
+belongs — never to the user as a market fact.
+
+> **Rule out your own instrument before attributing a reading to the world.**
+> A measurement taken through a limit you imposed measures the limit.
 
 The two newest are different in kind, and worth naming separately.
 

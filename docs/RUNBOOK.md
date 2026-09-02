@@ -333,6 +333,35 @@ computed live for that request.
 A presenter who says "two days" while the screen shows one has contradicted
 themselves in front of a judge, and the screen is right.
 
+### Top up the USDC approval first — it costs nothing to check
+
+Look first — this sends nothing:
+
+```bash
+npm run approve 9
+```
+
+Then, only if you want the change:
+
+```bash
+npm run approve 9 -- --confirm
+```
+
+Nine USDC, because the wallet holds 9.257 and BR-12 forbids an unbounded
+approval. The script refuses anything above 100 USDC outright.
+
+The wallet's approval to the OptionBook is currently **5.86 USDC**, and the
+largest protection tier on most assets costs more than that. Quotes still work:
+the size is shown, but marked as **not confirmed against the chain**, because
+the check needs an approval large enough to simulate paying the premium.
+
+That is honest, and it is not what you want on stage. Raising the approval turns
+those tiers from *computed* into *confirmed*. It sends one small transaction and
+spends only gas — **it buys nothing and moves no USDC**.
+
+If you would rather not send anything, do nothing: the quotes are still real and
+the pre-flight still refuses any fill it cannot afford. Nothing breaks.
+
 ### If an asset shows NONE
 
 It will display in the interface with a plain-English reason rather than
