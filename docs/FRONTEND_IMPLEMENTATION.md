@@ -588,3 +588,125 @@ Files updated:
 - The approved product scope was implemented without deviation.
 - The final sidebar/global navigation remains intentionally absent because its design has not yet been provided. The pages use local back and route actions so Phase 6 can function independently.
 - AVAX and XRP detail charts depend on backend candle availability. Phase 6 implements the correct unavailable state and does not substitute chart data; the page will begin rendering those charts automatically when the same endpoint supports them.
+
+## Phase 7 — Home dashboard
+
+**Status:** Complete
+
+### Approved implementation plan
+
+Phase 7 replaces the legacy `/dashboard` position list with Alpha's daily-use Home page and adds `/home` as an equivalent direct route. The page follows `docs/alpha-design-system.md`, uses only live backend responses, and keeps the previously removed AI brief, watchlist, market movers, protection-coverage summary, estimated payout, and seven-day portfolio performance out of the interface.
+
+1. Build the fixed-viewport Home shell:
+   - Add the approved 76px navigation rail, centered 1400px content area, compact topbar, market search, Protection Overview action, and backend-derived avatar initials.
+   - Do not add a general Buy Protection navigation link or personalised greeting.
+   - Keep the desktop page within one viewport; allow only the trend strip and market table to scroll internally when necessary.
+2. Build the Portfolio Value card:
+   - Read `GET /api/portfolio` and show the current backend total in USDC.
+   - Label displayed holdings as simulated and include a View Full Portfolio action.
+   - Respect `totalValueComplete`; identify unpriced assets and call the number partial instead of presenting an incomplete sum as a complete value.
+   - Do not show a seven-day portfolio change, estimated payout, protection coverage percentage, or another portfolio snapshot card.
+3. Build Trending Now:
+   - Read real `priceChange24hPct` values from `GET /api/assets/overview`.
+   - Rank Alpha's four supported market assets by absolute 24-hour movement and state that limited scope directly.
+   - Keep unavailable movements unavailable rather than treating them as zero.
+   - Link each asset to its existing Coin Detail route.
+4. Build Top Cryptocurrencies:
+   - Show the four real overview assets with coin identity, aggregated USD price, 24-hour change, and market capitalization.
+   - Request `GET /api/assets/:symbol/candles?range=1W` and derive each small seven-day line only from returned Binance USDT closes.
+   - Label the USD/USDT source distinction and show an explicit per-asset unavailable state if a candle request fails.
+   - Filter the table locally from the topbar search without changing backend data.
+5. Add resilient live refresh behavior:
+   - Refresh portfolio and overview data about every 45 seconds while the page is visible.
+   - Preserve the last successful data on a refresh failure and show a warning.
+   - Keep Portfolio and Market failure boundaries separate so one provider cannot blank the other section.
+   - Use skeletons only for a true initial load and never render a temporary zero.
+6. Add Anime.js as progressive enhancement:
+   - Use the already bundled Anime.js dependency with a root-scoped timeline and cleanup.
+   - Add a staged dashboard entrance, a rotating live-data orbit, pulsing verification nodes, live indicators, and a restrained row refresh accent.
+   - Keep all financial values and content synchronously visible, catch animation failures, and respect reduced-motion preferences.
+7. Add responsive and automated verification:
+   - Preserve the approved colors, typography, spacing, table rules, badges, visible focus, and numeric formatting.
+   - Collapse the rail and stacked layout on compact screens while keeping horizontal market data accessible.
+   - Test real-data rendering, source labels, ranking, search, partial totals, provider isolation, missing candles, routing, removed content, and route integration.
+
+### Planned files
+
+New files:
+
+- `frontend/src/features/home/HomePage.jsx`
+- `frontend/src/features/home/HomePage.test.jsx`
+- `frontend/src/features/home/MarketSparkline.jsx`
+- `frontend/src/features/home/homeViewModel.js`
+- `frontend/src/features/home/homeViewModel.test.js`
+- `frontend/src/features/home/useHomeAnimations.js`
+- `frontend/src/features/home/useHomeData.js`
+- `frontend/src/styles/home.css`
+
+Updated files:
+
+- `frontend/src/App.jsx`
+- `frontend/src/App.test.jsx`
+- `frontend/src/index.css`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Completion requirements
+
+- `/dashboard` and `/home` render the approved Home page using the live client.
+- Portfolio value, 24-hour ranking, market prices, market caps, and seven-day trend paths come from their documented backend responses with no sample values.
+- USD market data, USDT candles, and USDC portfolio valuation remain clearly distinguished.
+- A failure in one source does not remove valid data from another source, and stale refresh data is disclosed.
+- Removed Home features and personalised greeting copy are absent.
+- Anime.js remains optional, scoped, cleaned up, and reduced-motion safe.
+- Automated tests, production build, live integration, visual review, styling checks, and Git checks pass.
+
+### Implementation result
+
+Completed on 2026-09-03.
+
+- Replaced the legacy `/dashboard` page with the new Home dashboard and added `/home` as an alias. The previous dashboard component remains untouched but is no longer mounted by these routes.
+- Added the approved navigation rail and topbar without a general Buy Protection link. Home, Portfolio, Markets, Product Reality, Protection Overview, and asset-detail navigation use existing application routes.
+- Changed the Welcome page's “My protection” action to open `/portfolio`, matching the action's meaning now that Phase 6 exists.
+- Built the live Portfolio Value card with a prominent USDC total, simulated-holdings disclosure, partial-total handling, unpriced-asset names, and View Full Portfolio action. No portfolio-performance claim is made.
+- Built Trending Now from backend 24-hour percentages and made the ranking rule explicit: largest absolute movement first across Alpha's four market assets.
+- Built the Top Cryptocurrencies table using CoinGecko USD price/change/market-cap fields and separate Binance USDT seven-day closes. Each asset name and trending card opens Coin Detail.
+- Added small responsive SVG sparklines calculated only from returned candle closes. A failed or insufficient candle response produces “Unavailable” and never a fabricated line.
+- Added a 45-second visible-page refresh for summary data, a longer candle refresh path, last-successful-value preservation, and separate Portfolio/Market initial error states.
+- Added an original live-data orbit around the Portfolio Value card. Anime.js provides the scoped entrance sequence, continuous orbit, verification-node pulses, live-dot pulses, and market refresh accents. All content is visible without animation, reduced motion is respected, errors are isolated, and scope cleanup runs on unmount.
+- Applied the Alpha token palette, Space Grotesk/Inter/JetBrains Mono roles, 76px rail, centered 1400px layout, internal scrolling, table styling, semantic change chips, source disclosures, keyboard focus, and compact-screen stacking.
+- Kept “Good Morning, Demo User”, AI Market Brief, Favorites/Watchlist, Market Movers, Estimated Payout, Protection Coverage, and seven-day portfolio-change content out of the page.
+
+Files added:
+
+- `frontend/src/features/home/HomePage.jsx`
+- `frontend/src/features/home/HomePage.test.jsx`
+- `frontend/src/features/home/MarketSparkline.jsx`
+- `frontend/src/features/home/homeViewModel.js`
+- `frontend/src/features/home/homeViewModel.test.js`
+- `frontend/src/features/home/useHomeAnimations.js`
+- `frontend/src/features/home/useHomeData.js`
+- `frontend/src/styles/home.css`
+
+Files updated:
+
+- `frontend/src/App.jsx`
+- `frontend/src/App.test.jsx`
+- `frontend/src/index.css`
+- `docs/FRONTEND_IMPLEMENTATION.md`
+
+### Verification performed
+
+- Backend prerequisite tests: passed; all 170 backend tests passed before implementation.
+- Live backend prerequisite check: passed; portfolio value was complete, all four overview assets returned non-null price, 24-hour change, and market cap, and ETH/BTC/SOL/BNB each returned 168 real one-hour candles for `range=1W`.
+- Automated frontend tests: passed after final visual polish; 15 test files and 83 tests passed, including 10 new Home tests.
+- Phase 7 behavior coverage: passed for real portfolio and market rendering, USD/USDT/USDC source distinction, absolute-movement ranking, search filtering, qualified partial values, isolated market failure, missing-candle behavior, Portfolio and Coin Detail navigation, and absence of removed content.
+- Production build: passed after final visual polish with 139 modules transformed.
+- Dependency audit: passed; npm reported zero vulnerabilities.
+- Desktop live-data visual review: passed at 1440×900. The centered content fills one viewport, all four ranked assets and market rows are readable, and every real sparkline renders.
+- Compact live-data visual review: passed at 500×900. Controls stack cleanly, the trend strip remains horizontally accessible, and the market table uses local horizontal scrolling.
+- Failure-state visual review: passed. Portfolio and market provider failures are explicit, no blank panels or sample figures appear, and live-status wording is removed when a source is unavailable.
+
+### Deviations from plan
+
+- No product-scope deviation. The Home page contains only the approved sections and capabilities.
+- The market sections intentionally remain four-asset views because `/api/assets/overview` and the candle endpoint currently support ETH, BTC, SOL, and BNB. AVAX and XRP portfolio holdings are not relabelled as Home market-data support.
