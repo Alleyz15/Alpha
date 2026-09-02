@@ -9,7 +9,7 @@ import { startSweeping, stopSweeping } from './quoteStore.js';
 import {
   getDemoContext, postQuote, postPurchase, getPositions, getLoanStress, getMarketContext,
   getAssetsOverview, getAssetCandles, getAssetOrderBook,
-  getPositionDetail,
+  getPositionDetail, getPortfolio,
 } from './routes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
@@ -67,6 +67,7 @@ const routes = [
   { method: 'POST', path: '/api/purchase', handler: (body) => postPurchase(body) },
   { method: 'GET', path: '/api/positions', handler: () => getPositions() },
   { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
+  { method: 'GET', path: '/api/portfolio', handler: () => getPortfolio() },
 
   // Coin Detail market data. DISPLAY ONLY - CoinGecko and Binance, read-only,
   // and nothing they return prices a trade. This literal sits ABOVE the

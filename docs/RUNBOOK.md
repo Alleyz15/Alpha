@@ -55,8 +55,11 @@ Confirm the wallet is reachable and nothing is broken. This spends nothing:
 npm test
 ```
 
-Expect `pass 90`, `fail 0`. **If any test fails, stop and message the backend
-developer.** Do not continue — a failing test here means the code does not match
+Expect `pass 170`, `fail 0`.
+
+**The number that matters is `fail 0`.** If `pass` reads higher than 170, tests
+were added after this page was written and nothing is wrong. If anything says
+`fail`, **stop and message the backend developer** — do not continue — a failing test here means the code does not match
 what this runbook assumes.
 
 ---
@@ -333,6 +336,43 @@ computed live for that request.
 A presenter who says "two days" while the screen shows one has contradicted
 themselves in front of a judge, and the screen is right.
 
+### The USDC approval is already raised — nothing to do
+
+Done on 2 Sep 2026: the wallet is approved for **9 USDC** to the OptionBook
+(tx `0x3165e0ca…`). You do not need to run anything. This section exists only
+so that if something goes wrong you know what it is.
+
+The approval is what lets a quote confirm its size against the chain before the
+user sees it. Where the premium exceeds it, the quote still works — the size is
+shown but marked **not confirmed**, which is honest and harmless.
+
+**The wallet holds 9.257 USDC, so 9 is the ceiling.** The deepest protection
+tier on ETH, BTC, SOL and BNB costs more than that and will stay unconfirmed.
+That is a budget limit, not a market one, and not a fault.
+
+#### Only if the allowance is somehow back to zero
+
+Check it — this sends nothing:
+
+```bash
+npm run approve 9
+```
+
+If `allowance now` reads `0.000000`, run:
+
+```bash
+npm run approve 9 -- --confirm
+```
+
+**If that command crashes with a stack trace, run it once more.** It sends two
+transactions — a reset to zero, then the real amount — and the second can run
+out of gas because the first changed what it costs. Re-running from a zero
+allowance skips the reset and succeeds. This happened on 2 Sep and re-running
+fixed it. It spends only gas, moves no USDC, and cannot buy anything.
+
+**If it fails twice, stop and message the backend developer.** Do not try a
+different amount.
+
 ### If an asset shows NONE
 
 It will display in the interface with a plain-English reason rather than
@@ -353,7 +393,7 @@ of which depend on today's book.
 These read only and cannot spend anything:
 
 ```bash
-npm test                # 90 tests, no credentials needed
+npm test                # 170 tests, no credentials needed
 npm run market          # what the book offers today, per asset
 npm run db:check        # database connectivity
 npm run reconcile       # database vs chain

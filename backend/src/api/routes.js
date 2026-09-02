@@ -7,7 +7,7 @@
 
 import { buildQuoteSet, QuoteRefusedError } from '../thetanuts/quote.js';
 import { stressLoanById } from '../lending/stress.js';
-import { insertPurchasedTier } from '../db/quotes.js';
+import { insertPurchasedTier, getQuote } from '../db/quotes.js';
 import { insertPendingPosition, listPositionsByUser, listBalances, transitionPosition } from '../db/index.js';
 import { getPosition, listEventsForPositions } from '../db/positions.js';
 import { debitBalance, listBalanceEventsForPositions } from '../db/balances.js';
@@ -15,6 +15,8 @@ import { getDemoUser } from './demoUser.js';
 import { getQuoteSet, rememberQuoteSet, forgetQuoteSet } from './quoteStore.js';
 import { ApiError } from './errors.js';
 import { strikeView, paymentView, sumPayments, executionView, timelineView } from './positionView.js';
+import { buildHoldings, summariseValue, countProtection, nextExpiry } from './portfolioView.js';
+import { getSpotPrices } from '../thetanuts/market.js';
 import { buildMarketContext } from './marketContext.js';
 import { resolveMarket, resolveRange, MARKET_ASSETS, RANGE_KEYS } from '../marketdata/assets.js';
 import { fetchOverview, fetchCandles, fetchDepth } from '../marketdata/providers.js';
@@ -509,6 +511,72 @@ export async function getAssetOrderBook(symbol) {
  * position, so `positions.user_id` is the only record of who a position belongs
  * to (BR-31); getting this check wrong is not recoverable from chain data.
  */
+/**
+ * GET /api/portfolio
+ *
+ * What the user holds and how much of it is protected. Read-only: it prices
+ * nothing for trade and writes nothing.
+ *
+ * ---------------------------------------------------------------------------
+ * THE THREE THINGS THIS ENDPOINT MUST NOT DO
+ * ---------------------------------------------------------------------------
+ *
+ *   1. Present a partial total as complete. `totalValueComplete` and
+ *      `unpricedAssets` travel with every total, always.
+ *   2. Count a pending position as active protection. A debited balance is not
+ *      a filled option; `activeProtectionCount` requires a confirmed event.
+ *   3. Report a call's expiry as when protection ends. `nextExpiry` looks at
+ *      active downside protection and nothing else.
+ *
+ * Each of the three is a way to make the product look better than it is, which
+ * is exactly why they are named rather than left to a reviewer to notice.
+ *
+ * NOT INCLUDED, deliberately: the 7-day change in portfolio value. We have no
+ * price history - only a live feed - so any such figure would be computed from
+ * a number we never recorded. See docs/API-PORTFOLIO.md.
+ */
+export async function getPortfolio() {
+  const user = await getDemoUser();
+
+  const [balances, positions] = await Promise.all([
+    listBalances(user.id),
+    listPositionsByUser(user.id),
+  ]);
+
+  // Only what is actually held, and USDC never needs the feed.
+  const priced = balances
+    .filter((b) => b.asset !== 'USDC' && Number(b.amount) > 0)
+    .map((b) => b.asset);
+
+  // One market-data call, and it does not throw - a dead feed makes the total
+  // incomplete, not absent.
+  const prices = await getSpotPrices(priced);
+
+  const holdings = buildHoldings(balances, prices);
+
+  // verifiedOnChain comes from the event trail, never from tx_hash. One query
+  // for every position rather than one per row.
+  const eventsByPosition = await listEventsForPositions(positions.map((p) => p.id));
+  const verified = (p) => executionView(p, eventsByPosition.get(p.id) ?? []).verifiedOnChain;
+
+  return {
+    ...summariseValue(holdings),
+    ...countProtection(positions, verified),
+
+    // Earliest expiry among ACTIVE downside protection. Null means the user has
+    // no protection running - which the interface renders as that, never as a
+    // blank date.
+    nextExpiry: nextExpiry(positions, verified),
+
+    holdings,
+
+    // BR-50/51: the balances are seeded, not deposited, and the total is
+    // therefore a total of simulated holdings. The positions they relate to are
+    // real. Saying so here means the interface does not have to remember.
+    simulated: true,
+  };
+}
+
 export async function getPositionDetail(positionId) {
   const user = await getDemoUser();
   const position = await getPosition(positionId);
@@ -521,6 +589,18 @@ export async function getPositionDetail(positionId) {
   const events = (await listEventsForPositions([position.id])).get(position.id) ?? [];
   const payments = await listPaymentsForPositions([position.id]);
   const payment = paymentView(payments.get(position.id), position);
+
+  // What the asset was worth when this was bought, from the quote the user was
+  // actually shown - not from today's feed, and not recomputed.
+  //
+  // NULL when there is no quote row, which is not an edge case: the two vault
+  // calls were bought by script and never had one. A recomputed entry price
+  // would look identical to a recorded one and be a different number, so the
+  // absence is reported as an absence.
+  const quote = position.quote_id ? await getQuote(position.quote_id) : null;
+  const entryPriceUsdc = quote?.spot_price === null || quote?.spot_price === undefined
+    ? null
+    : Number(quote.spot_price);
 
   return {
     positionId: position.id,
@@ -537,6 +617,9 @@ export async function getPositionDetail(positionId) {
     txHash: position.tx_hash,
     optionAddress: position.option_address,
     explorerUrl: position.tx_hash ? `https://basescan.org/tx/${position.tx_hash}` : null,
+
+    // Spot at the moment of the quote. Null when no quote row exists.
+    entryPriceUsdc,
 
     ...executionView(position, events),
     ...payment,
