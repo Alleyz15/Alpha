@@ -100,11 +100,34 @@ afterEach(() => {
 describe('ProtectionFlowPage', () => {
   it('rejects unsupported route assets without making a backend call', () => {
     const client = apiClient();
-    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+    render(<ProtectionFlowPage symbol="DOGE" apiClient={client} onExit={vi.fn()} />);
 
     expect(screen.getByText(/cannot configure protection/i)).toBeVisible();
     expect(client.getMarketContext).not.toHaveBeenCalled();
     expect(client.getDemoContext).not.toHaveBeenCalled();
+  });
+
+  it('recognizes prepared assets but does not quote one absent from market-context', async () => {
+    const client = apiClient();
+    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+
+    expect(await screen.findByText(/AVAX protection is not available/i)).toBeVisible();
+    expect(client.getMarketContext).toHaveBeenCalledTimes(1);
+    expect(client.createQuote).not.toHaveBeenCalled();
+  });
+
+  it('configures a prepared asset as soon as market-context offers it', async () => {
+    const context = marketContext();
+    context.assets.push({
+      symbol: 'AVAX', name: 'Avalanche', spotUsdc: 24.12, holdingUnits: 4,
+      protectionAvailable: true, longestProtectionDays: 2, strikesBelowSpot: 6, unavailableReason: null,
+    });
+    const client = apiClient({ getMarketContext: vi.fn().mockResolvedValue(context) });
+
+    render(<ProtectionFlowPage symbol="AVAX" apiClient={client} onExit={vi.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'Buy protection for Avalanche' })).toBeVisible();
+    expect(screen.getByLabelText('Selected asset')).toHaveTextContent('Avalanche');
   });
 
   it('uses the route asset as a read-only selection and renders live backend context', async () => {

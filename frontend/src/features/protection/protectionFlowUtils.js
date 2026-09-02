@@ -1,7 +1,7 @@
-export const SUPPORTED_ASSETS = Object.freeze(['ETH', 'BTC', 'BNB', 'SOL']);
+export const KNOWN_ASSETS = Object.freeze(['ETH', 'BTC', 'BNB', 'SOL', 'AVAX', 'XRP']);
 
-export function isSupportedAsset(symbol) {
-  return SUPPORTED_ASSETS.includes(symbol);
+export function isKnownAsset(symbol) {
+  return KNOWN_ASSETS.includes(symbol);
 }
 
 export function dateInputValue(date) {

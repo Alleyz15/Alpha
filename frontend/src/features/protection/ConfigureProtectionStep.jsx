@@ -1,3 +1,4 @@
+import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ClockIcon, ShieldIcon } from '../../components/Icons.jsx';
 import {
   Alert,
@@ -45,7 +46,7 @@ export default function ConfigureProtectionStep({
       <div className="protection-config-topline">
         <header className="protection-heading">
           <div className="protection-asset-title">
-            <span className="protection-asset-mark" aria-hidden="true">{asset.symbol.slice(0, 1)}</span>
+            <AssetLogo symbol={asset.symbol} name={asset.name} size="large" />
             <div>
               <span className="protection-eyebrow">Alpha protection</span>
               <h1>Buy protection for {asset.name}</h1>

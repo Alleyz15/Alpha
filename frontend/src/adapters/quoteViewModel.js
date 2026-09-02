@@ -82,10 +82,14 @@ export function formatUpdatedAt(iso) {
 }
 
 export function toMarketAssetViewModel(asset, updatedAt) {
+  const holdingLabel = asset.holdingUnits == null || !Number.isFinite(Number(asset.holdingUnits))
+    ? '—'
+    : `${number.format(Number(asset.holdingUnits))} ${asset.symbol}`;
+
   return {
     ...asset,
     priceLabel: formatUsdc(asset.spotUsdc),
-    holdingLabel: `${number.format(asset.holdingUnits)} ${asset.symbol}`,
+    holdingLabel,
     availabilityLabel: asset.protectionAvailable
       ? asset.longestProtectionDays === 0
         ? 'Protection available today only'

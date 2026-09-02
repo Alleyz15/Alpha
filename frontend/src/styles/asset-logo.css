@@ -1,0 +1,29 @@
+.asset-logo {
+  --asset-logo-size: 40px;
+  width: var(--asset-logo-size);
+  height: var(--asset-logo-size);
+  flex: 0 0 var(--asset-logo-size);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-circle);
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.asset-logo--small { --asset-logo-size: 32px; }
+.asset-logo--medium { --asset-logo-size: 40px; }
+.asset-logo--large { --asset-logo-size: 48px; }
+
+.asset-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.asset-logo--fallback {
+  color: var(--signal);
+  font: 700 14px/1 var(--font-display);
+  background: var(--signal-tint);
+}
