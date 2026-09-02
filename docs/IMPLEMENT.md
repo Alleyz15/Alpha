@@ -60,7 +60,7 @@ corrected, the book looks nothing like what the earlier documents describe:
 
 | | Was believed | Actually |
 |---|---|---|
-| Longest tenor | ~26 days | **2.4 days** (vanilla puts) |
+| Longest tenor | ~26 days | **the longest single-leg put on the book** — sweeps ~2 to just under 3 days as expiries roll at 08:00 UTC. The raw book reaches 2 months; those are spreads, which we exclude (BR-52) |
 | Deepest floor | 20%+ | **~6%** |
 | Tradable assets | ETH, BTC | **ETH, BTC, SOL, BNB** (+AVAX partial) |
 
@@ -97,7 +97,7 @@ corrected book.
 | Thetanuts SDK installed | ✅ | `thetanuts-client`, `ethers`, `dotenv` |
 | Connectivity check passing | ✅ | ~320 live orders, prices for 6 assets |
 | Order book structure documented | ✅ | See SETUP.md |
-| Expiries mapped | ✅ | Raw book +1 to +62 days. **Buyable puts stop at ~26 days** (BR-52) — see SETUP.md |
+| Expiries mapped | ✅ | Raw book +1 to +62 days. Single-leg buy-side puts reach ~2–3 days; everything longer is a spread and excluded by our own rule, not the protocol (BR-52) — see SETUP.md |
 | SDK method surface mapped | ✅ | See requirements.md appendix |
 | Requirements written | ✅ | requirements.md |
 | Custodial vs non-custodial decided | ✅ | Custodial; the backend developer operates the wallet |
@@ -306,7 +306,7 @@ Implement as one function. Every item must pass; any failure aborts before broad
 | 6.5 | Public repo README | 🔄 | Audited against code and chain 1 Sep: eight transactions with what each proves, five option contracts, a simulated-vs-real table, and the setup section corrected (a fresh clone runs on mock data by default). **Demo section still to rewrite; video link still a placeholder** |
 | 6.6 | AI tool declaration | 🔄 | Table split per person. One row complete; **three carry a visible TODO** pending answers from the other developers. A blank is a disqualification risk and a guess is worse |
 | 6.7 | Devfolio submission | ⬜ | **Submit 4 Sep, not 5 Sep.** Leave a day of margin |
-| 6.8 | Q&A prep | ⬜ | Stop-loss vs put, odette.fi / collar difference, custody, seller side, why ETH only |
+| 6.8 | Q&A prep | 🔄 |  seeded with two verified answers from the 2 Sep investigation — why four assets, and why the tenor is short. **The rest is being written with the two presenters.** Still to cover: stop-loss vs put, collar difference, custody, seller side |
 
 ---
 

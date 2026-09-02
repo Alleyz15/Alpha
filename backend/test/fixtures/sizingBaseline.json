@@ -1,0 +1,198 @@
+[
+  {
+    "asset": "ETH",
+    "units": 0.15,
+    "order": {
+      "maker": "0xEcda1D002FBC55F2Fd3386bB4B9B95F859f3C39E",
+      "taker": "0x0000000000000000000000000000000000000000",
+      "option": "",
+      "isBuyer": true,
+      "numContracts": "0",
+      "price": "120995000",
+      "expiry": "1788336000",
+      "nonce": "97039362614221731701787320518143666635887749738477981864027732511271549199031",
+      "optionType": 1,
+      "strikes": [
+        "240000000000"
+      ],
+      "strikePrice": "240000000000",
+      "collateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "underlyingToken": "0x4200000000000000000000000000000000000006",
+      "deadline": "1788336000"
+    },
+    "availableAmount": "10000000000",
+    "rawApiData": {
+      "collateral": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "priceFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
+      "implementation": "0x7355EB92dfb0503DB558a70c10843618932ab290",
+      "strikes": [
+        "240000000000"
+      ],
+      "isCall": false,
+      "isLong": false,
+      "orderExpiryTimestamp": 1788326701,
+      "extraOptionData": "0x",
+      "maxCollateralUsable": "10000000000",
+      "optionBookAddress": "0x1bDff855d6811728acaDC00989e79143a2bdfDed",
+      "greeks": {
+        "delta": -0.1024,
+        "iv": 0.3778,
+        "gamma": 0.0113,
+        "theta": -12.9425,
+        "vega": 0.0747
+      }
+    },
+    "expect": {
+      "contractsRaw": "150000",
+      "premiumRaw": "181492",
+      "boundBy": "requested"
+    }
+  },
+  {
+    "asset": "BTC",
+    "units": 0.002,
+    "order": {
+      "maker": "0xEcda1D002FBC55F2Fd3386bB4B9B95F859f3C39E",
+      "taker": "0x0000000000000000000000000000000000000000",
+      "option": "",
+      "isBuyer": true,
+      "numContracts": "0",
+      "price": "13169554926",
+      "expiry": "1788336000",
+      "nonce": "110187750745273054862314276220950910092227951546797700426270510220608903940220",
+      "optionType": 1,
+      "strikes": [
+        "7750000000000"
+      ],
+      "strikePrice": "7750000000000",
+      "collateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "underlyingToken": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c",
+      "deadline": "1788336000"
+    },
+    "availableAmount": "10000000000",
+    "rawApiData": {
+      "collateral": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "priceFeed": "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",
+      "implementation": "0x7355EB92dfb0503DB558a70c10843618932ab290",
+      "strikes": [
+        "7750000000000"
+      ],
+      "isCall": false,
+      "isLong": false,
+      "orderExpiryTimestamp": 1788326701,
+      "extraOptionData": "0x",
+      "maxCollateralUsable": "10000000000",
+      "optionBookAddress": "0x1bDff855d6811728acaDC00989e79143a2bdfDed",
+      "greeks": {
+        "delta": -0.366,
+        "iv": 0.2783,
+        "gamma": 0.001,
+        "theta": -644.2897,
+        "vega": 5.047
+      }
+    },
+    "expect": {
+      "contractsRaw": "2000",
+      "premiumRaw": "263391",
+      "boundBy": "requested"
+    }
+  },
+  {
+    "asset": "SOL",
+    "units": 1,
+    "order": {
+      "maker": "0xEcda1D002FBC55F2Fd3386bB4B9B95F859f3C39E",
+      "taker": "0x0000000000000000000000000000000000000000",
+      "option": "",
+      "isBuyer": true,
+      "numContracts": "0",
+      "price": "76239460",
+      "expiry": "1788336000",
+      "nonce": "27728400141810760688005748717954033444878777144363084596984456823447936091943",
+      "optionType": 1,
+      "strikes": [
+        "10000000000"
+      ],
+      "strikePrice": "10000000000",
+      "collateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "underlyingToken": "0x0000000000000000000000000000000000000000",
+      "deadline": "1788336000"
+    },
+    "availableAmount": "10000000000",
+    "rawApiData": {
+      "collateral": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "priceFeed": "0x975043adBb80fc32276CbF9Bbcfd4A601a12462D",
+      "implementation": "0x7355EB92dfb0503DB558a70c10843618932ab290",
+      "strikes": [
+        "10000000000"
+      ],
+      "isCall": false,
+      "isLong": false,
+      "orderExpiryTimestamp": 1788326702,
+      "extraOptionData": "0x",
+      "maxCollateralUsable": "10000000000",
+      "optionBookAddress": "0x1bDff855d6811728acaDC00989e79143a2bdfDed",
+      "greeks": {
+        "delta": -0.4526,
+        "iv": 1.0038,
+        "gamma": 0.2279,
+        "theta": -3.1583,
+        "vega": 0.0069
+      }
+    },
+    "expect": {
+      "contractsRaw": "1000000",
+      "premiumRaw": "762394",
+      "boundBy": "requested"
+    }
+  },
+  {
+    "asset": "BNB",
+    "units": 0.2,
+    "order": {
+      "maker": "0xEcda1D002FBC55F2Fd3386bB4B9B95F859f3C39E",
+      "taker": "0x0000000000000000000000000000000000000000",
+      "option": "",
+      "isBuyer": true,
+      "numContracts": "0",
+      "price": "2900000000",
+      "expiry": "1788336000",
+      "nonce": "12610522867746723525015330446193635524595335921969706080627492453717763530289",
+      "optionType": 1,
+      "strikes": [
+        "67500000000"
+      ],
+      "strikePrice": "67500000000",
+      "collateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "underlyingToken": "0x0000000000000000000000000000000000000000",
+      "deadline": "1788336000"
+    },
+    "availableAmount": "10000000000",
+    "rawApiData": {
+      "collateral": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "priceFeed": "0x4b7836916781CAAfbb7Bd1E5FDd20ED544B453b1",
+      "implementation": "0x7355EB92dfb0503DB558a70c10843618932ab290",
+      "strikes": [
+        "67500000000"
+      ],
+      "isCall": false,
+      "isLong": false,
+      "orderExpiryTimestamp": 1788326702,
+      "extraOptionData": "0x",
+      "maxCollateralUsable": "10000000000",
+      "optionBookAddress": "0x1bDff855d6811728acaDC00989e79143a2bdfDed",
+      "greeks": {
+        "delta": -0.185,
+        "iv": 1.3224,
+        "gamma": 0.017,
+        "theta": -19.277,
+        "vega": 0.0318
+      }
+    },
+    "expect": {
+      "contractsRaw": "172413",
+      "premiumRaw": "4999977",
+      "boundBy": "premiumCap"
+    }
+  }
+]
