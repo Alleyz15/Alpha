@@ -50,17 +50,25 @@ premium. The indexer agrees: `"side": "buyer"`, `"buyer": 0x4fB77837…`,
 
 ---
 
-## 3. Settlement — TO BE FILLED IN 2 Sep 2026, after 16:00 MYT
+## 3. Settlement — done, 2 and 3 Sep 2026
 
-The position above expires **2026-09-02 08:00 UTC = 16:00 Malaysia time**.
+**This section is complete. The results are in [section 8](#8-maturity--the-deposit-returned-whole-3-sep-2026),
+which records both afternoons together with the maturity transfer they led to.**
 
-Run the sweep that afternoon (or have the daemon running):
+Summary, so this section stands alone:
 
-```
-cd backend && node --env-file-if-exists=../.env scripts/settle.js --confirm
-```
+| When | Positions | Settlement price | Outcome |
+|---|---|---|---|
+| 2 Sep | `ccdcbf28` | $2,421.92256872 | `expired_worthless`, payout 0 |
+| 3 Sep | four | $2,403.45858228 | `expired_worthless`, payout 0 |
 
-Then record here, and do not edit afterwards:
+All five read the price from `getTWAP` and all five matched their recorded
+contract counts. **Every payout was zero, and every one of them was correct** —
+ETH finished above both put strikes and below both call strikes. See section 8
+for why a zero is the promise working rather than a failure.
+
+The original checklist for this section is kept below, because what it asked for
+is what section 8 records:
 
 - final status — `settled` or `expired_worthless`
 - settlement price the protocol used, and which source reported it
@@ -68,7 +76,7 @@ Then record here, and do not edit afterwards:
 - the full event trail: created → broadcast → confirmed → settled
 - the option contract's state on BaseScan
 
-**Why this matters more than the purchase.** A position that completed the whole
+**Why this mattered more than the purchase.** A position that completed the whole
 lifecycle — bought on-chain, held to expiry, settled by the protocol, recorded in
 our database — is the strongest artefact this project will produce. It answers
 "does it work" with a chain of evidence rather than a claim. It exists for exactly
@@ -416,3 +424,145 @@ What it cannot do is pay its modelled principal. Both rows sit at `active`
 because the schema has no `superseded` status yet — that arrives with the
 maturity work. **The row stays.** Deleting the record of a real on-chain purchase
 to tidy a demo would be exactly the kind of gap the database exists to prevent.
+
+---
+
+## 8. Maturity — the deposit returned whole, 3 Sep 2026
+
+**Transaction:** [`0x72cb94ba…`](https://basescan.org/tx/0x72cb94ba1260e0dab6576f05ef2bf0de672cbc2da4e0d597c5c8df16aa4ab6c5)
+
+```
+status       1 (success)
+block        50819046, 2026-09-03T09:23:59Z
+from         0x4fB77837bf2A0B86D167627Ded2E894f92F15127   operator wallet
+to           0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913   USDC
+Transfer     operator -> 0xc169c7c0…   3.000000 USDC
+gasUsed      45047 of 54512
+```
+
+Balances at the block boundary, read from chain rather than from the script's
+own report:
+
+| | block 50819045 | block 50819046 | delta |
+|---|---|---|---|
+| operator | 9.257193 | 6.257193 | **−3.000000** |
+| recipient | 0.000380 | 3.000380 | **+3.000000** |
+
+**Principal returned: 3 USDC. Payout: 0. Total: 3 USDC — every cent.**
+
+---
+
+### A zero payout is the expected outcome
+
+This is the sentence the whole section exists for, and it is the one the
+maturity script printed before sending anything:
+
+> **A zero payout is the EXPECTED outcome.** The call was bought above spot; if
+> the price finished below it, it expires unused and the depositor still gets
+> every cent of principal back. That is the promise working, not a failure.
+
+The vault promise is *principal protection with upside participation*. Those are
+two different things and only one of them is guaranteed. The deposit buys a call
+above the current price with the yield; if the price rises through the strike the
+call pays and the depositor shares the gain, and if it does not, the call expires
+and costs nothing beyond the yield that bought it. **The principal was never at
+risk in either branch.**
+
+ETH settled at **$2,403.46**. The backing call was struck at **$2,680**. So:
+
+```
+settlement $2,403.46  <  strike $2,680   ->  call expires unused, payout 0
+principal returned in full                ->  3.000000 USDC
+```
+
+Nothing failed. The insurance was not claimed on.
+
+**This is the outcome most likely to be misread by a judge**, which is why it is
+written down rather than left to the demo to explain. "Expired worthless" is
+options vocabulary for "you did not need it", and a screen that shows a zero
+without that sentence looks like a product that lost money. US-7 exists for this
+exact reason, and so does BR-3.
+
+---
+
+### The four positions that settled the same afternoon
+
+All four read the settled price from `getTWAP`, all four matched their recorded
+contract counts, and all four came back **`expired_worthless` at $2,403.45858228**:
+
+| Position | Type | Strike | Contracts | Outcome |
+|---|---|---|---|---|
+| `2ebf82f8` | call | $2,680 | 0.000284 | expired unused — the vault call above |
+| `7a7d1153` | call | $2,660 | 0.009347 | expired unused |
+| `48104f22` | put | $2,340 | 0.019409 | protection not needed |
+| `efa8d071` | put | $2,300 | 0.001999 | protection not needed |
+
+**Both directions expired worthless, and both are correct.** ETH finished at
+$2,403.46 — *below* both call strikes and *above* both put strikes. The calls
+found no upside to share; the puts found no floor to defend. One settlement
+price, four positions, four different reasons for the same status.
+
+That symmetry is worth pointing at in the pitch: the puts and the calls are the
+same instrument read in opposite directions, and the product never says either
+word to the user.
+
+`ccdcbf28` settled the previous afternoon at **$2,421.92256872**, also
+`expired_worthless`. Five positions have now completed the full lifecycle.
+
+---
+
+### Three products, three complete lifecycles
+
+Nine transactions, all on Base mainnet, all verifiable by anyone with the hashes
+in this file.
+
+| Product | Lifecycle | Status |
+|---|---|---|
+| **Protection** | bought → held to expiry → settled by the protocol → recorded | complete |
+| **Lending** | put bought → funds disbursed → loan repaid | complete |
+| **Vault** | deposited → call bought → expired → principal returned whole | complete |
+
+Section 3 asked for exactly this and said why:
+
+> A position that completed the whole lifecycle is the strongest artefact this
+> project will produce. It answers "does it work" with a chain of evidence
+> rather than a claim.
+
+It now exists three times, and the last of the three is the one that had to move
+real money back out again to be true.
+
+---
+
+### What is real and what is not
+
+**Real:** the transfer, the amount, the recipient, the settlement price, every
+contract count, and the fact that the call expired unused.
+
+**Not real:** the depositor. `0xc169c7c0…` is a second wallet the team controls,
+not a user — there is no deposit path, so there was no external depositor to pay.
+The maturity transfer is a genuine on-chain movement of USDC to an address that
+is not ours to spend from, which is the closest honest analogue available. It is
+recorded here as that and not as a customer withdrawal.
+
+**Also not real:** the simulated yield that bought the call (BR-37). The
+*participation* was real — it came from a premium actually paid for an option
+actually held — but the yield that funded it was modelled, and the interface says
+so.
+
+---
+
+### One thing the script got wrong, and it did not matter
+
+The closing balance line printed `9.257193 (was 9.257193)` and gas as
+`0.00000000`, after 3 USDC had left the wallet. The true post-transaction balance
+is 6.257193, confirmed above at the block boundary.
+
+The read is one block stale — the same defect this project has now hit **six
+times, in every script that prints a closing balance**. It is recorded in
+SETUP.md as a property of the shape of the code rather than as six separate
+oversights.
+
+**Nothing depended on that line.** The transfer had already succeeded, the hash
+was already printed, and the figure it got wrong was cosmetic. It is written here
+anyway, because a report that only records the parts that went well is not
+evidence.

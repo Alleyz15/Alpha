@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Nineteen instances now, one family.** The shape:
+**Twenty instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -646,6 +646,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 |---|---|---|
 | `ensureExactAllowance` | `0.000000 -> 0.000000` | the approval had succeeded |
 | disbursement closing balance | `9.371552 (was 9.371552)` | 4.5977 USDC had left |
+| maturity closing balance | `9.257193 (was 9.257193)`, gas `0.00000000` | 3 USDC had left; the true balance was 6.257193 |
 | post-fill contract read | recorded 2000 contracts | the chain said 1999 |
 | `reconcile` settled-state check | printed `ok` | the RPC read had failed |
 | `api:check` cleanup | `test rows removed` | an FK blocked every delete |
@@ -668,6 +669,58 @@ The `api:check` pair were the same bug: twelve `await db.from(...).delete()` cal
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+#### The stale closing balance is the shape of the code, not six oversights
+
+Six times now, a script has printed a closing balance identical to its opening
+one immediately after moving money:
+
+```
+disbursement   9.371552 (was 9.371552)    4.5977 USDC had left
+maturity       9.257193 (was 9.257193)    3 USDC had left; true balance 6.257193
+                     gas 0.00000000       gas was spent
+```
+
+Each was fixed where it was found. It kept coming back, which is the tell: this
+is not six people forgetting the same thing, it is **one shape of code written
+six times**.
+
+The shape is always the same three lines:
+
+```js
+const before = await readBalance();
+const receipt = await sendTransaction();      // awaited, mined, status 1
+const after   = await readBalance();          // <- serves a PRE-transaction block
+```
+
+`await tx.wait()` resolves when the transaction is *mined*. It does not promise
+that the next `eth_call` will be routed to a node that has caught up to that
+block — RPC providers are load-balanced across nodes at slightly different
+heights, so a read issued microseconds later can legitimately answer from the
+block before. Nothing is broken; the read is simply asking a node that has not
+seen it yet.
+
+> **A read issued after a write is not a read of the state that write produced.**
+> Confirmation tells you a transaction was mined, not that the next node you
+> talk to knows about it.
+
+The correct fix already exists in this repository twice - `pollAllowanceUntil()`
+and `confirmRead.js` both re-read until the value *changes*, rather than reading
+once and trusting it. The reason the defect persists is that neither is reached
+for by default: writing the three lines above is the obvious thing to do, and it
+is wrong in a way that only shows up in a printed figure nobody acts on.
+
+**What would actually close it:** route every post-transaction balance read
+through `confirmRead.js`, so the wrong version is the harder one to write. That
+is a change to money-path scripts and it was NOT made before the freeze - six
+instances of a cosmetic misprint do not justify touching working transfer code
+the day of a deadline. It is written down here instead, which is the honest
+trade: the defect is understood, bounded, and known to affect only display.
+
+**Every instance so far has been cosmetic.** No transfer, refund or settlement
+has ever been decided by one of these reads - the transaction hash and the
+receipt status are what the scripts act on. If one ever gates a decision, this
+stops being a display bug.
 
 #### Degrading gracefully means degrading quietly
 
