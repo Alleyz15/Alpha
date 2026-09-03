@@ -39,6 +39,43 @@ const usdc = (raw) => Number(raw) / Number(USDC_SCALE);
 const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
 
 /**
+ * The ERC-20 Transfer events in a receipt, for one token.
+ *
+ * ---------------------------------------------------------------------------
+ * A RECEIPT'S `to` AND `value` SAY NOTHING ABOUT AN ERC-20 TRANSFER.
+ * ---------------------------------------------------------------------------
+ *
+ * `value` is the ETH sent, which for a token transfer is zero. `to` is the
+ * TOKEN CONTRACT, not the recipient. A check written against those two fields
+ * accepts any transaction sent to USDC - one that transferred nothing, one that
+ * transferred to somebody else, one that failed for a reason the status alone
+ * would catch but the amount would not.
+ *
+ * The truth is in the logs. `from` and `to` are indexed, so they arrive as
+ * topics 1 and 2, left-padded to 32 bytes; the amount is the unindexed data
+ * word. This function decodes exactly that and nothing else.
+ *
+ * Note that it takes LOGS, not a receipt. There is deliberately no way to pass
+ * it a transaction's own `to` and `value`, because there is no correct use for
+ * them here.
+ *
+ * @param {Array<{address:string, topics:string[], data:string}>} logs
+ * @param {string} token - the token contract whose transfers count
+ * @returns {Array<{from:string, to:string, value:bigint}>} lowercased addresses
+ */
+export function usdcTransfersIn(logs, token) {
+  const want = String(token).toLowerCase();
+
+  return (logs ?? [])
+    .filter((l) => String(l.address).toLowerCase() === want && l.topics?.[0] === TRANSFER_TOPIC)
+    .map((l) => ({
+      from: ethers.getAddress('0x' + l.topics[1].slice(26)).toLowerCase(),
+      to: ethers.getAddress('0x' + l.topics[2].slice(26)).toLowerCase(),
+      value: BigInt(l.data),
+    }));
+}
+
+/**
  * What a loan owes, from its STORED terms.
  *
  * Principal, rate and due date all come off the row, never from the
@@ -207,13 +244,7 @@ export async function confirmRepayment(loanId, txHash, { minConfirmations = 2 } 
   // The transfer is read from the logs, not from the transaction's `to` and
   // `value`. An ERC-20 transfer moves nothing in `value`, and the recipient is
   // an argument, not the transaction target.
-  const transfers = (receipt.logs ?? [])
-    .filter((l) => l.address.toLowerCase() === token && l.topics[0] === TRANSFER_TOPIC)
-    .map((l) => ({
-      from: ethers.getAddress('0x' + l.topics[1].slice(26)).toLowerCase(),
-      to: ethers.getAddress('0x' + l.topics[2].slice(26)).toLowerCase(),
-      value: BigInt(l.data),
-    }));
+  const transfers = usdcTransfersIn(receipt.logs, token);
 
   item('carries a USDC transfer', transfers.length > 0,
     `${transfers.length} USDC Transfer log(s)`);

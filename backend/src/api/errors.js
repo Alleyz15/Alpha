@@ -20,6 +20,14 @@ const STATUS_BY_CODE = {
   // temporary by nature and the interface should say "unavailable, try again"
   // rather than "something is broken".
   MARKET_DATA_UNAVAILABLE: 503,
+  // A repayment transaction was supplied and did not hold up. 400 rather than
+  // 422: the caller can fix it by sending the right transaction, and the
+  // response carries the checklist so they can see which check failed.
+  REPAYMENT_UNVERIFIED: 400,
+  // The action is not available in the resource's current state - a loan that
+  // is already repaid, a vault already matured. 409, because nothing about the
+  // request is malformed; it simply arrived too late.
+  CONFLICT: 409,
   INVALID_REQUEST: 400,
   UPSTREAM_ERROR: 502,
 };

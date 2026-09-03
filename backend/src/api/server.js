@@ -11,6 +11,9 @@ import {
   getAssetsOverview, getAssetCandles, getAssetOrderBook,
   getPositionDetail, getPortfolio,
 } from './routes.js';
+import {
+  getLoans, getLoanDetail, postRepaymentRequest, postRepay,
+} from './loanRoutes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
 // the machine call this API, and the demo runs on a laptop that is also
@@ -68,6 +71,7 @@ const routes = [
   { method: 'GET', path: '/api/positions', handler: () => getPositions() },
   { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
   { method: 'GET', path: '/api/portfolio', handler: () => getPortfolio() },
+  { method: 'GET', path: '/api/loans', handler: () => getLoans() },
 
   // Coin Detail market data. DISPLAY ONLY - CoinGecko and Binance, read-only,
   // and nothing they return prices a trade. This literal sits ABOVE the
@@ -76,9 +80,30 @@ const routes = [
   { method: 'GET', path: '/api/assets/overview', handler: () => getAssetsOverview() },
 
   // Routes with a path parameter carry a pattern instead of a literal path.
-  // Kept as regexes rather than pulling in a router: there are eight endpoints,
-  // and a dependency to match three of them is not a trade worth making two
-  // days before a freeze.
+  // Kept as regexes rather than pulling in a router: a dependency to match a
+  // handful of them is not a trade worth making days before a freeze.
+  {
+    pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/repayment-request$'),
+    path: '/api/loans/:loanId/repayment-request',
+    method: 'POST',
+    handler: (_body, { params }) => postRepaymentRequest(params[0]),
+  },
+  {
+    // POST, because it writes: the expected repayment is fixed on the row here.
+    pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/repay$'),
+    path: '/api/loans/:loanId/repay',
+    method: 'POST',
+    handler: (body, { params }) => postRepay(params[0], body),
+  },
+  {
+    // The id pattern is anchored with $, so it cannot swallow /repay or
+    // /repayment-request whatever the order - unlike the /api/assets literals
+    // above, which genuinely depend on being listed first.
+    pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})$'),
+    path: '/api/loans/:loanId',
+    method: 'GET',
+    handler: (_body, { params }) => getLoanDetail(params[0]),
+  },
   {
     method: 'GET',
     pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/stress$'),
