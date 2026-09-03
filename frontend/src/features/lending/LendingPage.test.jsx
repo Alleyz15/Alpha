@@ -20,10 +20,15 @@ const offer = {
   annualRatePct: 5,
   termDays: 0.8,
   dueAt: '2026-09-04T08:00:00Z',
-  borrowableNowUsdc: 55.686223,
+  // boundBy 'credit_limit' means the protection is the ceiling, so the
+  // borrowable figure IS the limit. The two disagreeing would be impossible.
+  borrowableNowUsdc: 257.237755,
   boundBy: 'credit_limit',
   walletUsdc: 300,
   walletShortfallUsdc: null,
+  // Server-side constant. The client never sends it, but it is shown before
+  // borrowing because it is the address repayment must come FROM.
+  recipientAddress: '0xc169c7c000cAA28807Ab2585D707C7A6457d718E',
   checks: [],
   sent: false,
 };
@@ -352,5 +357,79 @@ describe('LendingPage', () => {
 
     const cell = screen.getByText('On chain').closest('table').querySelectorAll('tbody td')[4];
     expect(cell.textContent).toBe('—');
+  });
+
+  // ---------------------------------------------------------------------
+  // What the borrow form promises.
+  // ---------------------------------------------------------------------
+
+  const walletBound = {
+    ...offer,
+    boundBy: 'wallet',
+    walletUsdc: 55.686223,
+    borrowableNowUsdc: 55.686223,
+    walletShortfallUsdc: 201.551532,
+  };
+
+  async function openBorrowForm(client) {
+    const user = userEvent.setup();
+    renderLending(client);
+    await user.click(await screen.findByRole('button', { name: 'Use as collateral' }));
+    return user;
+  }
+
+  it('caps the amount at what can be funded today, not at the credit limit', async () => {
+    // The alert above the field already says we can only fund 55.69 of a
+    // 257.24 limit. A field offering 257.24 contradicts it and hands the user
+    // an amount that fails on submit.
+    await openBorrowForm(apiClient({ getLoanOffer: vi.fn().mockResolvedValue(walletBound) }));
+
+    const input = await screen.findByLabelText(/Amount to borrow/);
+    expect(input).toHaveAttribute('max', '55.686223');
+    // Both numbers are present, and it is clear which one is today's.
+    expect(screen.getByText(/Up to \$55\.69 USDC today/)).toBeVisible();
+    expect(screen.getByText(/your limit is \$257\.24 USDC/)).toBeVisible();
+  });
+
+  it('shows one figure when the protection, not our float, is the ceiling', async () => {
+    await openBorrowForm(apiClient());
+
+    const input = await screen.findByLabelText(/Amount to borrow/);
+    expect(input).toHaveAttribute('max', '257.237755');
+    expect(screen.getByText('Up to $257.24 USDC')).toBeVisible();
+    expect(screen.queryByText(/today/)).toBeNull();
+  });
+
+  it('names the payout address, and never calls it the wallet of the borrower', async () => {
+    // Disbursement goes to a wallet the team controls. Calling it "you" cost a
+    // real repayment: it was sent back from the wrong address and refused.
+    await openBorrowForm(apiClient());
+
+    expect(await screen.findByText(offer.recipientAddress)).toBeVisible();
+    expect(screen.getByText(/held by the Alpha team, not by you/)).toBeVisible();
+    expect(screen.getByText(/from that same/)).toBeVisible();
+    expect(screen.queryByText(/operator wallet to you/)).toBeNull();
+    expect(screen.queryByText(/your wallet/i)).toBeNull();
+  });
+
+  it('shows nothing owed on a repaid loan', async () => {
+    // repaymentExpectedUsdc survives repayment as a record of what was quoted.
+    // Reading it after settlement left a closed loan still asking for money.
+    const repaid = { ...activeLoan, status: 'repaid', repaymentExpectedUsdc: 4.599411 };
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [repaid] }) }));
+
+    const row = (await screen.findByText('Repaid')).closest('tr');
+    // Zero, not a dash: what is owed is known exactly, and it is nothing.
+    expect(within(row).getByText('$0.00 USDC')).toBeVisible();
+    expect(within(row).queryByText('$4.60 USDC')).toBeNull();
+  });
+
+  it('keeps showing the amount owed while a repayment is still unverified', async () => {
+    // `repaying` is not settled - the transfer has been quoted, not verified.
+    const repaying = { ...activeLoan, status: 'repaying', repaymentExpectedUsdc: 4.599411 };
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [repaying] }) }));
+
+    const row = (await screen.findByText('Repaying')).closest('tr');
+    expect(within(row).getByText('$4.60 USDC')).toBeVisible();
   });
 });

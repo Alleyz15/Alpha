@@ -97,11 +97,19 @@ function OfferAndBorrow({ lending }) {
 
       {hint && <Alert tone="info" title="Our operator float is the limit today">{hint}</Alert>}
 
-      <FormField label="Amount to borrow (USDC)" hint={`Up to ${formatUsdc(offer.creditLimitUsdc) ?? '—'}`}>
+      {/*
+        Bounded by what can actually be sent today, not by the credit limit.
+        The limit is a fact about the collateral; the float is a fact about our
+        wallet, and it is the smaller of the two that a request has to clear.
+        Offering the limit as the ceiling invited an amount that fails on
+        submit - the alert directly above already said so, and the field
+        contradicted it.
+      */}
+      <FormField label="Amount to borrow (USDC)" hint={borrowableHintText(offer)}>
         <input
           type="number"
           min="0.000001"
-          max={offer.creditLimitUsdc}
+          max={borrowableCeiling(offer)}
           step="any"
           inputMode="decimal"
           placeholder="0.00"
@@ -140,7 +148,26 @@ function OfferAndBorrow({ lending }) {
           >
             Borrow {principalInput || '0'} USDC <ArrowIcon />
           </Button>
-          <small>This sends real USDC from Alpha's operator wallet to you, right now.</small>
+          {/*
+            Not "to you". The disbursement goes to payoutRecipient() - a second
+            wallet the team controls - and recipient.js says in as many words
+            that the interface must not call it "your wallet". There is no
+            wallet connection in this product, so there is no address of the
+            user's to pay.
+
+            Saying "to you" cost a real repayment: the borrower sent the money
+            back from the operator wallet instead of from this address, and the
+            transfer was refused for having the wrong sender. The address is
+            shown here, before borrowing, because it is the address repayment
+            must later come FROM.
+          */}
+          <small className="lending-spend-note">
+            This sends real USDC now, to Alpha's payout address{' '}
+            <MonoValue>{offer.recipientAddress ?? '—'}</MonoValue>. That address is
+            held by the Alpha team, not by you — Alpha holds the funds throughout.
+            When you repay, the transfer has to be sent back <strong>from that same
+            address</strong>; one sent from anywhere else is refused.
+          </small>
         </div>
       )}
     </>
@@ -285,6 +312,33 @@ function OnChainLinks({ disbursementUrl, repaymentUrl }) {
       )}
     </div>
   );
+}
+
+/**
+ * The most that can be borrowed right now.
+ *
+ * `borrowableNowUsdc` is already the smaller of the credit limit and our
+ * float. Falling back to the credit limit keeps an older response shape
+ * working, and cannot raise the ceiling above what the backend would allow -
+ * it only loses the float cap, which the backend still enforces.
+ */
+function borrowableCeiling(offer) {
+  return Number.isFinite(offer?.borrowableNowUsdc)
+    ? offer.borrowableNowUsdc
+    : offer?.creditLimitUsdc;
+}
+
+/**
+ * Both figures when they differ, one when they do not.
+ *
+ * Showing only the limit promises money we cannot send today; showing only
+ * today's ceiling makes the protection look smaller than it is. `boundBy`
+ * already distinguishes the two - see borrowableHint.
+ */
+function borrowableHintText(offer) {
+  const ceiling = formatUsdc(borrowableCeiling(offer)) ?? '—';
+  if (offer?.boundBy !== 'wallet') return `Up to ${ceiling}`;
+  return `Up to ${ceiling} today · your limit is ${formatUsdc(offer.creditLimitUsdc) ?? '—'}`;
 }
 
 function LoansList({ lending, rows }) {

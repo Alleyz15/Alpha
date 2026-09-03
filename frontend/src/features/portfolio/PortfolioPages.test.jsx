@@ -523,3 +523,60 @@ describe('Lending entry card', () => {
     expect(await screen.findByText(/Loan figures could not be loaded/)).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// The USDC balance on the portfolio.
+// ---------------------------------------------------------------------------
+//
+// The balance existed only as a hint inside the vault deposit form, so the
+// answer to "have I got anything to deposit?" sat behind the button that asks
+// you to deposit. It is now a stat card, reading the same holdings the vault
+// section reads - one request, one number, no chance of the two disagreeing.
+
+describe('USDC available card', () => {
+  it('shows the USDC holding from the portfolio, with its logo', async () => {
+    const apiClient = vaultApiClient();
+    renderPortfolio(apiClient);
+
+    const label = await screen.findByText('USDC available');
+    const card = label.closest('.portfolio-stat-card');
+
+    // The fixture holds 100 USDC.
+    expect(within(card).getByText(/\$100\.00 USDC/)).toBeVisible();
+
+    // A real image, not AssetLogo's initial-letter fallback.
+    const logo = within(card).getByRole('img', { name: 'USD Coin' });
+    expect(logo.tagName).toBe('IMG');
+    expect(logo).toHaveAttribute('src', '/assets/coins/usdc.svg');
+
+    // No extra request: the portfolio call already carries it.
+    expect(apiClient.getPortfolio).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what the balance is for, and that it is simulated', async () => {
+    // "Available" rather than "balance": this card answers a different
+    // question from Portfolio value above it - what can I move, not what do I
+    // own - which is also why the two figures overlapping is not confusing.
+    renderPortfolio(vaultApiClient());
+
+    const card = (await screen.findByText('USDC available')).closest('.portfolio-stat-card');
+    expect(within(card).getByText(/Ready to deposit into the vault/)).toBeVisible();
+    expect(within(card).getByText(/simulated balance/)).toBeVisible();
+  });
+
+  it('shows a dash rather than zero when there is no USDC holding', async () => {
+    // Zero is a real balance and would read as "you have nothing". A missing
+    // holding is not the same fact, and must not be rendered as one.
+    const apiClient = vaultApiClient({
+      getPortfolio: vi.fn().mockResolvedValue({
+        ...portfolio,
+        holdings: portfolio.holdings.filter((h) => h.asset !== 'USDC'),
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const card = (await screen.findByText('USDC available')).closest('.portfolio-stat-card');
+    expect(within(card).getByText('—')).toBeVisible();
+    expect(within(card).queryByText(/\$0\.00 USDC/)).toBeNull();
+  });
+});

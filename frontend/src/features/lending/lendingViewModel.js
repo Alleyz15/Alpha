@@ -31,11 +31,24 @@ export function buildCollateralRows(positions = []) {
 }
 
 /**
+ * Statuses where the debt is settled and nothing more is owed. `repaying` is
+ * NOT one of them: the transfer has been quoted but not yet verified, and the
+ * borrower still owes the full amount until it is.
+ */
+const CLOSED_STATUSES = new Set(['repaid']);
+
+/**
  * repaymentExpectedUsdc is the figure FIXED when repayment was requested and
  * does not move afterwards; owed.totalUsdc keeps accruing until then. Once
  * set, the fixed figure is what must be shown - see API-LENDING.md.
  */
 export function owedNowUsdc(loan) {
+  // A closed loan owes nothing, and that is a fact rather than a gap. The
+  // stored `repaymentExpectedUsdc` survives repayment - it is the figure the
+  // borrower was quoted, kept as a record - so reading it after settlement
+  // shows a repaid loan still asking for money.
+  if (CLOSED_STATUSES.has(loan?.status)) return 0;
+
   if (loan?.repaymentExpectedUsdc !== null && loan?.repaymentExpectedUsdc !== undefined) {
     return loan.repaymentExpectedUsdc;
   }
@@ -52,6 +65,8 @@ export function buildLoanRows(loans = []) {
       statusTone: status.tone,
       statusLabel: status.label,
       dueLabel: formatDate(loan.dueAt),
+      // Zero, not a dash. A dash reads as "we do not know"; the amount owed on
+      // a repaid loan is known exactly, and it is nothing.
       owedLabel: owed === null ? '—' : (formatUsdc(owed) ?? '—'),
     };
   });
