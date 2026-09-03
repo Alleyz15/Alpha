@@ -2,7 +2,7 @@ import { Fragment, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorCode, liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
-import { ArrowIcon } from '../../components/Icons.jsx';
+import { ArrowIcon, ExternalIcon } from '../../components/Icons.jsx';
 import { Alert, AsyncState, Button, Card, FormField, MonoValue, StatusBadge } from '../../components/ui/index.js';
 import useLendingData from './useLendingData.js';
 import {
@@ -244,6 +244,49 @@ function RepaymentFlow({ loanId, flow, onSetTxHash, onConfirm, onRetryStart }) {
   );
 }
 
+/**
+ * The on-chain evidence for one loan.
+ *
+ * Two different transactions: the money going out and the money coming back.
+ * They are labelled by which one they are rather than both reading "View on
+ * BaseScan", because two identically named links side by side say nothing
+ * about where either of them goes.
+ *
+ * A url is null until that transaction exists - a loan mid-disbursement has no
+ * hash yet. Nothing is rendered for a missing one, and a loan with neither
+ * shows a dash: an empty cell cannot be told apart from a broken one.
+ */
+function OnChainLinks({ disbursementUrl, repaymentUrl }) {
+  if (!disbursementUrl && !repaymentUrl) return <span aria-hidden="true">—</span>;
+
+  return (
+    <div className="lending-onchain-links">
+      {disbursementUrl && (
+        <a
+          className="pd-explorer-link"
+          href={disbursementUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="View the borrowing transaction on BaseScan"
+        >
+          Borrowed <ExternalIcon size={13} />
+        </a>
+      )}
+      {repaymentUrl && (
+        <a
+          className="pd-explorer-link"
+          href={repaymentUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="View the repayment transaction on BaseScan"
+        >
+          Repaid <ExternalIcon size={13} />
+        </a>
+      )}
+    </div>
+  );
+}
+
 function LoansList({ lending, rows }) {
   if (lending.loansState === 'loading') return <AsyncState state="loading" loadingLabel="Loading your loans…" />;
   if (lending.loansState === 'error') {
@@ -264,7 +307,7 @@ function LoansList({ lending, rows }) {
     <div className="portfolio-table-scroll">
       <table className="portfolio-table">
         <thead>
-          <tr><th>Principal</th><th>Status</th><th>Due date</th><th>Amount owed</th><th><span className="sr-only">Action</span></th></tr>
+          <tr><th>Principal</th><th>Status</th><th>Due date</th><th>Amount owed</th><th>On chain</th><th><span className="sr-only">Action</span></th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
@@ -274,6 +317,12 @@ function LoansList({ lending, rows }) {
                 <td><StatusBadge tone={row.statusTone}>{row.statusLabel}</StatusBadge></td>
                 <td>{row.dueLabel}</td>
                 <td className="numeric">{row.owedLabel}</td>
+                <td>
+                  <OnChainLinks
+                    disbursementUrl={row.disbursementUrl}
+                    repaymentUrl={row.repaymentUrl}
+                  />
+                </td>
                 <td className="portfolio-action-cell">
                   {/*
                     `repaying` gets a button too, not just `active`.
@@ -300,7 +349,8 @@ function LoansList({ lending, rows }) {
               </tr>
               {lending.repayFlows[row.loanId] && (
                 <tr>
-                  <td colSpan={5}>
+                  {/* Spans every column, including the new On chain one. */}
+                  <td colSpan={6}>
                     <RepaymentFlow
                       loanId={row.loanId}
                       flow={lending.repayFlows[row.loanId]}

@@ -297,4 +297,60 @@ describe('LendingPage', () => {
     expect(postRepaymentRequest).toHaveBeenCalledTimes(2);
     expect(await screen.findByText('Send exactly')).toBeVisible();
   });
+
+  // ---------------------------------------------------------------------
+  // On-chain evidence in the loan list.
+  // ---------------------------------------------------------------------
+  //
+  // Disbursement and repayment are two separate transactions. Showing the
+  // status alone asks the reader to take our word for it; the links let them
+  // check both halves on BaseScan.
+
+  it('links the disbursement and the repayment separately', async () => {
+    const repaid = {
+      ...activeLoan,
+      status: 'repaid',
+      repaymentExpectedUsdc: 5.000547,
+      repaymentTx: '0xecdc6816',
+      repaymentUrl: 'https://basescan.org/tx/0xecdc6816',
+    };
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [repaid] }) }));
+
+    const borrowed = await screen.findByRole('link', { name: 'View the borrowing transaction on BaseScan' });
+    const repaidLink = screen.getByRole('link', { name: 'View the repayment transaction on BaseScan' });
+
+    // Two different transactions, so two different destinations.
+    expect(borrowed).toHaveAttribute('href', 'https://basescan.org/tx/0xabc');
+    expect(repaidLink).toHaveAttribute('href', 'https://basescan.org/tx/0xecdc6816');
+    expect(borrowed.getAttribute('href')).not.toBe(repaidLink.getAttribute('href'));
+
+    expect(borrowed).toHaveTextContent('Borrowed');
+    expect(repaidLink).toHaveTextContent('Repaid');
+    // Opening BaseScan must not navigate the app away from the loan list.
+    expect(borrowed).toHaveAttribute('target', '_blank');
+    expect(borrowed).toHaveAttribute('rel', 'noreferrer');
+  });
+
+  it('shows only the disbursement link while there is no repayment yet', async () => {
+    // activeLoan has repaymentUrl: null. A link to a transaction that does not
+    // exist is worse than no link - it reads as a claim that it happened.
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [activeLoan] }) }));
+
+    expect(await screen.findByRole('link', { name: 'View the borrowing transaction on BaseScan' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'View the repayment transaction on BaseScan' })).toBeNull();
+  });
+
+  it('shows a dash, not an empty cell, when a loan has no transaction yet', async () => {
+    // A row written before the transfer is broadcast (BR-14) carries neither
+    // hash. An empty cell cannot be told apart from a cell that failed to
+    // render; a dash says "nothing here yet" on purpose.
+    const pending = { ...activeLoan, disbursementTx: null, disbursementUrl: null };
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [pending] }) }));
+
+    expect(await screen.findByText('On chain')).toBeVisible();
+    expect(screen.queryByRole('link', { name: /transaction on BaseScan/ })).toBeNull();
+
+    const cell = screen.getByText('On chain').closest('table').querySelectorAll('tbody td')[4];
+    expect(cell.textContent).toBe('—');
+  });
 });

@@ -58,3 +58,28 @@
   color: var(--text-faint);
   font-size: 12px;
 }
+
+/*
+  The two on-chain links in a loan row.
+
+  Stacked rather than side by side: "Borrowed" and "Repaid" are separate
+  transactions and a row is narrow, so putting them on one line either wraps
+  awkwardly or pushes the action column off the table. The link styling itself
+  is .pd-explorer-link, the same treatment used on the protection detail page.
+*/
+.lending-onchain-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.lending-onchain-links a {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lending-onchain-links a:hover,
+.lending-onchain-links a:focus-visible {
+  text-decoration: underline;
+}
