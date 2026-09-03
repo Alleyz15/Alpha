@@ -194,19 +194,24 @@ export async function assertPairTrading(asset) {
  * @param {object} asset - a MARKET_ASSETS entry
  * @param {{range:string, interval:string, limit:number}} range
  */
-export async function fetchCandles(asset, range) {
-  return cached(`candles:${asset.symbol}:${range.interval}`, TTL.CANDLES_MS, async () => {
+export async function fetchCandles(asset, { interval, limit }) {
+  // Keyed on interval AND limit: a 1m/60 request and a 1m/1000 request are
+  // different charts and must not share a cache entry.
+  return cached(`candles:${asset.symbol}:${interval}:${limit}`, TTL.CANDLES_MS, async () => {
     await assertPairTrading(asset);
 
     const url = `${BINANCE_BASE}/api/v3/klines?symbol=${asset.binancePair}` +
-      `&interval=${range.interval}&limit=${range.limit}`;
+      `&interval=${interval}&limit=${limit}`;
     const raw = await getJson(url, { provider: 'Binance' });
 
     if (!Array.isArray(raw)) {
       throw new MarketDataError('Binance returned an unexpected shape', { provider: 'Binance' });
     }
 
-    const shaped = normaliseCandles(raw, asset, range.interval);
+    // The interval Binance actually keyed on, not the one we asked for. If a
+    // future Binance ever silently substitutes one, the response says which we
+    // got - the same discipline as `venue` on the order book.
+    const shaped = normaliseCandles(raw, asset, interval);
 
     // An empty chart is not a chart. Better a clear failure than an axis with
     // nothing on it, which reads as a broken page.
@@ -217,7 +222,7 @@ export async function fetchCandles(asset, range) {
       );
     }
 
-    return { ...shaped, range: range.range };
+    return shaped;
   });
 }
 

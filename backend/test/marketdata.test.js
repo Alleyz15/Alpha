@@ -7,7 +7,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normaliseOverview, normaliseCandles, normaliseDepth } from '../src/marketdata/normalise.js';
-import { resolveMarket, resolveRange, RANGE_KEYS, MARKET_ASSETS } from '../src/marketdata/assets.js';
+import {
+  resolveMarket, resolveCandleQuery, MARKET_ASSETS,
+  CANDLE_INTERVALS, MAX_CANDLE_LIMIT, DEFAULT_CANDLE_LIMIT,
+} from '../src/marketdata/assets.js';
 import { cacheGet, cacheSet, cached, cacheClear } from '../src/marketdata/cache.js';
 
 const eth = { symbol: 'ETH', name: 'Ethereum', binancePair: 'ETHUSDT' };
@@ -35,12 +38,102 @@ test('no two assets share a CoinGecko id or a Binance pair', () => {
   assert.equal(new Set(pairs).size, pairs.length, 'duplicate binancePair');
 });
 
-test('ranges map to intervals, and an unknown range is refused not defaulted', () => {
-  assert.equal(resolveRange('1D').interval, '5m');
-  assert.equal(resolveRange('1y').interval, '1d');
-  assert.equal(resolveRange(undefined).range, '1D', 'no range means the default');
-  assert.equal(resolveRange('5Y'), null, 'an unknown range must not silently become 1D');
-  assert.deepEqual(RANGE_KEYS, ['1H', '1D', '1W', '1M', '1Y']);
+// --- resolving a candles request ----------------------------------------------
+//
+// The endpoint moved from range-based ("how far back") to interval-based ("what
+// candle size"). `range` survives as a one-release alias that must return
+// byte-identical responses.
+
+test('interval is taken directly and lower-cased', () => {
+  for (const iv of CANDLE_INTERVALS) {
+    const r = resolveCandleQuery({ interval: iv.toUpperCase() });
+    assert.equal(r.ok, true);
+    assert.equal(r.interval, iv);
+  }
+});
+
+test('an unknown interval is refused, not defaulted', () => {
+  const r = resolveCandleQuery({ interval: '3m' });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'interval');
+  assert.equal(r.got, '3m');
+});
+
+test('no parameters gives 5m and the default limit', () => {
+  const r = resolveCandleQuery({});
+  assert.deepEqual(
+    { interval: r.interval, limit: r.limit, viaRange: r.viaRange },
+    { interval: '5m', limit: DEFAULT_CANDLE_LIMIT, viaRange: null },
+  );
+});
+
+test('the range alias maps to its OLD interval AND its OLD lookback', () => {
+  // Byte-identical for one release: a caller still sending ?range=1D must get
+  // exactly what it got before - 5m candles, 288 of them.
+  assert.deepEqual(resolveCandleQuery({ range: '1D' }),
+    { ok: true, interval: '5m', limit: 288, viaRange: '1D' });
+  assert.deepEqual(resolveCandleQuery({ range: '1h' }),
+    { ok: true, interval: '1m', limit: 60, viaRange: '1H' });
+  assert.equal(resolveCandleQuery({ range: '1Y' }).interval, '1d');
+});
+
+test('an unknown range alias is refused', () => {
+  const r = resolveCandleQuery({ range: '5Y' });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'range');
+});
+
+test('interval WINS over range when both are given', () => {
+  // range is the alias; interval is the real parameter.
+  const r = resolveCandleQuery({ interval: '1h', range: '1D' });
+  assert.equal(r.interval, '1h');
+  assert.equal(r.viaRange, null, 'range was ignored, so it is not echoed');
+});
+
+test('an explicit limit overrides the range alias lookback', () => {
+  const r = resolveCandleQuery({ range: '1D', limit: 50 });
+  assert.equal(r.interval, '5m');
+  assert.equal(r.limit, 50);
+});
+
+test('an oversized limit is CLAMPED to the Binance cap, not refused', () => {
+  // A caller asking for 5000 wants "as much as you have". Because the response
+  // states the interval and the candles actually returned, a clamp cannot
+  // mislabel a chart - so clamp rather than 400.
+  const r = resolveCandleQuery({ interval: '1m', limit: 999999 });
+  assert.equal(r.ok, true);
+  assert.equal(r.limit, MAX_CANDLE_LIMIT);
+  assert.equal(MAX_CANDLE_LIMIT, 1000, "Binance's own per-request cap");
+});
+
+test('a limit at the cap is left alone', () => {
+  assert.equal(resolveCandleQuery({ interval: '1m', limit: 1000 }).limit, 1000);
+});
+
+test('a limit that is not a positive integer IS refused', () => {
+  // Malformed, not ambitious. Zero, negative, fractional, non-numeric.
+  for (const bad of ['0', '-5', '1.5', 'lots', 'NaN']) {
+    const r = resolveCandleQuery({ interval: '1m', limit: bad });
+    assert.equal(r.ok, false, `limit=${bad} should be refused`);
+    assert.equal(r.reason, 'limit');
+  }
+});
+
+test('a blank or absent limit falls through to the default', () => {
+  assert.equal(resolveCandleQuery({ interval: '1m', limit: '' }).limit, DEFAULT_CANDLE_LIMIT);
+  assert.equal(resolveCandleQuery({ interval: '1m', limit: undefined }).limit, DEFAULT_CANDLE_LIMIT);
+});
+
+test('the widest and narrowest spans at the cap are both sane charts', () => {
+  // The reasoning behind having no separate "interval x limit" rule: at the
+  // cap, 1d x 1000 is about 2.7 years and 1m x 1000 is about 16.7 hours.
+  // Neither is the half-million-candle memory problem.
+  const minutes = { '1m': 1, '5m': 5, '1h': 60, '4h': 240, '1d': 1440 };
+  for (const iv of CANDLE_INTERVALS) {
+    const spanHours = (minutes[iv] * MAX_CANDLE_LIMIT) / 60;
+    assert.ok(spanHours >= 16 && spanHours <= 24_500,
+      `${iv} x ${MAX_CANDLE_LIMIT} = ${spanHours}h is outside the sane band`);
+  }
 });
 
 // --- overview --------------------------------------------------------------

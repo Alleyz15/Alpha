@@ -167,7 +167,11 @@ const routes = [
     method: 'GET',
     pattern: new RegExp('^/api/assets/([A-Za-z]{2,10})/candles$'),
     path: '/api/assets/:symbol/candles',
-    handler: (_body, { params, query }) => getAssetCandles(params[0], query.get('range')),
+    handler: (_body, { params, query }) => getAssetCandles(params[0], {
+      intervalParam: query.get('interval'),
+      limitParam: query.get('limit'),
+      rangeParam: query.get('range'),
+    }),
   },
   {
     method: 'GET',
