@@ -137,3 +137,51 @@ export async function resolveFillFailure({ error, nonceBefore, wallet, provider 
     evidence: `nonce moved ${nonceBefore} -> ${nonceAfter} but no transaction was named`,
   };
 }
+
+/** ERC20 Transfer(address,address,uint256) */
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+/**
+ * The USDC that actually left a wallet, from a receipt's Transfer logs.
+ *
+ * SUMS every outgoing transfer, not just the first. A fill moves USDC out
+ * twice: the premium to the maker, and a protocol fee to the OptionBook.
+ * Recording only the premium understates what the position cost - measured on
+ * the 3 Sep deposit, 0.001007 to the maker plus 0.000143 in fees.
+ *
+ * Returns null when it cannot be determined, so the caller can fall back to the
+ * quoted figure rather than recording a wrong one. Null is not zero: a position
+ * that cost nothing and a position whose cost we could not read are different
+ * facts, and `premiumPaidUsdc: 0` on the API means the protection was free.
+ *
+ * Takes the token address as an argument rather than reaching for a client, so
+ * this module stays importable without credentials.
+ *
+ * @param {{logs?: Array}} receipt
+ * @param {string} fromAddress
+ * @param {string} usdcAddress
+ * @returns {number|null}
+ */
+export function extractUsdcSpent(receipt, fromAddress, usdcAddress) {
+  try {
+    const usdc = String(usdcAddress).toLowerCase();
+    const from = String(fromAddress).toLowerCase().slice(2).padStart(64, '0');
+
+    let total = 0n;
+    let found = false;
+
+    for (const log of receipt?.logs ?? []) {
+      if (log.address?.toLowerCase() !== usdc) continue;
+      if (log.topics?.[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
+      if (log.topics?.[1]?.toLowerCase().slice(2) !== from) continue;
+      total += BigInt(log.data);
+      found = true;
+    }
+
+    return found ? Number(total) / 1e6 : null;
+  } catch {
+    // Deliberately quiet: failing to parse a log must never take down a fill
+    // that already succeeded.
+    return null;
+  }
+}

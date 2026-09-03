@@ -23,7 +23,7 @@ import { getBuyablePutOrders } from './orders.js';
 import { runPreflight } from './preflight.js';
 import { getPosition, transitionPosition } from '../db/positions.js';
 import { getQuote } from '../db/quotes.js';
-import { resolveFillFailure } from './fillOutcome.js';
+import { resolveFillFailure, extractUsdcSpent } from './fillOutcome.js';
 import { refundBalance } from '../db/balances.js';
 
 /**
@@ -440,7 +440,9 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
   // The real premium, read from the USDC that actually left the wallet, rather
   // than the figure we quoted. They should match; if they do not, the row
   // should record what happened, not what was expected.
-  const premiumPaid = extractUsdcSpent(receipt, getWalletAddress()) ?? Number(usdcAmountRaw) / 1e6;
+  const premiumPaid = extractUsdcSpent(
+    receipt, getWalletAddress(), client.chainConfig.tokens.USDC.address,
+  ) ?? Number(usdcAmountRaw) / 1e6;
 
   // The count that actually filled. A fill executes by USDC amount, so it can
   // land a hair off the quoted count; read the authoritative on-chain size so
@@ -495,41 +497,6 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
   };
 }
 
-/** ERC20 Transfer(address,address,uint256) */
-const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-
-/**
- * The USDC that actually left the wallet, from the receipt's Transfer logs.
- * Returns null if it cannot be determined - the caller falls back to the
- * quoted figure rather than recording a wrong one.
- */
-function extractUsdcSpent(receipt, fromAddress) {
-  try {
-    const usdc = getSigningClient().chainConfig.tokens.USDC.address.toLowerCase();
-    const from = fromAddress.toLowerCase().slice(2).padStart(64, '0');
-
-    // SUM every outgoing transfer, not just the first. A fill moves USDC out
-    // twice: the premium to the maker, and a protocol fee to the OptionBook.
-    // Recording only the premium understates what the position cost - the
-    // indexer's entryPrice is the total, and the row should agree with it.
-    let total = 0n;
-    let found = false;
-
-    for (const log of receipt?.logs ?? []) {
-      if (log.address?.toLowerCase() !== usdc) continue;
-      if (log.topics?.[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
-      if (log.topics?.[1]?.toLowerCase().slice(2) !== from) continue;
-      total += BigInt(log.data);
-      found = true;
-    }
-
-    if (found) return Number(total) / 1e6;
-  } catch {
-    // Deliberately quiet: this is a nicety, and failing to parse a log must
-    // never take down a fill that already succeeded.
-  }
-  return null;
-}
 
 /**
  * The option contract created by this fill. Best effort: the first address

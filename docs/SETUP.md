@@ -753,7 +753,17 @@ anything to call `Number()` on a balance again.
 
 **Caught by a live request, not by a test.** The unit tests exercised the
 deposit path with injected balances that were already numbers, so the coercion
-never happened. A test can only be wrong in the same way the code is.
+never happened.
+
+> **A test can only be wrong in the same way the code is.** Both were written by
+> someone who believed `getBalance` returned a number, so the fixture agreed
+> with the bug and the assertion passed. Coverage of the line proves the line
+> ran, not that the value reaching it in production looks anything like the one
+> in the test.
+
+That generalises past this bug, and it is the reason live verification keeps
+finding things the suite does not: the fixture is written from the same
+misunderstanding as the code, and reality is not.
 
 #### A path that only runs on failure is a path nothing exercises
 

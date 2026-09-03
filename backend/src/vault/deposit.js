@@ -32,7 +32,7 @@
 // would get the next fix.
 
 import { quoteVault, yieldRateAnnualPct } from './vault.js';
-import { resolveFillFailure } from '../thetanuts/fillOutcome.js';
+import { resolveFillFailure, extractUsdcSpent } from '../thetanuts/fillOutcome.js';
 
 /** USDC 6dp. */
 const usdcRaw = (n) => BigInt(Math.round(n * 1e6));
@@ -266,11 +266,20 @@ export async function depositToVault(
       { label: 'on-chain contract count', attempts: 6, delayMs: 900 })
     : { value: null, confirmed: false, attempts: 0, error: 'no option address in the receipt' };
 
+  // What actually left the wallet - the premium to the maker PLUS the protocol
+  // fee - rather than the figure we quoted. Without this the row records
+  // premium_paid null, which the API renders as "not charged" for a position
+  // that cost real money.
+  const premiumPaid = extractUsdcSpent(
+    mined, walletAddress, client.chainConfig.tokens.USDC.address,
+  ) ?? Number(usdcAmountRaw) / 1e6;
+
   await transitionPosition(position.id, {
     toStatus: 'active',
     eventType: 'confirmed',
     txHash,
     optionAddress,
+    premiumPaid,
     numContractsRaw: onChain.confirmed ? onChain.value.toString() : null,
     payload: {
       vault: true,
