@@ -572,7 +572,8 @@ evidence.
 ## 9. Lending, end to end — 31 Aug and 3 Sep 2026
 
 Borrow against protection you already hold, then repay from your own wallet.
-**Two loans, one complete and one live.**
+**Two loans, both closed. Five USDC transfers on chain — two out, three back —
+and one of the three was refused.**
 
 ### The chain the product makes
 
@@ -607,21 +608,26 @@ This loan was written under the **old** credit rule, which is why its principal
 equals its protected value exactly. BR-39 was revised the same day to reserve
 the interest out of the limit.
 
-### Loan 2 — live, 3 Sep
+### Loan 2 — complete cycle, 3 Sep
 
 | | |
 |---|---|
 | Backing put | `e619686f` — $2,360 floor, 0.109011 contracts, premium 0.46096 USDC |
 | Put purchase | [`0x2913c6e2…`](https://basescan.org/tx/0x2913c6e20389de6e56ff605db47396688561c2167ee765d51d56a680b1091847) |
-| Disbursement | [`0x183fb463…`](https://basescan.org/tx/0x183fb4632d06b098d76e856aacf7e54220af80b655b4446d963cc3381ba74576) — 5 USDC, block 50825272 |
-| Loan | `d486ee11`, `active`, due 4 Sep 08:00 UTC |
+| Disbursement | [`0x183fb463…`](https://basescan.org/tx/0x183fb4632d06b098d76e856aacf7e54220af80b655b4446d963cc3381ba74576) — 5 USDC, block 50825272, 12:51:31 UTC |
+| Repayment refused | [`0xdf75182d…`](https://basescan.org/tx/0xdf75182d8c9bedac4996e1e72b88c49d94f3ddbe183451ca85fc441437963bf3) — block 50838174, 20:01:35 UTC |
+| Repayment accepted | [`0xecdc6816…`](https://basescan.org/tx/0xecdc6816db88d82468c55332aa0df8acc312949766d777294af6d30fa22bd1f6) — 5.000547 USDC, block 50838315, 20:06:17 UTC |
+| Loan | `d486ee11-02fe-479a-b239-4388c303f3f4`, **`repaid`** |
 
 Read at the block boundary rather than from the API's own report:
 
 ```
-operator   55.686223 -> 50.686223
-recipient   3.000380 ->  8.000380
+disbursement 0x183fb463  0x4fB77837 -> 0xc169c7c0   5.000000 USDC
+repayment    0xecdc6816  0xc169c7c0 -> 0x4fB77837   5.000547 USDC
 ```
+
+Out and back, opposite directions, the same two addresses. The 0.000547 is the
+interest, and it is the only difference between the two lines.
 
 ### The equation is the entire claim
 
@@ -656,13 +662,23 @@ protection is worth a fifth of what it is.
 
 ### What is owed, and what is *fixed*
 
-The live loan owes **5.000547 USDC** — 5 principal plus 0.000546 interest over
-0.7976 days — but `repaymentExpectedUsdc` is still `null`, and that is the
-point. The figure becomes binding only when the borrower asks for it.
+Loan 2 owed **5.000547 USDC** — 5 principal plus 0.000547 interest — and for the
+first seven hours of its life `repaymentExpectedUsdc` was `null`. That is the
+point. The figure becomes binding only when the borrower asks for it:
+
+```
+disbursed          12:51:27 UTC   repayment_expected = null
+repayment_requested 19:48:36 UTC  repayment_expected = 5.000547   <- fixed here
+repaid              20:07:06 UTC  5.000547 accepted
+```
 
 > Interest accrues with the clock. A single-step repayment would show one number,
 > accept that number, and call it short — with both figures correct at the moment
 > each was computed, and the discrepancy invisible to everyone.
+
+Eighteen minutes passed between fixing the figure and accepting it, and the
+amount did not move. It could not: it was written down before it was paid, and
+the check compares against the stored figure rather than recomputing one.
 
 ### The repayment is verified, not trusted
 
@@ -682,6 +698,68 @@ A check written against `to` and `value` would accept **any** transaction sent
 to USDC — including one that transferred nothing — and reject **every** real
 repayment. Seven checks run against the *stored* expectation, and one
 transaction can never close two loans.
+
+### The fifth check earned its place on 3 Sep
+
+The first repayment attempt on loan 2 was **refused**, and refusing it was the
+correct answer:
+
+```
+0xdf75182d   status 1   block 50838174   20:01:35 UTC
+  0x4fB77837 -> 0x4fB77837   5.000547 USDC
+```
+
+Right token. Right amount, to the last of six decimals. Confirmed on Base, a
+mined transaction with `status 1`. It failed the fifth check:
+
+> **sent by the borrower to the lender** — `expected 0xc169c7c0 -> 0x4fB77837,
+> not found`
+
+The transfer had gone out from the **operator** wallet rather than the borrower's
+address — a self-transfer from `0x4fB77837` back to `0x4fB77837`. USDC moved. It
+just did not move *from the borrower*, which is the one thing a repayment has to
+do. `POST /api/loans/:id/repay` answered **`REPAYMENT_UNVERIFIED`** with the
+seven-item checklist, and the loan stayed `repaying` — unchanged, still owing the
+same fixed 5.000547, still repayable.
+
+This is the failure worth having on the record, because it is the one a weaker
+check would have waved through:
+
+> Four of the five things a reviewer would look at were correct. A check on
+> amount, token, destination and confirmation count — the obvious four — would
+> have marked this loan repaid while the lender's balance was **exactly where it
+> started**. The money had gone in a circle.
+
+The borrower re-sent from the right address four and a half minutes later
+(`0xecdc6816`), all seven checks passed, and the loan closed. Nothing had to be
+undone in between, because nothing had been written: **a failed verification
+writes no row.** The refusal cost one transaction fee and no reconciliation.
+
+### The interface failed on the same run, and the backend did not
+
+The live run also broke the browser, and the two failures are worth separating.
+
+The repayment instruction — amount, token, and the two addresses — was held in
+React state and nowhere else. Refreshing the page emptied it, and by then the
+loan was `repaying` rather than `active`, which the row's button condition did
+not accept: **the instruction disappeared and the control that could fetch it
+back disappeared with it.** The panel had also never shown `from` at all, and its
+copy said only *"send this from your own wallet"* — which has no direction when
+the borrower controls more than one address. That is precisely how `0xdf75182d`
+came to be sent from the wrong one.
+
+Both were fixed the same day (`8d1701a`, merged as `0e0c284`): the button now
+accepts `repaying` and re-fetches the instruction, the panel shows all four
+fields with `from` second and addresses untruncated, and the copy states that a
+transfer from any other address will not be accepted. Four regression tests were
+added, each checked against the pre-change component to confirm it fails.
+
+The distinction the incident draws is the useful one:
+
+> The backend was never wrong. It refused a transfer it should have refused and
+> left the loan exactly as it found it. **The interface's defect was that it made
+> the mistake easy to make and then hid the way to correct it** — and no test
+> caught either half, because both were about state the tests always supplied.
 
 ---
 
