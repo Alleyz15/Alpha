@@ -11,10 +11,6 @@ import useWelcomeAnimations, { pulseMarketSnapshot } from './useWelcomeAnimation
 import useWelcomeMarket from './useWelcomeMarket.js';
 import { benefits, identityStatements, realityGroups } from './welcomeContent.js';
 
-function scrollTo(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
 function MarketFailure({ retry }) {
   return (
     <div className="welcome-market-state welcome-market-state--error" role="alert">
@@ -164,43 +160,17 @@ function MarketCard({ asset, onProtect, onViewAsset }) {
   );
 }
 
-function WelcomeHeader({ onMarkets, onPortfolio }) {
-  return (
-    <header className="welcome-header">
-      <a className="welcome-brand" href="/" aria-label="Alpha home">
-        <span><ShieldIcon size={18} /></span>
-        <strong>ALPHA</strong>
-        <small>Downside protection</small>
-      </a>
-      <nav aria-label="Welcome page">
-        <a href="#how-it-works">How it works</a>
-        <a href="#live-market">Live market</a>
-        <a href="#product-reality">Product reality</a>
-      </nav>
-      <div className="welcome-header__actions" aria-label="Product navigation">
-        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onMarkets}>
-          Markets
-        </button>
-        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onPortfolio}>
-          My Portfolio
-        </button>
-      </div>
-    </header>
-  );
-}
-
 export default function WelcomePage({
   apiClient,
   marketPollInterval = 30_000,
   onProtect = () => {},
   onViewAsset = () => {},
-  onMarkets = () => {},
-  onPortfolio = () => {},
+  onGetStarted = () => {},
 }) {
   const rootRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
-  useWelcomeAnimations(rootRef);
+  useWelcomeAnimations(rootRef, market?.assets.length ?? 0);
 
   useEffect(() => {
     if (market?.updatedAt) pulseMarketSnapshot(rootRef);
@@ -221,7 +191,6 @@ export default function WelcomePage({
   return (
     <div className="welcome-page" ref={rootRef}>
       <div className="welcome-ambient" aria-hidden="true" />
-      <WelcomeHeader onMarkets={onMarkets} onPortfolio={onPortfolio} />
 
       <main>
         <section className="welcome-hero" aria-labelledby="welcome-title">
@@ -236,13 +205,9 @@ export default function WelcomePage({
               <button
                 className="alpha-button alpha-button--primary alpha-button--large"
                 type="button"
-                disabled={!selectedAssetAvailable}
-                onClick={() => onProtect(selectedSymbol)}
+                onClick={onGetStarted}
               >
-                {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Checking live availability'} <ArrowIcon />
-              </button>
-              <button className="alpha-button alpha-button--ghost alpha-button--large" type="button" onClick={() => scrollTo('how-it-works')}>
-                How Alpha works
+                Get Started <ArrowIcon />
               </button>
             </div>
             <dl className="welcome-hero__facts">
@@ -392,7 +357,6 @@ export default function WelcomePage({
           <a className="welcome-brand" href="/" aria-label="Alpha home"><span><ShieldIcon size={18} /></span><strong>ALPHA</strong></a>
           <p>Plain-language downside protection powered by live market choices.</p>
         </div>
-        <nav aria-label="Footer"><a href="#how-it-works">How it works</a><a href="#live-market">Live market</a><a href="#product-reality">Product reality</a></nav>
         <p className="welcome-footer__disclosure">Market availability is live. Displayed holdings are simulated. On-chain activity is shown only when verified by the backend.</p>
         <div className="welcome-footer__bottom"><span>Protection execution and verification: Base</span><span>© 2026 Alpha · Prototype demonstration</span></div>
       </footer>

@@ -111,21 +111,11 @@ describe('application routes', () => {
     expect(await screen.findByRole('heading', { name: 'Buy protection for Ethereum' })).toBeVisible();
   });
 
-  it('navigates from Welcome to the Portfolio', async () => {
+  it('navigates from Welcome to Markets through Get Started', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
 
-    await user.click(screen.getByRole('button', { name: 'My Portfolio' }));
-
-    expect(await screen.findByRole('heading', { name: 'My Crypto' })).toBeVisible();
-    expect(liveApi.getPositions).toHaveBeenCalledTimes(1);
-  });
-
-  it('navigates from Welcome to Markets', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
-
-    await user.click(screen.getByRole('button', { name: 'Markets' }));
+    await user.click(screen.getByRole('button', { name: 'Get Started' }));
 
     expect(await screen.findByRole('heading', { name: 'Portfolio value' })).toBeVisible();
     expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);

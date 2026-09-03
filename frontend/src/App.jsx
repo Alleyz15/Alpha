@@ -17,8 +17,7 @@ function WelcomeRoute() {
       apiClient={liveApi}
       onProtect={(symbol) => navigate(`/protect/${symbol}`)}
       onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
-      onMarkets={() => navigate('/markets')}
-      onPortfolio={() => navigate('/portfolio')}
+      onGetStarted={() => navigate('/markets')}
     />
   );
 }
