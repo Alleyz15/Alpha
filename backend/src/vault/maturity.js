@@ -229,7 +229,15 @@ export async function matureVault({ vaultId, recipient, confirmed = false }) {
 
   const preflight = await runMaturityPreflight({ vault, position, recipient });
   if (!preflight.pass) {
-    throw new Error('matureVault refused: pre-flight failed. Nothing was sent.');
+    // Typed, not merely worded. A caller other than the CLI has to tell these
+    // three outcomes apart, and the difference between them is the difference
+    // between "fix it and try again", "nothing happened" and "DO NOT TOUCH
+    // THIS". Matching on message text would make that distinction depend on
+    // prose that someone will one day reword.
+    throw Object.assign(
+      new Error('matureVault refused: pre-flight failed. Nothing was sent.'),
+      { code: 'MATURITY_PREFLIGHT_FAILED', preflight, sent: false },
+    );
   }
 
   const owed = preflight.owed;
@@ -259,14 +267,23 @@ export async function matureVault({ vaultId, recipient, confirmed = false }) {
       if (marked.error) {
         console.error('[maturity] FAILED to reset vault', vault.id, ':', marked.error.message);
       }
-      throw new Error(`maturity transfer reverted, nothing was sent: ${error?.message ?? error}`);
+      throw Object.assign(
+        new Error(`maturity transfer reverted, nothing was sent: ${error?.message ?? error}`),
+        { code: 'MATURITY_REVERTED', sent: false },
+      );
     }
     // Anything else is NOT an answer. The transfer may have landed; retrying
     // would pay twice. The row stays at 'maturing' for a human.
-    throw new Error(
-      `maturity outcome UNKNOWN for vault ${vault.id}: ${error?.message ?? error}\n` +
-      `The transfer may have landed. DO NOT RETRY — check ` +
-      `https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
+    throw Object.assign(
+      new Error(
+        `maturity outcome UNKNOWN for vault ${vault.id}: ${error?.message ?? error}\n` +
+        `The transfer may have landed. DO NOT RETRY — check ` +
+        `https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
+      ),
+      // `sent` is deliberately null rather than false. The transfer may have
+      // landed, and anything reading this as "not sent" would retry and pay
+      // twice. Unknown is its own answer, and it is not a smaller kind of no.
+      { code: 'MATURITY_OUTCOME_UNKNOWN', sent: null, vaultId: vault.id },
     );
   }
 

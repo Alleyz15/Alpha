@@ -722,6 +722,43 @@ has ever been decided by one of these reads - the transaction hash and the
 receipt status are what the scripts act on. If one ever gates a decision, this
 stops being a display bug.
 
+#### A check that is correct and unusable: the 316-second pre-flight
+
+Wiring the maturity script to an HTTP endpoint measured what the CLI never had
+to care about:
+
+```
+readSettlementState    222.0s
+runMaturityPreflight   316.4s      measured 3 Sep 2026
+```
+
+Nothing is wrong with the checks. Check 3 reads settlement from chain rather
+than assuming it, which is right, and `readSettlementFromEvents` scans forty
+nine-block windows - about twelve minutes of chain - looking for the
+`OptionPayout` event. When settlement happened outside that window the scan
+finds nothing and costs the full 222 seconds before `getTWAP` answers in one
+call.
+
+The event source is tried FIRST deliberately: an event reports what the protocol
+actually paid, while the oracle only lets us derive it. Reordering for speed
+would weaken the source ordering that exists so a payout is read rather than
+computed.
+
+> **A correct check that takes five minutes is a correct check nobody can put
+> behind a button.** The cost of a verification is part of its design, and it
+> only becomes visible when the caller changes.
+
+**Not fixed before the freeze.** The endpoint returns 202 and is polled, which
+is the right shape regardless - a five-minute held request exceeds client
+timeouts, and a timed-out POST that may or may not have moved money is precisely
+the ambiguity this project removes everywhere else.
+
+The real fix, when there is time: bound the event scan by elapsed time rather
+than window count, and skip it entirely when the position row already carries a
+settled price from the sweep - using the events to corroborate rather than to
+discover. That keeps events authoritative and stops paying 222 seconds to learn
+nothing.
+
 #### Degrading gracefully means degrading quietly
 
 The Coin Detail overview fetches every asset in one CoinGecko call. `per_page`

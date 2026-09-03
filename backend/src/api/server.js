@@ -14,6 +14,9 @@ import {
 import {
   getLoans, getLoanDetail, postRepaymentRequest, postRepay,
 } from './loanRoutes.js';
+import {
+  getVaults, getVaultDetail, getMaturityPreflight, postMature,
+} from './vaultRoutes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
 // the machine call this API, and the demo runs on a laptop that is also
@@ -72,6 +75,7 @@ const routes = [
   { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
   { method: 'GET', path: '/api/portfolio', handler: () => getPortfolio() },
   { method: 'GET', path: '/api/loans', handler: () => getLoans() },
+  { method: 'GET', path: '/api/vault', handler: () => getVaults() },
 
   // Coin Detail market data. DISPLAY ONLY - CoinGecko and Binance, read-only,
   // and nothing they return prices a trade. This literal sits ABOVE the
@@ -103,6 +107,26 @@ const routes = [
     path: '/api/loans/:loanId',
     method: 'GET',
     handler: (_body, { params }) => getLoanDetail(params[0]),
+  },
+  {
+    pattern: new RegExp('^/api/vault/([0-9a-fA-F-]{36})/maturity-preflight$'),
+    path: '/api/vault/:vaultId/maturity-preflight',
+    method: 'GET',
+    handler: (_body, { params }) => getMaturityPreflight(params[0]),
+  },
+  {
+    pattern: new RegExp('^/api/vault/([0-9a-fA-F-]{36})/mature$'),
+    path: '/api/vault/:vaultId/mature',
+    method: 'POST',
+    // Accepted, not done. The pre-flight alone takes over five minutes.
+    successStatus: 202,
+    handler: (_body, { params }) => postMature(params[0]),
+  },
+  {
+    pattern: new RegExp('^/api/vault/([0-9a-fA-F-]{36})$'),
+    path: '/api/vault/:vaultId',
+    method: 'GET',
+    handler: (_body, { params }) => getVaultDetail(params[0]),
   },
   {
     method: 'GET',
@@ -178,7 +202,10 @@ async function handle(req, res) {
 
   try {
     const body = req.method === 'POST' ? await readJsonBody(req) : null;
-    sendJson(res, 200, await route.handler(body, {
+    // successStatus lets an endpoint say ACCEPTED rather than OK. Work that
+    // takes minutes returns 202 and is polled; 200 would tell the interface the
+    // thing was done, which is the one thing it must not believe.
+    sendJson(res, route.successStatus ?? 200, await route.handler(body, {
       params: matched.params,
       query: url.searchParams,
     }));
