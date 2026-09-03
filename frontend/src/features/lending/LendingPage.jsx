@@ -147,7 +147,7 @@ function OfferAndBorrow({ lending }) {
   );
 }
 
-function RepaymentFlow({ loanId, flow, onSetTxHash, onConfirm }) {
+function RepaymentFlow({ loanId, flow, onSetTxHash, onConfirm, onRetryStart }) {
   if (!flow) return null;
 
   if (flow.phase === 'requesting') {
@@ -155,9 +155,15 @@ function RepaymentFlow({ loanId, flow, onSetTxHash, onConfirm }) {
   }
 
   if (flow.phase === 'failed') {
+    // A retry has to live HERE. Once repayFlows has an entry for this loan the
+    // row's own button is hidden, so without this the failure is a dead end -
+    // the same trap that made a `repaying` loan unrecoverable after a refresh.
     return (
       <div className="lending-repay-flow">
         <Alert tone="error" title="Could not start repayment">{flow.error?.message ?? 'Something went wrong. Please try again.'}</Alert>
+        <div className="lending-verify-action">
+          <Button variant="ghost" size="small" onClick={() => onRetryStart(loanId)}>Try again</Button>
+        </div>
       </div>
     );
   }
@@ -178,11 +184,30 @@ function RepaymentFlow({ loanId, flow, onSetTxHash, onConfirm }) {
   const checks = failingChecks(flow.error);
   return (
     <div className="lending-repay-flow">
+      {/*
+        All four fields the backend returns, not two. `from` and `token` were
+        omitted and that is exactly what went wrong in real use: the transfer
+        was sent from a different address the user also controlled, every other
+        detail correct, and the backend refused it. Addresses render in full -
+        never truncated - because the user has to copy them.
+      */}
       <dl className="pd-detail-list">
         <div><dt>Send exactly</dt><dd className="numeric"><MonoValue as="strong">{formatUsdc(flow.transfer?.amountUsdc) ?? '—'}</MonoValue></dd></div>
-        <div><dt>To</dt><dd className="numeric">{flow.transfer?.to}</dd></div>
+        <div>
+          <dt>From this address</dt>
+          <dd className="numeric"><MonoValue>{flow.transfer?.from ?? '—'}</MonoValue></dd>
+        </div>
+        <div><dt>To</dt><dd className="numeric"><MonoValue>{flow.transfer?.to ?? '—'}</MonoValue></dd></div>
+        <div>
+          <dt>Token</dt>
+          <dd className="numeric"><MonoValue>{flow.transfer?.token ?? '—'}</MonoValue></dd>
+        </div>
       </dl>
-      <p className="lending-repay-note">Send this from your own wallet — Alpha does not send it for you. Then paste the transaction hash below.</p>
+      <p className="lending-repay-note">
+        <strong>It must come from the address above.</strong> A transfer sent from any other
+        address will not be accepted, even if the amount and the destination are right.
+        Alpha does not send it for you — send it yourself, then paste the transaction hash below.
+      </p>
 
       {flow.error && checks.length > 0 && (
         <Alert tone="error" title="That transaction does not settle this loan">
@@ -250,9 +275,25 @@ function LoansList({ lending, rows }) {
                 <td>{row.dueLabel}</td>
                 <td className="numeric">{row.owedLabel}</td>
                 <td className="portfolio-action-cell">
-                  {row.status === 'active' && !lending.repayFlows[row.loanId] && (
+                  {/*
+                    `repaying` gets a button too, not just `active`.
+                    ------------------------------------------------------
+                    The transfer instruction lives only in `repayFlows`, which
+                    is in-memory and dies on a refresh. Gating this on `active`
+                    alone meant a loan that had already moved to `repaying` had
+                    no way back in: no instruction, no hash field, no button -
+                    an empty action cell and a status badge. That happened in
+                    real use and the only way out was calling the API by hand.
+
+                    Both branches call the SAME startRepayment. The backend is
+                    idempotent: on a loan already `repaying` it returns the
+                    figure it fixed the first time (alreadyFixed: true) rather
+                    than re-pricing it. So one call serves both "fix it now"
+                    and "show me what was fixed".
+                  */}
+                  {(row.status === 'active' || row.status === 'repaying') && !lending.repayFlows[row.loanId] && (
                     <Button variant="ghost" size="small" onClick={() => lending.startRepayment(row.loanId)}>
-                      Start repayment
+                      {row.status === 'active' ? 'Start repayment' : 'View repayment instructions'}
                     </Button>
                   )}
                 </td>
@@ -265,6 +306,7 @@ function LoansList({ lending, rows }) {
                       flow={lending.repayFlows[row.loanId]}
                       onSetTxHash={lending.setRepayTxHash}
                       onConfirm={lending.confirmRepayment}
+                      onRetryStart={lending.startRepayment}
                     />
                   </td>
                 </tr>
