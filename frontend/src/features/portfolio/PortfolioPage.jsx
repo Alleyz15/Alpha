@@ -105,6 +105,27 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                     <small>Earliest confirmed protection end date</small>
                   </div>
                 </Card>
+
+                {/*
+                  USDC had no home on this page. The only place a balance
+                  appeared was a hint inside the vault deposit form, which a
+                  user only sees after opening the form - so the answer to
+                  "have I got anything to deposit?" was behind the button that
+                  asks you to deposit.
+
+                  The logo comes through `imageUrl` rather than by registering
+                  USDC in ASSET_IDENTITIES: AssetPicker derives the vault's
+                  selectable assets from that object's keys, so registering
+                  USDC there would offer a USDC-denominated vault deposit.
+                */}
+                <Card className="portfolio-stat-card">
+                  <AssetLogo symbol="USDC" name="USD Coin" imageUrl="/assets/coins/usdc.svg" size="large" />
+                  <div>
+                    <span>USDC available</span>
+                    <MonoValue as="strong">{formatUsdc(usdcAvailable) ?? '—'}</MonoValue>
+                    <small>Ready to deposit into the vault · simulated balance</small>
+                  </div>
+                </Card>
               </section>
 
               <VaultDepositsSection apiClient={apiClient} positions={positions} usdcAvailable={usdcAvailable} />

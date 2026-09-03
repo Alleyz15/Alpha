@@ -98,10 +98,25 @@
   text-transform: uppercase;
 }
 
+/*
+  Four cards, not three - the fourth is USDC available.
+
+  Four across needs about 320px per card to carry the longest value on one
+  line; below that the row is two across. With gaps and the page's own padding
+  that threshold lands at 1440px, not the 1200 first tried: at 1280 each card
+  is 285px and the value still wrapped even at 23px. Below 821px it is one
+  column, as before.
+*/
 .portfolio-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-4);
+}
+
+@media (max-width: 1439px) {
+  .portfolio-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .portfolio-stat-card {
@@ -141,6 +156,23 @@
   color: var(--text);
   font-size: clamp(25px, 3vw, 34px);
   line-height: 1.2;
+}
+
+/*
+  Four across leaves each card ~323px at 1440, and the clamp above is sized for
+  the ~437px cards of the old three-card row. Measured at 1440:
+  "$4,935.36 USDC" wraps onto a second line at 34, 30 and 28px and stops
+  wrapping at 26px, which also brings the cards back from 169px tall to 118px.
+  1.8vw lands at 25.9px there and still reaches 30px on a 1920 screen, where
+  the cards are wide enough to carry it.
+
+  Narrower than this the row is two across and the cards are wider than they
+  ever were at three, so the size above stands.
+*/
+@media (min-width: 1440px) {
+  .portfolio-stat-card strong {
+    font-size: clamp(22px, 1.8vw, 30px);
+  }
 }
 
 .portfolio-stat-card time {
