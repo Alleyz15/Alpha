@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toPositionViewModel } from '../../adapters/quoteViewModel.js';
 import { liveApi } from '../../api/client.js';
-import AppHeader from '../../components/AppHeader.jsx';
 import RealityDisclosure from '../../components/RealityDisclosure.jsx';
 import DashboardScreen from '../../screens/DashboardScreen.jsx';
 
@@ -59,14 +58,8 @@ export default function DashboardPage({ apiClient = liveApi, assetFilter = null 
     load();
   }, [load]);
 
-  function navigateLegacyHeader(view) {
-    navigate(view === 'dashboard' ? '/portfolio' : '/markets');
-  }
-
   return (
     <div className="app-shell dashboard-shell">
-      <AppHeader activeView="dashboard" onNavigate={navigateLegacyHeader} demoContext={demoContext} />
-
       <main>
         <DashboardScreen
           positions={positions}

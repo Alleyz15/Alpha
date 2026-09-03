@@ -1,6 +1,6 @@
 .portfolio-page,
 .pd-page {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   background:
     radial-gradient(circle at 14% 12%, var(--primary-tint), transparent 28%),
     radial-gradient(circle at 88% 18%, var(--signal-tint), transparent 26%),
@@ -14,7 +14,7 @@
 
 .portfolio-container {
   width: min(100%, 1600px);
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   margin: 0 auto;
   padding: var(--space-5) clamp(var(--space-5), 3vw, var(--space-12));
   display: flex;
@@ -254,12 +254,18 @@
 }
 
 .portfolio-action-cell .alpha-button {
-  margin-left: auto;
   white-space: nowrap;
 }
 
+.portfolio-action-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 .portfolio-action-cell .portfolio-view-button {
-  min-width: 132px;
+  min-width: 124px;
   border-color: rgba(94, 235, 255, 0.5);
   background: linear-gradient(135deg, rgba(94, 235, 255, 0.1), rgba(46, 111, 255, 0.12));
   color: var(--signal);
@@ -291,12 +297,12 @@
 
 @media (min-width: 821px) {
   .portfolio-page {
-    height: 100svh;
+    height: calc(100svh - var(--site-nav-height));
     overflow: hidden;
   }
 
   .portfolio-container {
-    height: 100svh;
+    height: calc(100svh - var(--site-nav-height));
     min-height: 0;
   }
 }

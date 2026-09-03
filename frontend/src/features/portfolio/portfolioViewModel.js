@@ -24,7 +24,7 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 });
 
 const pendingStatuses = new Set(['pending', 'pending_fill', 'pending_verification']);
-const currentPositionStatuses = new Set(['active', ...pendingStatuses]);
+const settledStatuses = new Set(['settled', 'expired_worthless']);
 
 export function formatUnits(value, symbol) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
@@ -62,11 +62,7 @@ export function buildPortfolioRows(holdings = [], positions = []) {
     .filter((holding) => holding.asset !== 'USDC')
     .map((holding) => {
       const identity = getAssetIdentity(holding.asset);
-      const currentPositions = positions.filter((position) => (
-        position.asset === holding.asset
-        && currentPositionStatuses.has(position.status)
-        && position.paymentStatus !== 'refunded'
-      ));
+      const assetPositions = positions.filter((position) => position.asset === holding.asset);
       const matchingPositions = positions
         .filter((position) => position.asset === holding.asset && position.role === 'protection')
         .sort((a, b) => {
@@ -78,6 +74,7 @@ export function buildPortfolioRows(holdings = [], positions = []) {
       const protectionState = getProtectionState(position);
       const activeProtectionCount = matchingPositions.filter((candidate) => getProtectionState(candidate) === 'active').length;
       const pendingProtectionCount = matchingPositions.filter((candidate) => getProtectionState(candidate) === 'pending').length;
+      const settledProtectionCount = matchingPositions.filter((candidate) => settledStatuses.has(candidate.status)).length;
       const protectionCount = activeProtectionCount || pendingProtectionCount;
       const protectionCountLabel = protectionCount === 1 ? '1 position' : `${protectionCount} positions`;
 
@@ -92,22 +89,26 @@ export function buildPortfolioRows(holdings = [], positions = []) {
           ? `Protected · ${protectionCountLabel}`
           : protectionState === 'pending'
             ? `Being set up · ${protectionCountLabel}`
-            : 'Not protected',
+            : settledProtectionCount > 0
+              ? `Not protected · ${settledProtectionCount} settled`
+              : 'Not protected',
         expiryLabel: position ? formatDate(position.expiry) : '—',
         positionId: position?.positionId ?? null,
-        currentPositionCount: currentPositions.length,
+        settledProtectionCount,
+        hasPositionHistory: assetPositions.length > 0,
+        protectable: holding.protectable !== false,
       };
     });
 }
 
 export function getTimeLeft(expiry, now = Date.now()) {
   const expiryTime = new Date(expiry).getTime();
-  if (!Number.isFinite(expiryTime)) return { label: '—', caption: 'Expiry unavailable' };
+  if (!Number.isFinite(expiryTime)) return { label: '—', caption: 'End date unavailable' };
   const milliseconds = Math.max(0, expiryTime - now);
   const days = Math.floor(milliseconds / 86_400_000);
   const hours = Math.floor((milliseconds % 86_400_000) / 3_600_000);
 
-  if (milliseconds === 0) return { label: 'Ended', caption: `Expired ${formatDate(expiry)}` };
+  if (milliseconds === 0) return { label: 'Ended', caption: `Ended ${formatDate(expiry)}` };
   if (days > 0) return { label: `${days}d ${hours}h`, caption: `Ends ${formatDate(expiry)}` };
   return { label: `${hours}h`, caption: `Ends ${formatDate(expiry)}` };
 }
@@ -165,8 +166,8 @@ export function toProtectionDetailViewModel(position) {
     meaning = 'This protection request is waiting for execution. No protection is active yet.';
   } else if (['active', 'settled'].includes(position.status)) {
     meaning = isProtection
-      ? `${quantityLabel} has a ${strikeLabel} price floor at expiry. If the settlement price finishes below that floor, the contract is designed to pay the difference in USDC.`
-      : `${quantityLabel} has upside exposure above the ${strikeLabel} threshold at expiry. This is an upside position, not downside protection.`;
+      ? `${quantityLabel} has a ${strikeLabel} price floor on the end date. If the settlement price finishes below that floor, the protection is designed to pay the difference in USDC.`
+      : `${quantityLabel} has upside exposure above the ${strikeLabel} threshold on the end date. This is an upside position, not downside protection.`;
   } else {
     meaning = isProtection
       ? 'This protection is no longer active.'
@@ -190,7 +191,7 @@ export function toProtectionDetailViewModel(position) {
     walletLabel: formatIdentifier(position.account?.walletAddress),
     buyerName: position.buyer?.displayName ?? '—',
     settlementTypeLabel: position.order?.settlementType === 'automatic_at_expiry'
-      ? 'Automatic at expiry'
+      ? 'Automatic on the end date'
       : position.order?.settlementType ?? '—',
     paymentMethodLabel: position.order?.paymentMethod === 'simulated_usdc_balance'
       ? 'Simulated USDC balance'

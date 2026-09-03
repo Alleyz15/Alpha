@@ -108,7 +108,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
                   <StatusBadge tone={statusTone(detail.status, detail.verifiedOnChain)}>{detail.statusLabel}</StatusBadge>
                 </div>
                 <p>
-                  Order {detail.orderIdLabel} <span aria-hidden="true">·</span> Expires {detail.expiryLabel}
+                  Order {detail.orderIdLabel} <span aria-hidden="true">·</span> Protection ends {detail.expiryLabel}
                   <span aria-hidden="true">·</span> <strong>{detail.timeLeft.label} left</strong>
                 </p>
               </header>
@@ -139,15 +139,15 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
                   <DetailItem label="Contract type" value={detail.contractType} />
                   <DetailItem label="Quantity covered" value={detail.quantityLabel} mono />
                   <DetailItem label="Entry price" value={detail.entryPriceLabel} mono />
-                  <DetailItem label="Strike price" value={detail.strikeLabel} mono />
+                  <DetailItem label={detail.isProtection ? 'Protection floor' : 'Upside threshold'} value={detail.strikeLabel} mono />
                   <DetailItem label="Purchase date" value={detail.purchaseDateLabel} />
-                  <DetailItem label="Expiry date" value={detail.expiryLabel} />
+                  <DetailItem label="End date" value={detail.expiryLabel} />
                   <DetailItem label="Status" value={detail.statusLabel} />
                 </DetailList>
               </Card>
 
               <Card className="pd-section">
-                <div className="pd-section-heading"><span>02</span><div><h2>Live tracking</h2><p>The real market path compared with this contract’s strike.</p></div></div>
+                <div className="pd-section-heading"><span>02</span><div><h2>Live tracking</h2><p>The real market path compared with this position’s recorded threshold.</p></div></div>
                 {chartState === 'loading' ? (
                   <div className="pd-chart-loading" role="status"><span className="alpha-async-state__spinner" /> Loading live prices…</div>
                 ) : (
@@ -189,7 +189,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
                   <div className="pd-milestones">
                     <div><span>1</span><strong>Purchased</strong><small>{detail.purchaseDateLabel}</small></div>
                     <div><span>2</span><strong>Active</strong><small>{formatDate(activeDate)}</small></div>
-                    <div><span>3</span><strong>Expiry</strong><small>{detail.expiryLabel}</small></div>
+                    <div><span>3</span><strong>End date</strong><small>{detail.expiryLabel}</small></div>
                   </div>
                 </div>
                 {detail.timeline.length > 0 ? (

@@ -3,19 +3,22 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CoinDetailPage from './CoinDetailPage.jsx';
 
+const createChartMock = vi.hoisted(() => vi.fn(() => ({
+  addSeries: () => ({ setData: vi.fn() }),
+  applyOptions: vi.fn(),
+  remove: vi.fn(),
+  timeScale: () => ({ fitContent: vi.fn() }),
+})));
+
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: {},
   ColorType: { Solid: 'solid' },
-  createChart: () => ({
-    addSeries: () => ({ setData: vi.fn() }),
-    applyOptions: vi.fn(),
-    remove: vi.fn(),
-    timeScale: () => ({ fitContent: vi.fn() }),
-  }),
+  createChart: createChartMock,
 }));
 
 afterEach(() => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  vi.clearAllMocks();
 });
 
 function overviewResponse() {
@@ -110,6 +113,21 @@ describe('CoinDetailPage', () => {
     await waitFor(() => expect(apiClient.getAssetOrderBook).toHaveBeenCalledTimes(1));
   });
 
+  it('keeps the chart instance when the order book refreshes', async () => {
+    const apiClient = client();
+    render(
+      <CoinDetailPage
+        symbol="ETH" apiClient={apiClient} onBack={vi.fn()} onProtect={vi.fn()}
+        orderBookPollInterval={20}
+      />,
+    );
+
+    await screen.findByLabelText('Candlestick chart');
+    await waitFor(() => expect(createChartMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiClient.getAssetOrderBook.mock.calls.length).toBeGreaterThan(1));
+    expect(createChartMock).toHaveBeenCalledTimes(1);
+  });
+
   it('connects the protection CTA without pretending to buy the underlying asset', async () => {
     const user = userEvent.setup();
     const onProtect = vi.fn();
@@ -137,10 +155,10 @@ describe('CoinDetailPage', () => {
       />,
     );
 
-    expect(await screen.findByText('Source: Binance · 5m candles')).toBeVisible();
+    expect(await screen.findByText('Source: Binance · ETH/USDT · 1D')).toBeVisible();
     await user.click(screen.getByRole('button', { name: '1H' }));
     await waitFor(() => expect(apiClient.getAssetCandles).toHaveBeenLastCalledWith('ETH', '1H'));
-    expect(await screen.findByText('Source: Binance · 1m candles')).toBeVisible();
+    expect(await screen.findByText('Source: Binance · ETH/USDT · 1H')).toBeVisible();
     expect(screen.getByText(/Chart prices are USDT from Binance/)).toBeVisible();
   });
 
