@@ -167,6 +167,8 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
         reveal('.welcome-reality .welcome-section__heading > *', '.welcome-reality', { blur: true });
         reveal('.welcome-reality-card', '.welcome-reality__grid', { distance: 30, staggerBy: 120 });
         reveal('.welcome-reality__callout', '.welcome-reality__grid', { distance: 18, duration: 620 });
+        reveal('.welcome-beyond .welcome-section__heading > *', '.welcome-beyond', { blur: true });
+        reveal('.welcome-beyond-card', '.welcome-beyond__grid', { distance: 30, staggerBy: 120 });
         reveal('.welcome-cta > div > *, .welcome-cta > .alpha-button', '.welcome-cta', { blur: true, staggerBy: 90 });
         reveal('.welcome-footer > *', '.welcome-footer', { distance: 18, duration: 620, staggerBy: 70 });
       });

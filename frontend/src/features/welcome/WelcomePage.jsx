@@ -9,7 +9,7 @@ import SignalGrid from './SignalGrid.jsx';
 import WelcomeJourney from './WelcomeJourney.jsx';
 import useWelcomeAnimations, { pulseMarketSnapshot } from './useWelcomeAnimations.js';
 import useWelcomeMarket from './useWelcomeMarket.js';
-import { benefits, identityStatements, realityGroups } from './welcomeContent.js';
+import { benefits, expansionCards, identityStatements, realityGroups } from './welcomeContent.js';
 
 function MarketFailure({ retry }) {
   return (
@@ -166,6 +166,8 @@ export default function WelcomePage({
   onProtect = () => {},
   onViewAsset = () => {},
   onGetStarted = () => {},
+  onExploreLending = () => {},
+  onExploreVault = () => {},
 }) {
   const rootRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState('');
@@ -333,6 +335,29 @@ export default function WelcomePage({
             ))}
           </div>
           <div className="welcome-reality__callout"><ShieldIcon /><strong>Alpha simulates the user holding—not the live protection market.</strong></div>
+        </section>
+
+        <section className="welcome-section welcome-beyond" id="beyond-alpha" aria-labelledby="beyond-title">
+          <div className="welcome-section__heading">
+            <p className="welcome-eyebrow">BEYOND PROTECTION</p>
+            <h2 id="beyond-title">More ways to use Alpha</h2>
+            <p>Borrowing and the protected-floor vault build on the same live backend and the same on-chain positions.</p>
+          </div>
+          <div className="welcome-beyond__grid">
+            {expansionCards.map((card) => (
+              <article className="welcome-beyond-card" key={card.id}>
+                <h3>{card.title}</h3>
+                <p>{card.body}</p>
+                <button
+                  className="alpha-button alpha-button--ghost alpha-button--default"
+                  type="button"
+                  onClick={() => (card.id === 'lending' ? onExploreLending() : onExploreVault())}
+                >
+                  {card.ctaLabel} <ArrowIcon />
+                </button>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="welcome-cta" aria-labelledby="cta-title">

@@ -5,9 +5,11 @@ import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import HomePage from './features/home/HomePage.jsx';
+import LendingPage from './features/lending/LendingPage.jsx';
 import PortfolioPage from './features/portfolio/PortfolioPage.jsx';
 import ProtectionDetailsPage from './features/portfolio/ProtectionDetailsPage.jsx';
 import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
+import VaultPage from './features/vault/VaultPage.jsx';
 import WelcomePage from './features/welcome/WelcomePage.jsx';
 
 function WelcomeRoute() {
@@ -19,6 +21,8 @@ function WelcomeRoute() {
       onProtect={(symbol) => navigate(`/protect/${symbol}`)}
       onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
       onGetStarted={() => navigate('/markets')}
+      onExploreLending={() => navigate('/lending')}
+      onExploreVault={() => navigate('/vault')}
     />
   );
 }
@@ -90,6 +94,8 @@ export default function App() {
         <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
         <Route path="/home" element={<Navigate replace to="/markets" />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/vault" element={<VaultPage />} />
+        <Route path="/lending" element={<LendingPage />} />
         <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
         <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
         <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
