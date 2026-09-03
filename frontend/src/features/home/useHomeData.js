@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const initialSource = { state: 'loading', data: null, refreshError: false };
 
 export default function useHomeData(apiClient, summaryPollInterval = 45_000, candlePollInterval = 300_000) {
-  const [demo, setDemo] = useState(initialSource);
   const [portfolio, setPortfolio] = useState(initialSource);
   const [market, setMarket] = useState(initialSource);
   const [candles, setCandles] = useState({});
@@ -21,12 +20,10 @@ export default function useHomeData(apiClient, summaryPollInterval = 45_000, can
   }, []);
 
   const loadSummary = useCallback(async () => {
-    const [demoResult, portfolioResult, marketResult] = await Promise.allSettled([
-      apiClient.getDemoContext(),
+    const [portfolioResult, marketResult] = await Promise.allSettled([
       apiClient.getPortfolio(),
       apiClient.getAssetsOverview(),
     ]);
-    updateSource(setDemo, demoResult);
     updateSource(setPortfolio, portfolioResult);
     updateSource(setMarket, marketResult);
   }, [apiClient, updateSource]);
@@ -86,7 +83,6 @@ export default function useHomeData(apiClient, summaryPollInterval = 45_000, can
   }, [candlePollInterval, loadCandles, loadSummary, market.data, summaryPollInterval]);
 
   return {
-    demo,
     portfolio,
     market,
     candles,
