@@ -108,15 +108,30 @@ export function participationFor({ optionPortion, premiumPerContract, spot, prin
  * @param {number} [args.targetDays] - defaults to the longest available
  * @returns {Promise<object>}
  */
-export async function quoteVault({ asset = 'ETH', principalUsdc, targetDays } = {}) {
+export async function quoteVault({ asset = 'ETH', principalUsdc, targetDays } = {}, deps = {}) {
+  // The two live-book reads are injectable so the "no buyable call" branch below
+  // can be exercised without a network. Defaults are the real imports, so every
+  // existing caller (deposit.js, scripts/vault.js via runDepositPreflight) is
+  // unaffected.
+  const spotPriceFor = deps.getSpotPrice ?? getSpotPrice;
+  const buyableCallsFor = deps.getBuyableCallOrders ?? getBuyableCallOrders;
+
   const [spot, rawCalls] = await Promise.all([
-    getSpotPrice(asset),
-    getBuyableCallOrders(asset),
+    spotPriceFor(asset),
+    buyableCallsFor(asset),
   ]);
 
   const above = rawCalls.map(toHumanOrder).filter((o) => o.strike > spot);
   if (above.length === 0) {
-    throw new Error(`quoteVault: no buyable ${asset} calls above spot right now`);
+    // Coded so the API layer can tell "the book is thin for this asset right
+    // now" apart from a systemic failure. Same Object.assign(new Error, { code })
+    // shape as DEPOSIT_REVERTED and friends in deposit.js. errors.js maps
+    // NO_BUYABLE_CALLS to 409 - a well-formed request for a resource that is
+    // simply not available this moment, not a bad request and nothing broken.
+    throw Object.assign(
+      new Error(`quoteVault: no buyable ${asset} calls above spot right now`),
+      { code: 'NO_BUYABLE_CALLS', asset },
+    );
   }
 
   // Group by expiry so a tenor can be chosen deliberately.

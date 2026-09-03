@@ -16,9 +16,27 @@ test('statusForCode maps each domain code to its HTTP status', () => {
   assert.equal(statusForCode('BALANCE_EXCEEDED'), 400);
   assert.equal(statusForCode('NO_EXPIRY'), 404);
   assert.equal(statusForCode('NO_TIERS'), 404);
+  assert.equal(statusForCode('NO_BUYABLE_CALLS'), 409);
   assert.equal(statusForCode('INVALID_REQUEST'), 400);
   assert.equal(statusForCode('UPSTREAM_ERROR'), 502);
   assert.equal(statusForCode('anything-unmapped'), 500);
+});
+
+test('NO_BUYABLE_CALLS maps to 409 and its message passes through to the client', () => {
+  // The coded error quoteVault throws: a plain Error with a `code`. It must
+  // reach the client as 409 with its own message, NOT the scrubbed generic one
+  // reserved for unmapped failures - the interface needs the reason to tell the
+  // user the book is thin for this asset rather than "something broke".
+  const coded = Object.assign(
+    new Error('quoteVault: no buyable ETH calls above spot right now'),
+    { code: 'NO_BUYABLE_CALLS', asset: 'ETH' },
+  );
+  const { status, body } = toErrorResponse(coded);
+
+  assert.equal(status, 409);
+  assert.equal(body.error.code, 'NO_BUYABLE_CALLS');
+  assert.equal(body.error.message, 'quoteVault: no buyable ETH calls above spot right now');
+  assert.notEqual(body.error.message, 'The service could not complete this request.');
 });
 
 test('toErrorResponse maps a known coded error with its message and details', () => {
