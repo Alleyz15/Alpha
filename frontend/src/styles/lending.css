@@ -1,0 +1,60 @@
+.lending-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.portfolio-table tbody tr.is-selected {
+  background: var(--interactive-tint);
+}
+
+.lending-equation {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+}
+
+/* Borrowing spends the operator's real USDC - a solid, heavier action than
+   the repayment controls below, which only verify a transfer the user made
+   themselves. The two must never look interchangeable. */
+.lending-spend-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.lending-spend-action small {
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.lending-repay-flow {
+  margin: var(--space-2) 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--bg-elevated);
+}
+
+.lending-repay-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lending-verify-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.lending-verify-action small {
+  color: var(--text-faint);
+  font-size: 12px;
+}

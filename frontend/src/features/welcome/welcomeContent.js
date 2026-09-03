@@ -62,6 +62,23 @@ export const journeySteps = [
   },
 ];
 
+export const expansionCards = [
+  {
+    id: 'lending',
+    title: 'Borrow against your protection',
+    body: 'Already have a protected position? Borrow USDC against it without selling early or giving up your floor. How much you can borrow comes from the protection itself, not a separate credit check.',
+    ctaLabel: 'Explore lending',
+    href: '/lending',
+  },
+  {
+    id: 'vault',
+    title: 'A deposit that comes back whole',
+    body: 'Deposit USDC and get the full amount back at the end of the term. Part of it funds a real position on Base, so you can share in the upside if the market moves — with no risk to your principal.',
+    ctaLabel: 'Explore the vault',
+    href: '/vault',
+  },
+];
+
 export const realityGroups = [
   {
     kind: 'live',
@@ -80,7 +97,7 @@ export const realityGroups = [
     title: 'What is demonstration data',
     items: [
       'Displayed user holdings are demonstration data.',
-      'There is no user deposit flow in this prototype.',
+      'Vault deposits spend from a simulated USDC balance to buy a real position on Base.',
       'A simulated holding is never presented as an on-chain deposit.',
     ],
   },
