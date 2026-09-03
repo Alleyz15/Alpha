@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import WelcomePage from './WelcomePage.jsx';
@@ -120,5 +120,69 @@ describe('WelcomePage', () => {
     expect(await screen.findByText('Live update paused. Showing the last successful market snapshot.')).toBeVisible();
     expect(screen.getAllByText('$77,487.38 USDC').length).toBeGreaterThan(0);
     vi.useRealTimers();
+  });
+
+  // -------------------------------------------------------------------------
+  // The lending and vault cards carry a three-step summary.
+  // -------------------------------------------------------------------------
+
+  it('summarises the lending and vault flows in three numbered steps each', async () => {
+    const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+    await act(async () => Promise.resolve());
+
+    const lending = screen.getByRole('heading', { name: 'Borrow against your protection' }).closest('article');
+    const vault = screen.getByRole('heading', { name: 'A deposit that comes back whole' }).closest('article');
+
+    // An ordered list, because the point is the sequence.
+    for (const card of [lending, vault]) {
+      expect(within(card).getByRole('list').tagName).toBe('OL');
+      expect(within(card).getAllByRole('listitem')).toHaveLength(3);
+      // The numerals decorate the ordering rather than restating it.
+      expect(within(card).getAllByText(/^0[123]$/)).toHaveLength(3);
+    }
+
+    expect(within(lending).getByText('Start with protection you hold')).toBeVisible();
+    expect(within(lending).getByText('See what your floor supports')).toBeVisible();
+    expect(within(lending).getByText('Borrow and repay on Base')).toBeVisible();
+
+    expect(within(vault).getByText('Deposit USDC')).toBeVisible();
+    expect(within(vault).getByText('Part of it buys a real position')).toBeVisible();
+    expect(within(vault).getByText('Get the whole deposit back')).toBeVisible();
+  });
+
+  it('keeps the vault promise honest: the deposit is guaranteed, the upside is not', async () => {
+    // Principal protection is a guarantee; participation is not. An interface
+    // that promised both would look like it had failed on the day the market
+    // did not move - which is the expected day.
+    const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
+    render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+    await act(async () => Promise.resolve());
+
+    expect(screen.getByText(/The deposit is guaranteed; the share of the rise is not/)).toBeVisible();
+  });
+
+  it('says none of it in trading language (BR-3)', async () => {
+    // Whole words, compared as a set. Matching on substrings would fire on
+    // "optional" and "called"; the word list is what BR-3 actually forbids.
+    const FORBIDDEN = ['strike', 'premium', 'expiry', 'put', 'call', 'option', 'exercise'];
+    const wordsIn = (text) => new Set(text.toLowerCase().match(/[a-z]+/g) ?? []);
+
+    const client = { getMarketContext: vi.fn().mockResolvedValue(marketContext()) };
+    const { container } = render(<WelcomePage apiClient={client} marketPollInterval={999_999} />);
+    await act(async () => Promise.resolve());
+
+    const cards = [...container.querySelectorAll('.welcome-beyond-card')].map((c) => c.textContent).join(' ');
+    const found = (text) => FORBIDDEN.filter((word) => wordsIn(text).has(word));
+
+    // Guard the guard. A "must not appear" assertion passes just as happily
+    // on an empty string, or with a pattern that cannot match anything - the
+    // first version of this test shipped green with the word "put" in the
+    // copy, because an escaping slip had left it anchored to a control
+    // character. So: prove there is text, and prove the check can fail.
+    expect(cards.length).toBeGreaterThan(200);
+    expect(found('a premium put at the strike')).toEqual(['strike', 'premium', 'put']);
+
+    expect(found(cards)).toEqual([]);
   });
 });

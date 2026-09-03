@@ -348,6 +348,20 @@ export default function WelcomePage({
               <article className="welcome-beyond-card" key={card.id}>
                 <h3>{card.title}</h3>
                 <p>{card.body}</p>
+                {/*
+                  An ordered list, because these are steps in a sequence. The
+                  visible 01/02/03 is decoration on top of that ordering, so it
+                  is aria-hidden rather than read out twice.
+                */}
+                <ol className="welcome-beyond-card__steps">
+                  {card.steps.map((step) => (
+                    <li key={step.number}>
+                      <span aria-hidden="true">{step.number}</span>
+                      <strong>{step.title}</strong>
+                      <p>{step.body}</p>
+                    </li>
+                  ))}
+                </ol>
                 <button
                   className="alpha-button alpha-button--ghost alpha-button--default"
                   type="button"
