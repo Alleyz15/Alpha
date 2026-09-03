@@ -468,24 +468,28 @@
   }
 
   /*
-    A floor, so the card cannot be crushed instead of overflowing.
+    Sized by its content, never squeezed to fit.
 
-    This card is `flex: 1` with `min-height: 0`, which lets it shrink to
-    nothing. When a sibling grows - the vault form expanding - the growth was
-    absorbed by this card shrinking rather than by the container overflowing,
-    so `overflow-y: auto` above had almost nothing to scroll: measured at
-    1440x900, expanding the form took this card from 213px to 50px and left the
-    container with 16px of scroll for 185px of new content. Holdings and the
-    protection overview both live in here, and both became a sliver.
+    This card holds the holdings table and the protection overview. It used to
+    be `flex: 1` with `min-height: 0`, which let a growing sibling take its
+    height instead of making the container overflow: expanding the vault form
+    took it from 213px to 50px and left 16px of scroll for 185px of content.
 
-    200px is deliberately just under the ~213px this card is given when the
-    form is closed, so the floor binds only under pressure: closed, nothing
-    changes and no scrollbar appears; open, the container overflows properly
-    and scrolls. A larger floor (280px was tried) introduces a scrollbar in the
-    closed state, which is a regression.
+    A 200px floor was tried and made it worse. The floor was measured before
+    the lending entry card existed; once that card took 137px the overview
+    card's share fell below 200, so the floor stopped being a safety net and
+    became a ceiling - 200px minus a 91px heading left the table 22px to show
+    372px of rows, which reads as an empty section. Six rows were in the DOM
+    the whole time.
+
+    Any floor is a number that goes stale the next time a row is added or a
+    sibling grows. So there is no floor: the card takes the height of its
+    content and `.portfolio-container` scrolls, which is how this page is now
+    meant to behave.
   */
   .portfolio-overview-card {
-    min-height: 200px;
+    flex: 0 0 auto;
+    min-height: 0;
   }
 }
 
