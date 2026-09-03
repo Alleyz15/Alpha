@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
-import { ArrowIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
+import { ArrowIcon, ClockIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
 import { Alert, AsyncState, Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
 import { buildPortfolioRows, formatDate, formatUsdc } from './portfolioViewModel.js';
 
@@ -12,7 +12,6 @@ export default function PortfolioPage({ apiClient = liveApi }) {
   const [portfolio, setPortfolio] = useState(null);
   const [positions, setPositions] = useState([]);
   const [error, setError] = useState(null);
-  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setState('loading');
@@ -39,33 +38,22 @@ export default function PortfolioPage({ apiClient = liveApi }) {
     () => buildPortfolioRows(portfolio?.holdings, positions),
     [portfolio, positions],
   );
-  const visibleRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return rows;
-    return rows.filter((row) => `${row.name} ${row.symbol}`.toLowerCase().includes(normalizedQuery));
-  }, [query, rows]);
 
   return (
     <main className="portfolio-page">
       <div className="portfolio-container">
-        <header className="portfolio-topbar">
-          <button className="portfolio-brand" type="button" onClick={() => navigate('/')} aria-label="Go to Alpha Welcome">
-            <span>α</span> ALPHA
-          </button>
-          <label className="portfolio-search">
-            <span className="sr-only">Search holdings</span>
-            <span aria-hidden="true">⌕</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your holdings" />
-          </label>
-        </header>
-
         <section className="portfolio-heading">
           <div>
             <span className="portfolio-eyebrow">Portfolio</span>
             <h1>My Crypto</h1>
             <p>See what you hold and whether each asset has confirmed downside protection.</p>
           </div>
-          {portfolio?.simulated && <RealityBadge kind="simulated" label="Simulated holdings" />}
+          <div className="portfolio-heading-actions">
+            <button className="portfolio-home-link" type="button" onClick={() => navigate('/markets')}>
+              <span aria-hidden="true">←</span> Back to Home
+            </button>
+            {portfolio?.simulated && <RealityBadge kind="simulated" label="Simulated holdings" />}
+          </div>
         </section>
 
         <AsyncState
@@ -99,12 +87,24 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                   <div>
                     <span>Active protections</span>
                     <MonoValue as="strong">{portfolio.activeProtectionCount ?? '—'}</MonoValue>
-                    <small>{portfolio.nextExpiry
-                      ? `Next confirmed protection ends ${formatDate(portfolio.nextExpiry)}`
-                      : 'No protection active'}</small>
+                    <small>Confirmed downside protection</small>
                     {Number(portfolio.pendingProtectionCount) > 0 && (
                       <em>{portfolio.pendingProtectionCount} being set up</em>
                     )}
+                  </div>
+                </Card>
+                <Card className="portfolio-stat-card portfolio-stat-card--expiry">
+                  <div className="portfolio-stat-icon"><ClockIcon size={22} /></div>
+                  <div>
+                    <span>Next expiry</span>
+                    <MonoValue
+                      as={portfolio.nextExpiry ? 'time' : 'strong'}
+                      dateTime={portfolio.nextExpiry || undefined}
+                      className={portfolio.nextExpiry ? '' : 'portfolio-stat-empty'}
+                    >
+                      {portfolio.nextExpiry ? formatDate(portfolio.nextExpiry) : 'No active protection'}
+                    </MonoValue>
+                    <small>Earliest confirmed protection end date</small>
                   </div>
                 </Card>
               </section>
@@ -125,12 +125,6 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                     emptyTitle="No crypto holdings yet"
                     emptyMessage="Your non-USDC holdings will appear here when the backend returns them."
                   />
-                ) : visibleRows.length === 0 ? (
-                  <AsyncState
-                    state="empty"
-                    emptyTitle="No matching holding"
-                    emptyMessage={`No asset matches “${query}”.`}
-                  />
                 ) : (
                   <div className="portfolio-table-scroll">
                     <table className="portfolio-table">
@@ -145,7 +139,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {visibleRows.map((row) => (
+                        {rows.map((row) => (
                           <tr key={row.asset}>
                             <td>
                               <div className="portfolio-coin-cell">
@@ -166,6 +160,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                                 <Button
                                   variant="ghost"
                                   size="small"
+                                  className="portfolio-view-button"
                                   onClick={() => navigate(row.currentPositionCount > 1 ? `/positions/${row.symbol}` : `/protection/${row.positionId}`)}
                                 >
                                   {row.currentPositionCount > 1 ? 'View positions' : 'View'} <ArrowIcon size={14} />
