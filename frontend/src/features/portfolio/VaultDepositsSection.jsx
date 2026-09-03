@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import AssetLogo, { ASSET_IDENTITIES } from '../../components/AssetLogo.jsx';
+import AssetLogo from '../../components/AssetLogo.jsx';
+import AssetPicker from '../../components/AssetPicker.jsx';
 import { Alert, AsyncState, Button, Card, FormField, StatusBadge } from '../../components/ui/index.js';
 import { formatUsdc } from '../../utils/usdc.js';
 import { buildVaultRows, formatDate, formatParticipationPct } from './vaultDepositsViewModel.js';
 import useVaultDeposits from './useVaultDeposits.js';
-
-const ASSET_OPTIONS = Object.keys(ASSET_IDENTITIES);
 
 function VaultDepositForm({ vault, usdcAvailable }) {
   const { phase } = vault;
@@ -22,15 +21,11 @@ function VaultDepositForm({ vault, usdcAvailable }) {
     >
       <div className="vault-deposit-fields">
         <FormField label="Asset">
-          <select
+          <AssetPicker
             value={vault.assetInput}
-            onChange={(event) => vault.setAsset(event.target.value)}
+            onChange={vault.setAsset}
             disabled={!vault.isEditable}
-          >
-            {ASSET_OPTIONS.map((symbol) => (
-              <option key={symbol} value={symbol}>{ASSET_IDENTITIES[symbol].name} ({symbol})</option>
-            ))}
-          </select>
+          />
         </FormField>
 
         <FormField label="Principal amount (USDC)" hint={`Available: ${formatUsdc(usdcAvailable) ?? '—'}`}>

@@ -266,7 +266,7 @@ describe('Vault Deposits section', () => {
 
     await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
 
-    expect(screen.getByLabelText('Asset')).toHaveValue('ETH');
+    expect(screen.getByLabelText('Asset')).toHaveTextContent('Ethereum (ETH)');
     expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
 
     await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');

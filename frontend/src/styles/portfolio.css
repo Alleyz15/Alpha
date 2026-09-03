@@ -197,18 +197,93 @@
 .vault-deposit-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: var(--space-4);
 }
 
-.vault-deposit-fields select {
+.asset-picker {
+  position: relative;
+}
+
+.asset-picker__trigger {
   width: 100%;
-  height: 42px;
-  border: 1px solid var(--border-strong);
+  min-height: 46px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 14px;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.asset-picker__trigger:focus-visible,
+.asset-picker__trigger[aria-expanded="true"] {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 1px var(--signal);
+  outline: 0;
+}
+
+.asset-picker__trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.asset-picker__trigger span {
+  flex: 1;
+  text-align: left;
+}
+
+.asset-picker__trigger svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.asset-picker__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--space-2);
+  max-height: 260px;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+}
+
+.asset-picker__list li + li {
+  margin-top: 2px;
+}
+
+.asset-picker__list button {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-picker__list button:hover,
+.asset-picker__list button.is-selected {
+  background: var(--interactive-tint);
 }
 
 .vault-preview-card {
@@ -382,6 +457,7 @@
   .portfolio-container {
     height: calc(100svh - var(--site-nav-height));
     min-height: 0;
+    overflow-y: auto;
   }
 }
 
