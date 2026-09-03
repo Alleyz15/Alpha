@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PortfolioPage from './PortfolioPage.jsx';
 import ProtectionDetailsPage from './ProtectionDetailsPage.jsx';
 import DashboardPage from '../dashboard/DashboardPage.jsx';
@@ -70,6 +70,7 @@ describe('Phase 6 pages', () => {
       getPortfolio: vi.fn().mockResolvedValue(portfolio),
       getPositions: vi.fn().mockResolvedValue({ positions }),
       getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
+      getVaults: vi.fn().mockResolvedValue({ vaults: [] }),
     };
     render(
       <MemoryRouter initialEntries={['/portfolio']}>
@@ -180,5 +181,256 @@ describe('Phase 6 pages', () => {
     expect(await screen.findByText('No protection became active. Execution failed and the held funds were refunded.')).toBeVisible();
     const meaningSection = screen.getByRole('heading', { name: 'What this means for you' }).closest('.pd-meaning-card');
     expect(within(meaningSection).queryByText(/price floor/i)).not.toBeInTheDocument();
+  });
+});
+
+function vaultApiClient(overrides = {}) {
+  return {
+    getPortfolio: vi.fn().mockResolvedValue(portfolio),
+    getPositions: vi.fn().mockResolvedValue({ positions: [] }),
+    getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
+    getVaults: vi.fn().mockResolvedValue({ vaults: [] }),
+    getDepositPreflight: vi.fn(),
+    postVaultDeposit: vi.fn(),
+    ...overrides,
+  };
+}
+
+function renderPortfolio(apiClient) {
+  return render(
+    <MemoryRouter initialEntries={['/portfolio']}>
+      <Routes>
+        <Route path="/portfolio" element={<PortfolioPage apiClient={apiClient} />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+const depositPreview = {
+  asset: 'ETH',
+  principalUsdc: 5,
+  yieldPortionUsdc: 4.9,
+  optionPortionUsdc: 0.1,
+  yieldIsSimulated: true,
+  participationPct: 22.5,
+  exposureUsdc: 1.1,
+  spotUsdc: 2400,
+  upsideThresholdUsdc: 2580,
+  maturity: '2026-09-06T08:00:00Z',
+  daysToMaturity: 2.8,
+  premiumPerContractUsdc: 3.6,
+  contracts: 0.0003,
+  pass: true,
+  checks: [],
+  availableUsdc: 100,
+  affordable: true,
+  wouldSend: true,
+  sent: false,
+};
+
+describe('Vault Deposits section', () => {
+  it("shows an empty state with a New Deposit action when there are no vault deposits", async () => {
+    const apiClient = vaultApiClient();
+    renderPortfolio(apiClient);
+
+    expect(await screen.findByText("You haven't made any vault deposits yet")).toBeVisible();
+    expect(screen.getByRole('button', { name: '+ New Deposit' })).toBeVisible();
+  });
+
+  it('lists existing vaults joined with their backing position asset', async () => {
+    const apiClient = vaultApiClient({
+      getPositions: vi.fn().mockResolvedValue({
+        positions: [{ positionId: 'call-1', asset: 'ETH', role: 'upside' }],
+      }),
+      getVaults: vi.fn().mockResolvedValue({
+        vaults: [{
+          vaultId: 'vault-1', positionId: 'call-1', status: 'active',
+          principalUsdc: 3, participationPct: 27.8451, maturity: '2026-09-06T08:00:00Z',
+        }],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    expect(await within(section).findByText('Ethereum')).toBeVisible();
+    expect(within(section).getByText('$3.00 USDC')).toBeVisible();
+    expect(within(section).getByText('27.85%')).toBeVisible();
+    expect(within(section).getByText('Active')).toBeVisible();
+    expect(screen.getByRole('button', { name: '+ New Deposit' })).toBeVisible();
+  });
+
+  it('disables Preview until a positive amount is entered, defaulting the asset to ETH', async () => {
+    const user = userEvent.setup();
+    const apiClient = vaultApiClient();
+    renderPortfolio(apiClient);
+
+    await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+
+    expect(screen.getByLabelText('Asset')).toHaveValue('ETH');
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled();
+  });
+
+  it('shows the preview breakdown and a Confirm Deposit action on a passing preview', async () => {
+    const user = userEvent.setup();
+    const apiClient = vaultApiClient({
+      getDepositPreflight: vi.fn().mockResolvedValue(depositPreview),
+    });
+    renderPortfolio(apiClient);
+
+    await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+    await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+
+    expect(apiClient.getDepositPreflight).toHaveBeenCalledWith('ETH', 5);
+    expect(await screen.findByText('22.5%')).toBeVisible();
+    expect(screen.getByText('$1.10 USDC')).toBeVisible();
+    expect(screen.getByText('$2,580.00 USDC')).toBeVisible();
+    expect(screen.getByText('$4.90 USDC')).toBeVisible();
+    expect(screen.getByText('$0.10 USDC')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Confirm Deposit' })).toBeVisible();
+  });
+
+  it('shows an asset-specific message on NO_BUYABLE_CALLS and keeps the form editable', async () => {
+    const user = userEvent.setup();
+    const noBuyable = Object.assign(new Error('no calls'), { payload: { error: { code: 'NO_BUYABLE_CALLS' } } });
+    const apiClient = vaultApiClient({
+      getDepositPreflight: vi.fn().mockRejectedValue(noBuyable),
+    });
+    renderPortfolio(apiClient);
+
+    await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+    await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+
+    expect(await screen.findByText('ETH has no available upside options right now — try a different asset')).toBeVisible();
+    expect(screen.getByLabelText('Asset')).toBeEnabled();
+    expect(screen.getByLabelText('Principal amount (USDC)')).toHaveValue(5);
+    expect(screen.queryByRole('button', { name: 'Confirm Deposit' })).not.toBeInTheDocument();
+  });
+
+  it('shows a generic message on any other preview error without clearing the form', async () => {
+    const user = userEvent.setup();
+    const apiClient = vaultApiClient({
+      getDepositPreflight: vi.fn().mockRejectedValue(new Error('offline')),
+    });
+    renderPortfolio(apiClient);
+
+    await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+    await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+
+    expect(await screen.findByText('Something went wrong previewing this deposit, please try again')).toBeVisible();
+    expect(screen.getByLabelText('Principal amount (USDC)')).toHaveValue(5);
+  });
+
+  it('clears a stale successful preview when the input changes', async () => {
+    const user = userEvent.setup();
+    const apiClient = vaultApiClient({
+      getDepositPreflight: vi.fn().mockResolvedValue(depositPreview),
+    });
+    renderPortfolio(apiClient);
+
+    await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+    await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(await screen.findByRole('button', { name: 'Confirm Deposit' })).toBeVisible();
+
+    await user.type(screen.getByLabelText('Principal amount (USDC)'), '0');
+    expect(screen.queryByRole('button', { name: 'Confirm Deposit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeVisible();
+  });
+
+  describe('confirming a deposit and polling for the result', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('polls GET /api/vault until the new deposit leaves pending, then stops', async () => {
+      const user = userEvent.setup({ delay: null });
+      const backingPosition = { positionId: 'call-9', asset: 'ETH', role: 'upside' };
+      const pendingVault = {
+        vaultId: 'vault-new', positionId: 'call-9', status: 'pending',
+        principalUsdc: 5, participationPct: 20, maturity: '2026-09-10T00:00:00Z',
+      };
+      const activeVault = { ...pendingVault, status: 'active' };
+
+      const getVaults = vi.fn()
+        .mockResolvedValueOnce({ vaults: [] })
+        .mockResolvedValueOnce({ vaults: [pendingVault] })
+        .mockResolvedValue({ vaults: [activeVault] });
+      const getPositions = vi.fn().mockResolvedValue({ positions: [backingPosition] });
+
+      const apiClient = vaultApiClient({
+        getVaults,
+        getPositions,
+        getDepositPreflight: vi.fn().mockResolvedValue(depositPreview),
+        postVaultDeposit: vi.fn().mockResolvedValue({
+          accepted: true, started: true, sent: null,
+          depositJob: { state: 'running', startedAt: new Date().toISOString(), elapsedSeconds: 0, error: null },
+          pollUrl: '/api/vault', expectedSeconds: 30,
+        }),
+      });
+      renderPortfolio(apiClient);
+
+      await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+      await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+      await user.click(screen.getByRole('button', { name: 'Preview' }));
+      await screen.findByRole('button', { name: 'Confirm Deposit' });
+
+      await act(async () => {
+        await user.click(screen.getByRole('button', { name: 'Confirm Deposit' }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(apiClient.postVaultDeposit).toHaveBeenCalledWith('ETH', 5);
+
+      expect(await screen.findByText('Deposit submitted, processing…')).toBeVisible();
+      const section = screen.getByRole('region', { name: 'Vault deposits' });
+      expect(within(section).getByText('Pending')).toBeVisible();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+
+      expect(within(section).getByText('Active')).toBeVisible();
+      expect(screen.queryByText('Deposit submitted, processing…')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '+ New Deposit' })).toBeVisible();
+    });
+
+    it('stops polling and shows a message after 60 seconds stuck pending', async () => {
+      const user = userEvent.setup({ delay: null });
+      const pendingVault = {
+        vaultId: 'vault-stuck', positionId: null, status: 'pending',
+        principalUsdc: 5, participationPct: 20, maturity: '2026-09-10T00:00:00Z',
+      };
+
+      const apiClient = vaultApiClient({
+        getVaults: vi.fn().mockResolvedValue({ vaults: [pendingVault] }),
+        getDepositPreflight: vi.fn().mockResolvedValue(depositPreview),
+        postVaultDeposit: vi.fn().mockResolvedValue({
+          accepted: true, started: true, sent: null,
+          depositJob: { state: 'running', startedAt: new Date().toISOString(), elapsedSeconds: 0, error: null },
+          pollUrl: '/api/vault', expectedSeconds: 30,
+        }),
+      });
+      renderPortfolio(apiClient);
+
+      await user.click(await screen.findByRole('button', { name: '+ New Deposit' }));
+      await user.type(screen.getByLabelText('Principal amount (USDC)'), '5');
+      await user.click(screen.getByRole('button', { name: 'Preview' }));
+      await screen.findByRole('button', { name: 'Confirm Deposit' });
+      await act(async () => {
+        await user.click(screen.getByRole('button', { name: 'Confirm Deposit' }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(64_000); });
+
+      expect(await screen.findByText('This is taking longer than expected, refresh to check status')).toBeVisible();
+    });
   });
 });

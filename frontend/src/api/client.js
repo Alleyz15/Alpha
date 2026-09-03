@@ -34,6 +34,9 @@ export const liveApi = {
   getPositions: () => request('/api/positions'),
   getPortfolio: () => request('/api/portfolio'),
   getPositionDetail: (positionId) => request(`/api/positions/${encodeURIComponent(positionId)}`),
+  getVaults: () => request('/api/vault'),
+  getDepositPreflight: (asset, principalUsdc) => request(`/api/vault/deposit-preflight?asset=${encodeURIComponent(asset)}&principalUsdc=${encodeURIComponent(principalUsdc)}`),
+  postVaultDeposit: (asset, principalUsdc) => request('/api/vault/deposit', { method: 'POST', body: JSON.stringify({ asset, principalUsdc }) }),
 };
 
 export const api = useMockApi ? mockApi : liveApi;

@@ -175,6 +175,84 @@
   overflow: hidden;
 }
 
+.vault-deposits-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.vault-deposits-empty {
+  min-height: 120px;
+  padding: var(--space-5);
+}
+
+.vault-deposit-form {
+  display: grid;
+  gap: var(--space-4);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.vault-deposit-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.vault-deposit-fields select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.vault-preview-card {
+  background: var(--bg-elevated);
+}
+
+.vault-preview-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-6);
+}
+
+.vault-preview-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.vault-preview-list dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.vault-preview-list dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.vault-deposit-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.vault-deposit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
 .portfolio-section-heading {
   flex: 0 0 auto;
   justify-content: space-between;
@@ -687,7 +765,9 @@
 
   .portfolio-stats,
   .pd-summary-grid,
-  .pd-detail-list {
+  .pd-detail-list,
+  .vault-deposit-fields,
+  .vault-preview-list {
     grid-template-columns: 1fr;
   }
 

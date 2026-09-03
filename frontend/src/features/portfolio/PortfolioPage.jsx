@@ -4,6 +4,7 @@ import { liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ClockIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
 import { Alert, AsyncState, Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
+import VaultDepositsSection from './VaultDepositsSection.jsx';
 import { buildPortfolioRows, formatDate, formatUsdc } from './portfolioViewModel.js';
 
 export default function PortfolioPage({ apiClient = liveApi }) {
@@ -38,6 +39,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
     () => buildPortfolioRows(portfolio?.holdings, positions),
     [portfolio, positions],
   );
+  const usdcAvailable = portfolio?.holdings?.find((holding) => holding.asset === 'USDC')?.amount ?? null;
 
   return (
     <main className="portfolio-page">
@@ -103,6 +105,8 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                   </div>
                 </Card>
               </section>
+
+              <VaultDepositsSection apiClient={apiClient} positions={positions} usdcAvailable={usdcAvailable} />
 
               <Card className="portfolio-overview-card">
                 <div className="portfolio-section-heading">
