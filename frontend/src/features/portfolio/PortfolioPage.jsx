@@ -90,7 +90,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                   <div className="portfolio-stat-icon"><WalletIcon /></div>
                   <div>
                     <span>{portfolio.totalValueComplete ? 'Portfolio value' : 'Priced holdings value'}</span>
-                    <MonoValue as="strong">{formatUsdc(portfolio.totalValueUsdc)}</MonoValue>
+                    <MonoValue as="strong">{formatUsdc(portfolio.totalValueUsdc) ?? '—'}</MonoValue>
                     <small>Live USDC prices · simulated holdings</small>
                   </div>
                 </Card>
@@ -163,8 +163,12 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                             <td>{row.expiryLabel}</td>
                             <td className="portfolio-action-cell">
                               {row.positionId ? (
-                                <Button variant="ghost" size="small" onClick={() => navigate(`/protection/${row.positionId}`)}>
-                                  View <ArrowIcon size={14} />
+                                <Button
+                                  variant="ghost"
+                                  size="small"
+                                  onClick={() => navigate(row.currentPositionCount > 1 ? `/positions/${row.symbol}` : `/protection/${row.positionId}`)}
+                                >
+                                  {row.currentPositionCount > 1 ? 'View positions' : 'View'} <ArrowIcon size={14} />
                                 </Button>
                               ) : (
                                 <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
@@ -178,6 +182,9 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                     </table>
                   </div>
                 )}
+                <p className="portfolio-position-scope">
+                  This holdings summary counts active and pending positions. Open an asset to see its complete history, including settled and failed requests.
+                </p>
               </Card>
             </>
           )}

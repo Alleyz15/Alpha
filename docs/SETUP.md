@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Seventeen instances now, one family.** The shape:
+**Nineteen instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -662,11 +662,56 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | a simulated fill refusing a size | the market will not fill it | our own wallet's USDC allowance was too small (**fixed** — see below) |
 | `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
 | `approve 9 --confirm` | one transaction, raising 5.86 to 9 | **two**; the reset landed and the raise ran out of gas, leaving 0 |
+| the CoinGecko overview | six assets, all priced | four; `per_page=4` dropped the two smallest, which rendered as coins with no data |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+#### Degrading gracefully means degrading quietly
+
+The Coin Detail overview fetches every asset in one CoinGecko call. `per_page`
+was hardcoded to `4` while the list held four assets. Adding AVAX and XRP made
+it six ids into a four-row page, and with `order=market_cap_desc` the provider
+returned the four largest and dropped SOL and AVAX.
+
+They came back as coins with **every field null** — no price, no market cap, no
+all-time high. Nothing threw. Nothing logged. The page rendered.
+
+That is because the code does something deliberately kind:
+
+```js
+// Our order, not the provider's, and an asset the provider omitted comes
+// back with null fields rather than vanishing from the list.
+normaliseOverview(byId.get(asset.coingeckoId) ?? {}, asset, updatedAt)
+```
+
+That fallback is correct and worth keeping. A provider genuinely missing a coin
+should not blank the page. But it makes "the provider had no data" and "we
+never asked properly" **indistinguishable in the output** — and the second one
+is our bug wearing the first one's clothes.
+
+> **Degrading gracefully means degrading quietly.** Every fallback that keeps a
+> page rendering also removes the signal that something is wrong. The kinder the
+> failure mode, the more it needs a separate alarm.
+
+Two consequences, both applied:
+
+**The omission is now logged.** The response still renders; the gap leaves a
+trace someone can find.
+
+**The test asserts the REQUEST, not the response.** This is the part that
+generalises. No assertion about the returned assets could have caught this — the
+shape was right, the count was right, the fields were merely null, which is a
+legitimate state. The bug was a page too small to hold the list, and that is
+only visible in the URL. So the test stubs `fetch`, calls `fetchOverview()`, and
+checks `per_page` equals `MARKET_ASSETS.length`.
+
+**And it was verified by reinstating the literal `4` and watching it fail.**
+Second time that has been necessary this week — see the `modules-link` test,
+which was proved by restoring the truncated file. A regression test that has
+never seen the regression is a hypothesis.
 
 #### An estimate is a measurement of a state you are about to leave
 

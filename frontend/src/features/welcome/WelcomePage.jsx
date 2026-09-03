@@ -164,7 +164,7 @@ function MarketCard({ asset, onProtect, onViewAsset }) {
   );
 }
 
-function WelcomeHeader({ onDashboard }) {
+function WelcomeHeader({ onMarkets, onPortfolio }) {
   return (
     <header className="welcome-header">
       <a className="welcome-brand" href="/" aria-label="Alpha home">
@@ -177,14 +177,26 @@ function WelcomeHeader({ onDashboard }) {
         <a href="#live-market">Live market</a>
         <a href="#product-reality">Product reality</a>
       </nav>
-      <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onDashboard}>
-        My protection
-      </button>
+      <div className="welcome-header__actions" aria-label="Product navigation">
+        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onMarkets}>
+          Markets
+        </button>
+        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onPortfolio}>
+          My Portfolio
+        </button>
+      </div>
     </header>
   );
 }
 
-export default function WelcomePage({ apiClient, marketPollInterval = 30_000, onProtect = () => {}, onViewAsset = () => {}, onDashboard = () => {} }) {
+export default function WelcomePage({
+  apiClient,
+  marketPollInterval = 30_000,
+  onProtect = () => {},
+  onViewAsset = () => {},
+  onMarkets = () => {},
+  onPortfolio = () => {},
+}) {
   const rootRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
@@ -209,7 +221,7 @@ export default function WelcomePage({ apiClient, marketPollInterval = 30_000, on
   return (
     <div className="welcome-page" ref={rootRef}>
       <div className="welcome-ambient" aria-hidden="true" />
-      <WelcomeHeader onDashboard={onDashboard} />
+      <WelcomeHeader onMarkets={onMarkets} onPortfolio={onPortfolio} />
 
       <main>
         <section className="welcome-hero" aria-labelledby="welcome-title">

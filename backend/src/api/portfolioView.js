@@ -92,14 +92,15 @@ export function summariseValue(holdings) {
 }
 
 /**
- * Whether a position is downside protection the user actually holds.
+ * Whether a position is downside protection at all.
  *
- * Two conditions, deliberately separate:
+ * SHAPE ONLY - it says nothing about status. A put that failed is still a put.
+ * Callers add their own status test, which is why this is separate: conflating
+ * "is protection" with "is live protection" is how a settled position ends up
+ * counted as cover.
  *
- *   role === 'protection'   a put. A call is upside participation and belongs
- *                           in neither count - the dashboard already conflated
- *                           these once (see strikeView).
- *   status === 'active'     not settled, not expired, not failed.
+ * A call is upside participation and is protection in neither sense. The
+ * dashboard conflated the two once already (see strikeView).
  *
  * @param {object} position
  * @returns {boolean}
@@ -109,19 +110,55 @@ export function isDownsideProtection(position) {
 }
 
 /**
- * How much protection is real, and how much is merely requested.
+ * Every status a position row may hold, from the CHECK constraint.
+ *
+ * Listed here so the counts below are written against the SCHEMA rather than
+ * against whatever the demo database happens to contain. `pending` and
+ * `pending_verification` do not occur in the demo data at all, which is exactly
+ * how they came to be counted nowhere.
+ */
+export const POSITION_STATUSES = Object.freeze([
+  'pending',                // row written, transaction not yet broadcast (BR-14)
+  'pending_verification',   // broadcast, outcome unknown - never blind-retry
+  'active',                 // confirmed on-chain, not yet expired
+  'failed',                 // reverted; nothing was bought
+  'settled',                // expired in the money, payout recorded
+  'expired_worthless',      // expired out of the money, payout zero
+  'needs_review',           // past expiry but still unsettled on-chain (BR-27)
+]);
+
+/**
+ * Statuses that mean "on its way, not yet real".
+ *
+ * Both are states where the user has been charged and no confirmed position
+ * exists. They are the two the operator model produces between the confirm
+ * button and the fill.
+ */
+export const PENDING_STATUSES = Object.freeze(['pending', 'pending_verification']);
+
+/**
+ * How much protection is real, and how much is merely on its way.
  *
  * ---------------------------------------------------------------------------
  * PENDING IS COUNTED SEPARATELY AND NEVER FOLDED INTO ACTIVE.
  * ---------------------------------------------------------------------------
  *
- * `active` requires `verifiedOnChain` - a confirmed event, not a transaction
- * hash. A position whose row exists and whose money has been debited is a
- * promise; a position with a confirmed fill is a position. The operator model
- * means the gap between them can be hours (see "the operator model has no
- * timeout" in SETUP.md), so this is not a rare edge.
+ *   active    status 'active' AND verifiedOnChain - a confirmed event, not a
+ *             transaction hash and not a row existing
+ *   pending   status 'pending' or 'pending_verification', OR status 'active'
+ *             with no confirmed event
  *
- * Adding the two together would let the interface say "3 protected" when one of
+ * The last clause is defensive. 'active' is written on confirmation so it
+ * should always carry a confirmed event; if it ever does not, the position is
+ * unproven and belongs in pending rather than in a count the interface presents
+ * as protection the user holds.
+ *
+ * Everything else - failed, settled, expired_worthless, needs_review - is in
+ * NEITHER count. Those are over. needs_review in particular is past expiry and
+ * merely unreconciled, so counting it as pending would suggest something is
+ * still coming.
+ *
+ * Adding the two totals would let the interface say "3 protected" when one of
  * the three has not been bought. That is the single worst thing this endpoint
  * could do, because it is the claim the whole product rests on.
  *
@@ -135,10 +172,13 @@ export function countProtection(positions, verified) {
 
   for (const p of positions ?? []) {
     if (!isDownsideProtection(p)) continue;
-    if (p.status !== 'active') continue;
 
-    if (verified(p)) activeProtectionCount += 1;
-    else pendingProtectionCount += 1;
+    if (p.status === 'active') {
+      if (verified(p)) activeProtectionCount += 1;
+      else pendingProtectionCount += 1;
+    } else if (PENDING_STATUSES.includes(p.status)) {
+      pendingProtectionCount += 1;
+    }
   }
 
   return { activeProtectionCount, pendingProtectionCount };
@@ -171,4 +211,75 @@ export function nextExpiry(positions, verified) {
     .sort();
 
   return dates[0] ?? null;
+}
+
+/**
+ * One authoritative action per holding row.
+ *
+ * ---------------------------------------------------------------------------
+ * A ROW HAS ONE BUTTON AND A USER CAN HAVE MANY POSITIONS ON ONE ASSET.
+ * ---------------------------------------------------------------------------
+ *
+ * So the choice of WHICH position that button opens is a decision, and making
+ * it here means every surface makes the same one. Left to the interface it
+ * would be "the first in the array", which is whatever the database returned.
+ *
+ *   protectable           can we quote this asset at all
+ *   hasActiveProtection   is there confirmed, live downside protection on it
+ *   protectionPositionId  the position to open, or null
+ *
+ * `protectionPositionId` is the SOONEST-EXPIRING active protection on that
+ * asset - the one the user most needs to look at, and the one whose expiry
+ * `nextExpiry` may already be reporting. Taking the newest instead would open
+ * a position expiring in a month while one expires tomorrow.
+ *
+ * It is null whenever `hasActiveProtection` is false, INCLUDING when protection
+ * is merely pending. A View button that opens an unfilled position invites the
+ * user to read it as cover they have. Pending is surfaced by
+ * pendingProtectionCount, which is a count and not a promise.
+ *
+ * Same judgement as gating the BaseScan link on verifiedOnChain rather than on
+ * a transaction hash. Reviewed and kept deliberately; held by the test
+ * 'PENDING protection gives no View target'.
+ *
+ * `protectable` is false for USDC - it is the spending balance, not an exposure
+ * to protect, and a "Buy Protection" button on a stablecoin is nonsense. It is
+ * also false for any asset we cannot actually quote, so a holding never gets a
+ * button leading to a page that 404s.
+ *
+ * @param {ReturnType<typeof buildHoldings>} holdings
+ * @param {object[]} positions
+ * @param {(p:object)=>boolean} verified
+ * @param {string[]} offeredSymbols - the assets we can quote (OFFERED_ASSETS)
+ * @returns {ReturnType<typeof buildHoldings>} the same rows, with the three fields added
+ */
+export function annotateHoldings(holdings, positions, verified, offeredSymbols) {
+  const offered = new Set(offeredSymbols ?? []);
+
+  return holdings.map((h) => {
+    // Soonest first, so [0] is the one to open.
+    const live = (positions ?? [])
+      .filter((p) => p.asset === h.asset
+        && isDownsideProtection(p)
+        && p.status === 'active'
+        && verified(p))
+      // Soonest expiry first, then id as a tiebreak. The tiebreak is not
+      // decoration: the demo holds two ETH puts expiring in the same hour, and
+      // without it the View target would be decided by the order the database
+      // happened to return rows in - stable today, and silently different the
+      // first time a query gains an ORDER BY.
+      //
+      // Reviewed and kept deliberately. Held by the test
+      // 'the View target is stable when two positions share an expiry'.
+      .sort((a, b) => String(a.expiry).localeCompare(String(b.expiry))
+        || String(a.id).localeCompare(String(b.id)));
+
+    return {
+      ...h,
+      // USDC is the spending balance, never an exposure.
+      protectable: h.asset !== 'USDC' && offered.has(h.asset),
+      hasActiveProtection: live.length > 0,
+      protectionPositionId: live[0]?.id ?? null,
+    };
+  });
 }

@@ -41,12 +41,37 @@
 // reach client.js, which throws without credentials - and assessAsset() is the
 // part worth testing. A module that cannot be imported cannot be tested.
 
-/** The assets the demo offers. AVAX and XRP scored 2/6 and 0/6 in simulation. */
+/**
+ * The assets the demo offers.
+ *
+ * ---------------------------------------------------------------------------
+ * AVAX AND XRP WERE EXCLUDED FOR A REASON THAT NO LONGER HOLDS.
+ * ---------------------------------------------------------------------------
+ *
+ * They scored 2/6 and 0/6 when sizes were COMPUTED and sent unverified, because
+ * some orders reject sizes arithmetic says are fine (InvalidNumContracts, rule
+ * unknown - see fillableSize.js). Quote sizing now confirms every size against
+ * the chain before quoting it and refuses the tier if none passes, so a size
+ * that would have failed is no longer offered.
+ *
+ * Measured 2 Sep 2026 through the real quote path, at the demo holdings:
+ *
+ *   AVAX  40 units   2 tiers (one reduced 40 -> 36, the book's own refusal)
+ *   XRP   300 units  3 tiers, all confirmed
+ *
+ * This list must stay in step with marketdata/assets.js. A holding that is
+ * offered here but missing there gets a Buy Protection button and a Coin Detail
+ * page with no data - which is worse than not offering it, because a smaller
+ * scope is coherent and a half-wired one is broken. portfolioView derives
+ * `protectable` from this list rather than repeating it, for the same reason.
+ */
 export const OFFERED_ASSETS = Object.freeze([
-  { symbol: 'ETH', name: 'Ethereum' },
-  { symbol: 'BTC', name: 'Bitcoin' },
-  { symbol: 'SOL', name: 'Solana' },
-  { symbol: 'BNB', name: 'BNB' },
+  { symbol: 'ETH',  name: 'Ethereum' },
+  { symbol: 'BTC',  name: 'Bitcoin' },
+  { symbol: 'SOL',  name: 'Solana' },
+  { symbol: 'BNB',  name: 'BNB' },
+  { symbol: 'AVAX', name: 'Avalanche' },
+  { symbol: 'XRP',  name: 'XRP' },
 ]);
 
 /**

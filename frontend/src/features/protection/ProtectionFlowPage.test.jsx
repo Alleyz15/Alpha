@@ -53,7 +53,7 @@ function quoteResponse() {
           tier: 'middle', floorUsdc: 70_000, protectionPct: 9.7,
           expiry: new Date(createdAt.getTime() + 86_400_000).toISOString(),
         },
-        size: { protectedUnits: 0.005 },
+        size: { protectedUnits: 0.005, confirmed: true, unconfirmedReason: null },
         cost: { premiumUsdc: 1.25 },
         maxLoss: { forConfirmation: 38.75 },
         disclosure: {
@@ -231,12 +231,37 @@ describe('ProtectionFlowPage', () => {
       tierId: 'tier-balanced',
     }));
     expect(await screen.findByRole('heading', { name: 'Your request is waiting for execution.' })).toBeVisible();
-    expect(screen.getByText('Funds locked')).toBeVisible();
+    expect(screen.getByText('Funds held')).toBeVisible();
     expect(screen.getByText(/No transaction hash was returned/)).toBeVisible();
     expect(screen.queryByRole('link', { name: /BaseScan/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'View my protection' }));
     expect(onViewDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['operator_spend_capacity', /could not confirm this amount against the operator’s current USDC spending capacity/i],
+    ['capacity_unreadable', /could not read the operator’s current USDC spending capacity/i],
+  ])('never labels an unconfirmed %s quote size as protected in Configure or Review', async (unconfirmedReason, expectedMessage) => {
+    const user = userEvent.setup();
+    const response = quoteResponse();
+    response.tiers[0].size.confirmed = false;
+    response.tiers[0].size.unconfirmedReason = unconfirmedReason;
+    const client = apiClient({ createQuote: vi.fn().mockResolvedValue(response) });
+    render(<ProtectionFlowPage symbol="BTC" apiClient={client} onExit={vi.fn()} />);
+    await completeConfiguration(user);
+
+    await user.click(screen.getByRole('button', { name: /Get live quote/ }));
+    expect((await screen.findAllByText('Computed protection amount')).length).toBeGreaterThan(0);
+    expect(screen.getByText(expectedMessage)).toBeVisible();
+    expect(screen.queryByText('Protected amount')).not.toBeInTheDocument();
+    expect(screen.queryByText('Amount protected')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Continue to review/ }));
+    expect(screen.getByText('Computed protection amount')).toBeVisible();
+    expect(screen.getByText(expectedMessage)).toBeVisible();
+    expect(screen.queryByText('Protected amount')).not.toBeInTheDocument();
+    expect(screen.queryByText('Amount protected')).not.toBeInTheDocument();
   });
 
   it('does not let an expired quote continue to Review', async () => {

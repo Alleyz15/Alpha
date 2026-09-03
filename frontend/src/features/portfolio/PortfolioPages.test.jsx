@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import PortfolioPage from './PortfolioPage.jsx';
 import ProtectionDetailsPage from './ProtectionDetailsPage.jsx';
+import DashboardPage from '../dashboard/DashboardPage.jsx';
 
 const portfolio = {
   totalValueUsdc: 1830,
@@ -37,14 +38,44 @@ const protectedPosition = {
 describe('Phase 6 pages', () => {
   it('shows one truthful action per holding and excludes cash from protection rows', async () => {
     const user = userEvent.setup();
+    const secondProtection = {
+      ...protectedPosition,
+      positionId: 'put-2',
+      protectionFloorUsdc: 69_000,
+    };
+    const upsidePosition = {
+      ...protectedPosition,
+      positionId: 'call-1',
+      role: 'upside',
+      optionType: 'call',
+      protectionFloorUsdc: null,
+      upsideThresholdUsdc: 80_000,
+    };
+    const failedPosition = {
+      ...protectedPosition,
+      positionId: 'failed-1',
+      status: 'failed',
+      paymentStatus: 'refunded',
+      verifiedOnChain: false,
+    };
+    const completedPosition = {
+      ...protectedPosition,
+      positionId: 'ccdcbf28',
+      status: 'expired_worthless',
+      paymentStatus: 'none',
+      premiumPaidUsdc: null,
+    };
+    const positions = [failedPosition, completedPosition, protectedPosition, secondProtection, upsidePosition];
     const apiClient = {
       getPortfolio: vi.fn().mockResolvedValue(portfolio),
-      getPositions: vi.fn().mockResolvedValue({ positions: [protectedPosition] }),
+      getPositions: vi.fn().mockResolvedValue({ positions }),
+      getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
     };
     render(
       <MemoryRouter initialEntries={['/portfolio']}>
         <Routes>
           <Route path="/portfolio" element={<PortfolioPage apiClient={apiClient} />} />
+          <Route path="/positions/:symbol" element={<DashboardPage apiClient={apiClient} assetFilter="BTC" />} />
           <Route path="/protection/:positionId" element={<div>Opened protection</div>} />
           <Route path="/protect/:symbol" element={<div>Opened checkout</div>} />
         </Routes>
@@ -55,11 +86,23 @@ describe('Phase 6 pages', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(3);
     expect(within(table).queryByText('USDC')).not.toBeInTheDocument();
     expect(within(table).getAllByRole('button')).toHaveLength(2);
-    expect(within(table).getByRole('button', { name: /View/ })).toBeVisible();
+    expect(within(table).getByText('Protected · 2 positions')).toBeVisible();
+    expect(within(table).getByRole('button', { name: /View positions/ })).toBeVisible();
     expect(within(table).getByRole('button', { name: 'Buy protection' })).toBeVisible();
+    expect(screen.getByText(/Open an asset to see its complete history, including settled and failed requests/)).toBeVisible();
 
-    await user.click(within(table).getByRole('button', { name: /View/ }));
-    expect(screen.getByText('Opened protection')).toBeVisible();
+    await user.click(within(table).getByRole('button', { name: /View positions/ }));
+    expect(await screen.findByRole('heading', { name: 'Recorded positions' })).toBeVisible();
+    expect(screen.getByText('5 positions')).toBeVisible();
+    expect(screen.getByText('Not needed')).toBeVisible();
+    expect(screen.getByText('Failed')).toBeVisible();
+    expect(screen.getByText('No user payment')).toBeVisible();
+
+    const cards = screen.getAllByRole('article').map((card) => card.textContent);
+    expect(cards.findIndex((text) => text.includes('Not needed')))
+      .toBeGreaterThan(cards.findLastIndex((text) => text.includes('Active')));
+    expect(cards.findIndex((text) => text.includes('Failed')))
+      .toBeGreaterThan(cards.findIndex((text) => text.includes('Not needed')));
   });
 
   it('renders the requested contract and order sections without payout or PnL cards', async () => {
@@ -106,5 +149,30 @@ describe('Phase 6 pages', () => {
     expect(await screen.findByText('Live chart feed unavailable')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Order details' })).toBeVisible();
     expect(screen.getByText(/No price path has been invented/)).toBeVisible();
+  });
+
+  it('does not claim a failed, refunded request has protection or a price floor', async () => {
+    const failedPosition = {
+      ...protectedPosition,
+      status: 'failed',
+      paymentStatus: 'refunded',
+      verifiedOnChain: false,
+      executionState: 'failed',
+      purchasedAt: null,
+      explorerUrl: null,
+    };
+    const apiClient = {
+      getPositionDetail: vi.fn().mockResolvedValue(failedPosition),
+      getAssetCandles: vi.fn().mockResolvedValue({ candles: [] }),
+    };
+    render(
+      <MemoryRouter initialEntries={['/protection/put-1']}>
+        <Routes><Route path="/protection/:positionId" element={<ProtectionDetailsPage apiClient={apiClient} />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('No protection became active. Execution failed and the held funds were refunded.')).toBeVisible();
+    const meaningSection = screen.getByRole('heading', { name: 'What this means for you' }).closest('.pd-meaning-card');
+    expect(within(meaningSection).queryByText(/price floor/i)).not.toBeInTheDocument();
   });
 });

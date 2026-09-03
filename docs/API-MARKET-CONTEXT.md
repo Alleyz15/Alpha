@@ -48,8 +48,14 @@ order book on every request.
 }
 ```
 
-Always four assets: **ETH, BTC, SOL, BNB**. Never AVAX or XRP — they scored 2/6
-and 0/6 in simulation and are deliberately excluded.
+Always six assets: **ETH, BTC, SOL, BNB, AVAX, XRP** — the same six
+`/api/assets/*` serves, so no holding gets a Buy Protection button and a Coin
+Detail page with no data.
+
+AVAX and XRP were excluded while they scored 2/6 and 0/6 in simulation. Quote
+sizing now confirms every size against the chain before quoting it and refuses
+the tier if none passes, so the reason no longer holds. Measured 2 Sep 2026:
+AVAX offered 2 tiers and XRP offered 3.
 
 ---
 

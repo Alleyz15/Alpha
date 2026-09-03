@@ -266,6 +266,15 @@
   white-space: nowrap;
 }
 
+.portfolio-position-scope {
+  margin: var(--space-4) 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .pd-container {
   width: min(calc(100% - 40px), var(--content-max-protection));
   margin: 0 auto;

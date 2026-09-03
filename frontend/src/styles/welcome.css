@@ -33,10 +33,13 @@
 }
 
 .welcome-header {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 20;
   min-height: 86px;
   border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(16px);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -97,8 +100,11 @@
   color: var(--signal);
 }
 
-.welcome-header > button {
+.welcome-header__actions {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .welcome-hero {
@@ -1249,8 +1255,7 @@
     min-height: 74px;
   }
 
-  .welcome-header .welcome-brand small,
-  .welcome-header > button {
+  .welcome-header .welcome-brand small {
     display: none;
   }
 

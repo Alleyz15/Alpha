@@ -52,7 +52,7 @@ export default function ReviewProtectionStep({
             <div><dt>Asset</dt><dd>{asset.name} ({asset.symbol})</dd></div>
             <div><dt>Price when quoted</dt><dd className="numeric">{quote.spot}</dd></div>
             <div><dt>Amount requested</dt><dd>{quote.requestedAmount}</dd></div>
-            <div><dt>Amount protected</dt><dd>{tier.protectedAmount}</dd></div>
+            <div><dt>{tier.sizeConfirmed ? 'Protected amount' : 'Computed protection amount'}</dt><dd>{tier.protectedAmount}</dd></div>
             <div><dt>Protection floor</dt><dd className="numeric">{tier.floor}</dd></div>
             <div><dt>Protection premium</dt><dd className="numeric">{tier.cost}</dd></div>
             <div><dt>Maximum loss on protected portion</dt><dd className="numeric">{tier.maximumLoss}</dd></div>

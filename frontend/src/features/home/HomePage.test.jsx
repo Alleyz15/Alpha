@@ -28,9 +28,9 @@ function apiClient(overrides = {}) {
 
 function renderHome(client) {
   return render(
-    <MemoryRouter initialEntries={['/dashboard']}>
+    <MemoryRouter initialEntries={['/markets']}>
       <Routes>
-        <Route path="/dashboard" element={<HomePage apiClient={client} />} />
+        <Route path="/markets" element={<HomePage apiClient={client} />} />
         <Route path="/portfolio" element={<div>Portfolio route</div>} />
         <Route path="/coin/:symbol" element={<div>Coin detail route</div>} />
       </Routes>
@@ -46,7 +46,8 @@ describe('HomePage', () => {
     expect(await screen.findByText('$4,703.20 USDC')).toBeVisible();
     expect(screen.getByText('Live USDC prices · simulated holdings')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Trending now' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Top cryptocurrencies' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Supported assets' })).toBeVisible();
+    expect(screen.getByText(/Alpha’s supported assets/)).toBeVisible();
     expect(screen.getByText(/aggregated USD data.*Binance USDT candles/i)).toBeVisible();
     expect(await screen.findAllByLabelText(/seven-day Binance USDT trend/)).toHaveLength(4);
     expect(client.getAssetCandles).toHaveBeenCalledTimes(4);

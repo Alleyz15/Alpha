@@ -269,7 +269,7 @@ export default function ProtectionFlowPage({
   symbol,
   apiClient,
   onExit = () => window.location.assign('/'),
-  onViewDashboard = () => window.location.assign('/dashboard'),
+  onViewDashboard = () => window.location.assign('/portfolio'),
   marketPollInterval = 30_000,
 }) {
   if (!isKnownAsset(symbol)) {

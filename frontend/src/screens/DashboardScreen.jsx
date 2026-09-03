@@ -33,8 +33,7 @@ function PositionCard({ position, isMock }) {
 
       <div className="position-metric position-metric--payment">
         <small>Payment</small>
-        <strong>{position.paymentStatusLabel}</strong>
-        {position.paymentStatus === 'paid' && position.premiumLabel ? <small>{position.premiumLabel}</small> : null}
+        <strong>{position.premiumPresentation}</strong>
       </div>
 
       <div className="position-evidence">
@@ -103,7 +102,7 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
           <header className="dashboard-section-heading">
             <div>
               <h2 id="positions-heading">Recorded positions</h2>
-              <p>Only completed on-chain fills include a BaseScan verification link.</p>
+              <p>Current positions appear first. Completed and failed requests remain below as history; only on-chain fills include a BaseScan link.</p>
             </div>
             <span>{positions.length} {positions.length === 1 ? 'position' : 'positions'}</span>
           </header>

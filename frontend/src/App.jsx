@@ -1,7 +1,8 @@
-import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
+import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import HomePage from './features/home/HomePage.jsx';
 import PortfolioPage from './features/portfolio/PortfolioPage.jsx';
 import ProtectionDetailsPage from './features/portfolio/ProtectionDetailsPage.jsx';
@@ -16,7 +17,8 @@ function WelcomeRoute() {
       apiClient={liveApi}
       onProtect={(symbol) => navigate(`/protect/${symbol}`)}
       onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
-      onDashboard={() => navigate('/portfolio')}
+      onMarkets={() => navigate('/markets')}
+      onPortfolio={() => navigate('/portfolio')}
     />
   );
 }
@@ -30,7 +32,7 @@ function ProtectionRoute() {
       symbol={decodeURIComponent(symbol).toUpperCase()}
       apiClient={liveApi}
       onExit={() => navigate('/')}
-      onViewDashboard={() => navigate('/dashboard')}
+      onViewDashboard={() => navigate('/portfolio')}
     />
   );
 }
@@ -44,11 +46,16 @@ function CoinDetailRoute() {
     <CoinDetailPage
       symbol={normalizedSymbol}
       apiClient={liveApi}
-      onBack={() => navigate('/#live-market')}
-      onDashboard={() => navigate('/dashboard')}
+      onBack={() => navigate('/markets')}
+      onDashboard={() => navigate('/portfolio')}
       onProtect={() => navigate(`/protect/${normalizedSymbol}`)}
     />
   );
+}
+
+function AssetPositionsRoute() {
+  const { symbol = '' } = useParams();
+  return <DashboardPage assetFilter={decodeURIComponent(symbol).toUpperCase()} />;
 }
 
 function NotFoundPage() {
@@ -70,9 +77,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<WelcomeRoute />} />
-      <Route path="/dashboard" element={<HomePage />} />
-      <Route path="/home" element={<HomePage />} />
+      <Route path="/markets" element={<HomePage />} />
+      <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
+      <Route path="/home" element={<Navigate replace to="/markets" />} />
       <Route path="/portfolio" element={<PortfolioPage />} />
+      <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
       <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
       <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
       <Route path="/protect/:symbol" element={<ProtectionRoute />} />

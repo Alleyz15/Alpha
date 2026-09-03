@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { strikeView, paymentView, sumPayments } from '../src/api/positionView.js';
+import { strikeView, paymentView, sumPayments, usdcOrNull } from '../src/api/positionView.js';
 
 test('a put strike is a floor and a call strike is not', () => {
   const put = strikeView('put', 2300);
@@ -198,4 +198,29 @@ test('internal event names are mapped to interface names', () => {
 test('an unmapped event type passes through rather than vanishing', () => {
   const t = timelineView([{ event_type: 'something_new', created_at: 'T0' }]);
   assert.equal(t[0].event, 'something_new');
+});
+
+// --- absent is not zero ----------------------------------------------------
+
+test('a missing premium is null, never 0', () => {
+  // $0.00 says the protection was free. The third time this shape appeared:
+  // a call's protection floor, the CoinGecko overview, now premiumPaidUsdc.
+  assert.equal(usdcOrNull(null), null);
+  assert.equal(usdcOrNull(undefined), null);
+});
+
+test('a real zero is preserved as zero', () => {
+  // A recorded 0 is a fact - the payout on an expired_worthless position. Only
+  // ABSENCE becomes null.
+  assert.equal(usdcOrNull(0), 0);
+  assert.equal(usdcOrNull('0'), 0);
+});
+
+test('numeric strings from the database are converted', () => {
+  assert.equal(usdcOrNull('1.523456'), 1.523456);
+});
+
+test('an unparseable value is null rather than NaN', () => {
+  // NaN renders as "NaN" on screen and compares false to everything.
+  assert.equal(usdcOrNull('not a number'), null);
 });

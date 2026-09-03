@@ -23,18 +23,34 @@ describe('portfolio view model', () => {
       [{ positionId: 'put-1', asset: 'BTC', role: 'protection', status: 'active', verifiedOnChain: false, expiry: '2026-09-05T00:00:00Z' }],
     );
 
-    expect(row.protectionLabel).toBe('Being set up');
+    expect(row.protectionLabel).toBe('Being set up · 1 position');
     expect(row.positionId).toBe('put-1');
   });
 
+  it('counts confirmed protection separately from all current asset positions and excludes failed requests', () => {
+    const [row] = buildPortfolioRows(
+      [{ asset: 'ETH', amount: 0.4, priceUsdc: 2400, valueUsdc: 960 }],
+      [
+        { positionId: 'put-1', asset: 'ETH', role: 'protection', status: 'active', verifiedOnChain: true, expiry: '2026-09-05T00:00:00Z' },
+        { positionId: 'put-2', asset: 'ETH', role: 'protection', status: 'active', verifiedOnChain: true, expiry: '2026-09-06T00:00:00Z' },
+        { positionId: 'call-1', asset: 'ETH', role: 'upside', status: 'active', verifiedOnChain: true },
+        { positionId: 'call-2', asset: 'ETH', role: 'upside', status: 'active', verifiedOnChain: true },
+        { positionId: 'failed-1', asset: 'ETH', role: 'protection', status: 'failed', paymentStatus: 'refunded', verifiedOnChain: false },
+      ],
+    );
+
+    expect(row.protectionLabel).toBe('Protected · 2 positions');
+    expect(row.currentPositionCount).toBe(4);
+  });
+
   it('preserves unavailable prices instead of displaying zero', () => {
-    expect(formatUsdc(null)).toBe('—');
+    expect(formatUsdc(null)).toBeNull();
     expect(formatUsdc(0)).toBe('$0.00 USDC');
   });
 });
 
 describe('protection detail view model', () => {
-  it('shows operator purchases as no payment and keeps a missing entry price missing', () => {
+  it('uses the shared no-payment presentation and keeps a missing entry price missing', () => {
     const detail = toProtectionDetailViewModel({
       asset: 'ETH', role: 'protection', protectedAmount: 0.4,
       protectionFloorUsdc: 2200, upsideThresholdUsdc: null,
@@ -45,9 +61,57 @@ describe('protection detail view model', () => {
       timeline: [],
     });
 
-    expect(detail.premium.value).toBe('No payment');
+    expect(detail.premium.value).toBe('No user payment');
     expect(detail.entryPriceLabel).toBe('—');
     expect(detail.orderIdLabel).toBe('—');
     expect(detail.paymentMethodLabel).toBe('Operator purchase — no user payment');
+  });
+
+  it.each([
+    ['paid', 12, '$12.00 USDC'],
+    ['held', 12, 'Funds held'],
+    ['refunded', 12, 'Refunded'],
+    [null, 12, '—'],
+  ])('uses the shared %s premium presentation', (paymentStatus, premiumPaidUsdc, expected) => {
+    const detail = toProtectionDetailViewModel({
+      asset: 'ETH', role: 'protection', protectedAmount: 0.4,
+      protectionFloorUsdc: 2200, status: 'active', expiry: '2026-09-05T00:00:00Z',
+      paymentStatus, premiumPaidUsdc, timeline: [],
+    });
+
+    expect(detail.premium.value).toBe(expected);
+  });
+
+  it('never claims a failed, refunded request has a price floor', () => {
+    const detail = toProtectionDetailViewModel({
+      asset: 'BTC', role: 'protection', protectedAmount: 0.01,
+      protectionFloorUsdc: 76_500, status: 'failed', paymentStatus: 'refunded',
+      expiry: '2026-09-05T00:00:00Z', timeline: [],
+    });
+
+    expect(detail.meaning).toBe('No protection became active. Execution failed and the held funds were refunded.');
+    expect(detail.meaning).not.toMatch(/price floor/i);
+  });
+
+  it('describes a pending request without claiming protection is active', () => {
+    const detail = toProtectionDetailViewModel({
+      asset: 'ETH', role: 'protection', protectedAmount: 0.1,
+      protectionFloorUsdc: 2_200, status: 'pending_fill', paymentStatus: 'held',
+      expiry: '2026-09-05T00:00:00Z', timeline: [],
+    });
+
+    expect(detail.meaning).toMatch(/waiting for execution/i);
+    expect(detail.meaning).toMatch(/no protection is active/i);
+    expect(detail.meaning).not.toMatch(/has a .*price floor/i);
+  });
+
+  it('keeps the price-floor explanation for active protection', () => {
+    const detail = toProtectionDetailViewModel({
+      asset: 'ETH', role: 'protection', protectedAmount: 0.1,
+      protectionFloorUsdc: 2_200, status: 'active', paymentStatus: 'paid',
+      expiry: '2026-09-05T00:00:00Z', timeline: [],
+    });
+
+    expect(detail.meaning).toMatch(/has a \$2,200\.00 USDC price floor at expiry/i);
   });
 });
