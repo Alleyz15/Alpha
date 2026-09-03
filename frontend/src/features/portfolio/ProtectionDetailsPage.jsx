@@ -60,7 +60,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
     let current = true;
     if (!position?.asset) return undefined;
     setChartState('loading');
-    apiClient.getAssetCandles(position.asset, '1W')
+    apiClient.getAssetCandles(position.asset, { interval: '1h', limit: 168 })
       .then((response) => {
         if (!current) return;
         setCandles(response.candles ?? []);

@@ -33,7 +33,7 @@ export default function useHomeData(apiClient, summaryPollInterval = 45_000) {
     if (!unrequestedSymbols.length) return;
     unrequestedSymbols.forEach((symbol) => requestedCandleSymbols.current.add(symbol));
     const results = await Promise.allSettled(
-      unrequestedSymbols.map((symbol) => apiClient.getAssetCandles(symbol, '1W')),
+      unrequestedSymbols.map((symbol) => apiClient.getAssetCandles(symbol, { interval: '1h', limit: 168 })),
     );
     if (!mounted.current) return;
     const nextCandles = {};

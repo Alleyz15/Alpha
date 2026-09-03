@@ -27,7 +27,7 @@ export const liveApi = {
   getDemoContext: () => request('/api/demo-context'),
   getMarketContext: () => request('/api/market-context'),
   getAssetsOverview: () => request('/api/assets/overview'),
-  getAssetCandles: (symbol, range = '1D') => request(`/api/assets/${encodeURIComponent(symbol)}/candles?range=${encodeURIComponent(range)}`),
+  getAssetCandles: (symbol, { interval = '5m', limit = 200 } = {}) => request(`/api/assets/${encodeURIComponent(symbol)}/candles?interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`),
   getAssetOrderBook: (symbol) => request(`/api/assets/${encodeURIComponent(symbol)}/order-book`),
   createQuote: (body) => request('/api/quote', { method: 'POST', body: JSON.stringify(body) }),
   purchaseQuote: (body) => request('/api/purchase', { method: 'POST', body: JSON.stringify(body) }),

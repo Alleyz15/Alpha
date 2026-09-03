@@ -51,7 +51,7 @@ describe('HomePage', () => {
     expect(screen.getByText(/aggregated USD data.*Binance USDT candles/i)).toBeVisible();
     expect(await screen.findAllByLabelText(/seven-day Binance USDT trend/)).toHaveLength(4);
     expect(client.getAssetCandles).toHaveBeenCalledTimes(4);
-    expect(client.getAssetCandles).toHaveBeenCalledWith('ETH', '1W');
+    expect(client.getAssetCandles).toHaveBeenCalledWith('ETH', { interval: '1h', limit: 168 });
 
     expect(screen.queryByText(/Good Morning/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/AI Market Brief/i)).not.toBeInTheDocument();
