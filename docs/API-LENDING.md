@@ -51,9 +51,19 @@ protectionFloorUsdc $2,360  x  numContracts 0.109011
 Render these; do not recompute them. Two implementations of one equation
 eventually disagree, and the disagreement would be about money.
 
-**The limit drifts slightly upward** as expiry approaches — the interest reserve
-shrinks with the term. A user shown a figure and clicking a moment later is
-always *within* the newer limit, never over it.
+**The limit drifts slightly upward** as expiry approaches, because the interest
+reserve shrinks with the term. Three calls seconds apart returned
+`257.237754`, `257.237755`, `257.237756`.
+
+> **The direction is load-bearing, not incidental.** Upward means a user shown a
+> figure and clicking a moment later is always *within* the newer limit. If the
+> reserve ever grew with time — a different rate model, compounding, a longer
+> term — the identical code would start refusing clicks the user was entitled to
+> make, and the refusal would look like a bug in the browser rather than a
+> property of the formula.
+
+So do not treat the drift as noise to be smoothed over by caching a figure. It
+is safe only while it moves this way.
 
 ### `boundBy` — the two limits are not the same fact
 
