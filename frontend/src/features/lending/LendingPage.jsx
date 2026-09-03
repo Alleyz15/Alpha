@@ -9,10 +9,12 @@ import {
   borrowableHint,
   buildCollateralRows,
   buildLoanRows,
+  estimateRepayment,
   describeLoanError,
   failingChecks,
   formatDate,
   formatUsdc,
+  formatUsdcPrecise,
 } from './lendingViewModel.js';
 
 function CollateralPicker({ rows, selectedPositionId, onSelect }) {
@@ -79,18 +81,44 @@ function OfferAndBorrow({ lending }) {
   }
   if (!offer) return null;
 
+  // The asset the selected protection covers, for the units on "Protection
+  // covers". Falls back to nothing rather than guessing a symbol.
+  const coveredSymbol = lending.positions
+    ?.find((position) => position.positionId === offer.positionId)?.asset ?? '';
+
   const hint = borrowableHint(offer);
   const amount = Number(principalInput);
-  const submitDisabled = !principalInput || !Number.isFinite(amount) || amount <= 0 || amount > offer.creditLimitUsdc
+  const ceiling = borrowableCeiling(offer);
+
+  // Against the ceiling that can actually be funded, not the credit limit.
+  // The field carries `max`, but `max` on a number input only drives
+  // validation and the steppers - it does not stop anyone typing a larger
+  // number, so gating on the limit let an amount through that the backend
+  // would refuse with INSUFFICIENT_FLOAT.
+  const overCeiling = Number.isFinite(amount) && amount > ceiling;
+  const estimate = estimateRepayment(offer, principalInput);
+  const submitDisabled = !principalInput || !Number.isFinite(amount) || amount <= 0
+    || overCeiling
     || borrowState === 'submitting';
 
   return (
     <>
       <dl className="pd-detail-list lending-equation">
         <div><dt>Protection floor</dt><dd className="numeric">{formatUsdc(offer.protectionFloorUsdc) ?? '—'}</dd></div>
-        <div><dt>Contracts covered</dt><dd className="numeric">{offer.numContracts}</dd></div>
+        {/*
+          Not "contracts". The number is the amount of the asset the protection
+          covers - protectedAmount, numContracts and collateralContracts are
+          the same figure - and it is a factor in the credit limit below, so
+          removing it would break the reader's ability to check the sum. BR-3
+          forbids the word, not the quantity.
+        */}
+        <div><dt>Protection covers</dt><dd className="numeric">{`${offer.numContracts} ${coveredSymbol}`}</dd></div>
         <div><dt>Protected value</dt><dd className="numeric">{formatUsdc(offer.protectedValueUsdc) ?? '—'}</dd></div>
-        <div><dt>Interest reserved</dt><dd className="numeric">{formatUsdc(offer.interestReservedUsdc) ?? '—'}</dd></div>
+        <div>
+          <dt>Interest set aside</dt>
+          <dd className="numeric">{formatUsdc(offer.interestReservedUsdc) ?? '—'}</dd>
+          <small>Held back from your limit so the debt can never exceed your floor.</small>
+        </div>
         <div><dt>Your credit limit</dt><dd className="numeric"><MonoValue as="strong">{formatUsdc(offer.creditLimitUsdc) ?? '—'}</MonoValue></dd></div>
         <div><dt>Due date</dt><dd>{formatDate(offer.dueAt)}</dd></div>
       </dl>
@@ -118,6 +146,59 @@ function OfferAndBorrow({ lending }) {
           disabled={borrowState === 'submitting' || borrowState === 'success'}
         />
       </FormField>
+
+      {/*
+        What it costs, before committing to it. Rendered only for a usable
+        amount: an estimate of nothing is neither an estimate nor a fact, and
+        printing a hopeful $0.00 under an empty field is worse than silence.
+      */}
+      {estimate && !overCeiling && (
+        <dl className="pd-detail-list lending-estimate">
+          <div>
+            <dt>Interest rate</dt>
+            <dd className="numeric">{`${estimate.annualRatePct}% a year`}</dd>
+          </div>
+          <div>
+            <dt>Repay by</dt>
+            <dd>{formatDate(offer.dueAt)}</dd>
+          </div>
+          <div>
+            {/*
+              At 2dp the interest on a two-day loan disappears - "repay $50.00"
+              against "borrow 50" reads as though nothing was calculated. Shown
+              at USDC's own six decimals, and only on this line: the total
+              stays in the page's ordinary money format.
+            */}
+            <dt>Interest</dt>
+            <dd className="numeric">{`≈ ${formatUsdcPrecise(estimate.interestUsdc) ?? '—'}`}</dd>
+          </div>
+          <div>
+            <dt>You would repay</dt>
+            <dd className="numeric">
+              <MonoValue as="strong">{`≈ ${formatUsdc(estimate.totalUsdc) ?? '—'}`}</MonoValue>
+            </dd>
+          </div>
+          <p className="lending-estimate__note">
+            An estimate: interest runs with the clock, so the amount is a little
+            lower the sooner you borrow. The exact figure is fixed when you borrow,
+            and shown in Your loans.
+          </p>
+        </dl>
+      )}
+
+      {/*
+        Say why, rather than only greying the button out. A disabled control
+        with no explanation reads as a broken page, and the reason here is one
+        the user can act on by typing a smaller number.
+      */}
+      {overCeiling && (
+        <Alert tone="warning" title="More than we can send today">
+          {`The most we can send right now is ${formatUsdc(ceiling) ?? '—'}. `}
+          {offer.boundBy === 'wallet'
+            ? 'That is our operator float, not your credit limit — your protection still supports the full amount.'
+            : 'That is what your protection supports.'}
+        </Alert>
+      )}
 
       {borrowState === 'error' && borrowError && (() => {
         const described = describeLoanError(borrowError, getApiErrorCode(borrowError));
@@ -361,13 +442,22 @@ function LoansList({ lending, rows }) {
     <div className="portfolio-table-scroll">
       <table className="portfolio-table">
         <thead>
-          <tr><th>Principal</th><th>Status</th><th>Due date</th><th>Amount owed</th><th>On chain</th><th><span className="sr-only">Action</span></th></tr>
+          <tr><th>Principal</th><th>Backed by</th><th>Status</th><th>Due date</th><th>Amount owed</th><th>On chain</th><th><span className="sr-only">Action</span></th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <Fragment key={row.loanId}>
               <tr>
                 <td className="numeric">{row.principalLabel}</td>
+                <td>
+                  {/*
+                    Always a link. The protection page fetches by id, so it
+                    works even when this list could not name the position.
+                  */}
+                  <Link className="lending-collateral-link" to={`/protection/${row.positionId}`}>
+                    {row.collateralLabel ?? 'View protection'}
+                  </Link>
+                </td>
                 <td><StatusBadge tone={row.statusTone}>{row.statusLabel}</StatusBadge></td>
                 <td>{row.dueLabel}</td>
                 <td className="numeric">{row.owedLabel}</td>
@@ -404,7 +494,7 @@ function LoansList({ lending, rows }) {
               {lending.repayFlows[row.loanId] && (
                 <tr>
                   {/* Spans every column, including the new On chain one. */}
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <RepaymentFlow
                       loanId={row.loanId}
                       flow={lending.repayFlows[row.loanId]}
@@ -426,7 +516,10 @@ function LoansList({ lending, rows }) {
 export default function LendingPage({ apiClient = liveApi }) {
   const lending = useLendingData(apiClient);
   const collateralRows = useMemo(() => buildCollateralRows(lending.positions), [lending.positions]);
-  const loanRows = useMemo(() => buildLoanRows(lending.loans), [lending.loans]);
+  const loanRows = useMemo(
+    () => buildLoanRows(lending.loans, lending.positions),
+    [lending.loans, lending.positions],
+  );
 
   return (
     <main className="portfolio-page">
@@ -436,6 +529,22 @@ export default function LendingPage({ apiClient = liveApi }) {
             <span className="portfolio-eyebrow">Lending</span>
             <h1>Borrow Against Your Protection</h1>
             <p>Borrow USDC against a protection position you already hold — no separate credit check, no selling early.</p>
+            {/*
+              The difference from ordinary collateralised borrowing, and the
+              reason it holds. Verified rather than asserted: a loan's due date
+              is its protection's end date (dueAtFor), and the credit limit is
+              the floor times the size less reserved interest, so the debt
+              cannot outgrow what the floor guarantees.
+
+              Said in plain words on purpose. "No liquidation" and "no margin
+              call" only mean something to someone who has already been through
+              one.
+            */}
+            <p className="lending-no-forced-sale">
+              <strong>And no forced sale if the price drops:</strong> your loan is due
+              when your protection ends, and you can never borrow more than your floor
+              guarantees.
+            </p>
           </div>
         </section>
 

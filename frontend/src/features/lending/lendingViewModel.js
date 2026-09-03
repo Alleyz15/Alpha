@@ -55,7 +55,98 @@ export function owedNowUsdc(loan) {
   return loan?.owed?.totalUsdc ?? null;
 }
 
-export function buildLoanRows(loans = []) {
+/**
+ * USDC at the precision the number actually carries.
+ *
+ * The shared formatUsdc() is fixed at 2dp, which is right for balances and
+ * totals and wrong for interest: over a two-day tenor at 5% a year, the
+ * interest on a demo-sized loan is a fraction of a cent, and 2dp renders it as
+ * $0.00 - which reads as "no interest is being charged" rather than "the
+ * interest is small". Six decimals is USDC's own precision, so nothing here is
+ * finer than the ledger.
+ *
+ * Trailing zeros are trimmed below 6dp but never below 2, so an ordinary
+ * amount still looks like money.
+ */
+const preciseUsdc = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+});
+
+export function formatUsdcPrecise(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return `${preciseUsdc.format(numeric)} USDC`;
+}
+
+/**
+ * What a loan of `principalUsdc` would cost to repay.
+ *
+ * ---------------------------------------------------------------------------
+ * A SECOND IMPLEMENTATION OF A MONEY FORMULA. KEEP IT IN STEP.
+ * ---------------------------------------------------------------------------
+ *
+ * The authority is `amountOwed()` in backend/src/lending/repay.js (the interest
+ * line and the ceil are at repay.js:108-113). This mirrors it so the cost can
+ * be shown BEFORE borrowing, which the backend cannot do - it has no loan to
+ * price until one exists. Any change there has to be made here too, and the
+ * test pins both the formula and the rounding.
+ *
+ *   interest = principal x rate/100 x termDays/365
+ *   total    = ceil((principal + interest) x 1e6) / 1e6
+ *
+ * The ceil is not cosmetic: a borrower who sends the rounded-DOWN figure is a
+ * fraction short, and the repayment check compares against what is owed.
+ *
+ * ESTIMATE, NOT A QUOTE. `offer.termDays` runs from now to the due date, while
+ * the loan is priced from its own created_at. Time passes between reading this
+ * and pressing the button, so the real figure is slightly smaller. The
+ * interface must say so rather than print this as exact.
+ *
+ * @returns {{interestUsdc: number, totalUsdc: number, termDays: number,
+ *            annualRatePct: number}|null} null when it cannot be priced
+ */
+export function estimateRepayment(offer, principalUsdc) {
+  const principal = Number(principalUsdc);
+  const annualRatePct = Number(offer?.annualRatePct);
+  const termDays = Number(offer?.termDays);
+
+  if (!Number.isFinite(principal) || principal <= 0) return null;
+  if (!Number.isFinite(annualRatePct) || annualRatePct < 0) return null;
+  if (!Number.isFinite(termDays) || termDays < 0) return null;
+
+  const interestUsdc = principal * (annualRatePct / 100) * (termDays / 365);
+  const totalUsdc = Math.ceil((principal + interestUsdc) * 1e6) / 1e6;
+
+  return { interestUsdc, totalUsdc, termDays, annualRatePct };
+}
+
+/**
+ * How a loan names the protection behind it.
+ *
+ * The page is called "Borrow Against Your Protection" and the list showed no
+ * sign of which protection - two loans on two different floors were
+ * indistinguishable. Asset and floor together identify one.
+ *
+ * The link is always offered, even when the position is not in hand:
+ * /protection/:positionId fetches by id and does not depend on this list, and
+ * a loan always has a positionId. "Cannot name it" and "has no collateral" are
+ * different facts, and a dash would state the second.
+ */
+function collateralLabel(loan, positionsById) {
+  const position = loan?.positionId ? positionsById.get(loan.positionId) : null;
+  if (!position) return null;
+
+  const identity = getAssetIdentity(position.asset);
+  const floor = formatUsdc(position.protectionFloorUsdc);
+  return floor ? `${identity.symbol} · ${floor} floor` : identity.symbol;
+}
+
+export function buildLoanRows(loans = [], positions = []) {
+  const positionsById = new Map(positions.map((p) => [p.positionId, p]));
   return loans.map((loan) => {
     const status = LOAN_STATUS[loan.status] ?? { tone: 'neutral', label: loan.status ?? 'Unknown' };
     const owed = owedNowUsdc(loan);
@@ -65,6 +156,7 @@ export function buildLoanRows(loans = []) {
       statusTone: status.tone,
       statusLabel: status.label,
       dueLabel: formatDate(loan.dueAt),
+      collateralLabel: collateralLabel(loan, positionsById),
       // Zero, not a dash. A dash reads as "we do not know"; the amount owed on
       // a repaid loan is known exactly, and it is nothing.
       owedLabel: owed === null ? '—' : (formatUsdc(owed) ?? '—'),

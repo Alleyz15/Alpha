@@ -97,3 +97,53 @@
 .lending-spend-note .alpha-mono-value {
   word-break: break-all;
 }
+
+/*
+  What a loan would cost, shown before the button that commits to it.
+  Deliberately quieter than the credit-limit equation above it: that block is
+  the offer, this one is a projection of a number the user is still choosing.
+*/
+.lending-estimate {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+}
+
+.lending-estimate__note {
+  grid-column: 1 / -1;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.lending-collateral-link {
+  color: var(--signal);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.lending-collateral-link:hover,
+.lending-collateral-link:focus-visible {
+  text-decoration: underline;
+}
+
+.lending-no-forced-sale {
+  max-width: 68ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.lending-no-forced-sale strong {
+  color: var(--text);
+}
+
+.lending-equation small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
