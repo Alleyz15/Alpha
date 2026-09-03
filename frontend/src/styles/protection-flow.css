@@ -1,7 +1,7 @@
 .protection-flow {
   position: relative;
   width: 100%;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   margin: 0;
   overflow-x: clip;
   background:
@@ -34,7 +34,7 @@
   position: relative;
   z-index: 1;
   width: min(var(--content-max), calc(100% - 48px));
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   margin: 0 auto;
   padding: var(--space-6) 0 var(--space-12);
 }

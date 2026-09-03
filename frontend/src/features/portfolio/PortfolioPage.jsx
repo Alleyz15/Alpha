@@ -48,12 +48,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
             <h1>My Crypto</h1>
             <p>See what you hold and whether each asset has confirmed downside protection.</p>
           </div>
-          <div className="portfolio-heading-actions">
-            <button className="portfolio-home-link" type="button" onClick={() => navigate('/markets')}>
-              <span aria-hidden="true">←</span> Back to Home
-            </button>
-            {portfolio?.simulated && <RealityBadge kind="simulated" label="Simulated holdings" />}
-          </div>
+          {portfolio?.simulated && <RealityBadge kind="simulated" label="Simulated holdings" />}
         </section>
 
         <AsyncState
@@ -96,7 +91,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                 <Card className="portfolio-stat-card portfolio-stat-card--expiry">
                   <div className="portfolio-stat-icon"><ClockIcon size={22} /></div>
                   <div>
-                    <span>Next expiry</span>
+                    <span>Next protection end</span>
                     <MonoValue
                       as={portfolio.nextExpiry ? 'time' : 'strong'}
                       dateTime={portfolio.nextExpiry || undefined}
@@ -134,7 +129,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                           <th>Holdings</th>
                           <th>Current price</th>
                           <th>Protection</th>
-                          <th>Expiry</th>
+                          <th>Protection ends</th>
                           <th><span className="sr-only">Action</span></th>
                         </tr>
                       </thead>
@@ -156,20 +151,24 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                             </td>
                             <td>{row.expiryLabel}</td>
                             <td className="portfolio-action-cell">
-                              {row.positionId ? (
-                                <Button
-                                  variant="ghost"
-                                  size="small"
-                                  className="portfolio-view-button"
-                                  onClick={() => navigate(row.currentPositionCount > 1 ? `/positions/${row.symbol}` : `/protection/${row.positionId}`)}
-                                >
-                                  {row.currentPositionCount > 1 ? 'View positions' : 'View'} <ArrowIcon size={14} />
-                                </Button>
-                              ) : (
-                                <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
-                                  Buy protection
-                                </Button>
-                              )}
+                              <div className="portfolio-action-group">
+                                {row.protectable && (
+                                  <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
+                                    Buy protection
+                                  </Button>
+                                )}
+                                {row.hasPositionHistory && (
+                                  <Button
+                                    variant="ghost"
+                                    size="small"
+                                    className="portfolio-view-button"
+                                    onClick={() => navigate(`/positions/${row.symbol}`)}
+                                  >
+                                    View history <ArrowIcon size={14} />
+                                  </Button>
+                                )}
+                                {!row.protectable && !row.hasPositionHistory && <span aria-hidden="true">—</span>}
+                              </div>
                             </td>
                           </tr>
                         ))}

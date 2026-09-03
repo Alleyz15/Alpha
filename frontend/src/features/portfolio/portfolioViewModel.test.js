@@ -40,7 +40,21 @@ describe('portfolio view model', () => {
     );
 
     expect(row.protectionLabel).toBe('Protected · 2 positions');
-    expect(row.currentPositionCount).toBe(4);
+    expect(row.hasPositionHistory).toBe(true);
+  });
+
+  it('shows settled protection history when no protection is active', () => {
+    const [row] = buildPortfolioRows(
+      [{ asset: 'ETH', amount: 0.4, priceUsdc: 2400, valueUsdc: 960 }],
+      [
+        { positionId: 'ended-1', asset: 'ETH', role: 'protection', status: 'expired_worthless', verifiedOnChain: true },
+        { positionId: 'ended-2', asset: 'ETH', role: 'protection', status: 'settled', verifiedOnChain: true },
+        { positionId: 'failed-1', asset: 'ETH', role: 'protection', status: 'failed', verifiedOnChain: false },
+      ],
+    );
+
+    expect(row.protectionLabel).toBe('Not protected · 2 settled');
+    expect(row.hasPositionHistory).toBe(true);
   });
 
   it('preserves unavailable prices instead of displaying zero', () => {
@@ -112,6 +126,6 @@ describe('protection detail view model', () => {
       expiry: '2026-09-05T00:00:00Z', timeline: [],
     });
 
-    expect(detail.meaning).toMatch(/has a \$2,200\.00 USDC price floor at expiry/i);
+    expect(detail.meaning).toMatch(/has a \$2,200\.00 USDC price floor on the end date/i);
   });
 });

@@ -1,5 +1,5 @@
 .dashboard-shell {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   color: var(--text);
   background:
     radial-gradient(ellipse 760px 420px at 8% 0%, var(--primary-tint), transparent 68%),

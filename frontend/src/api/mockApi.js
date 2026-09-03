@@ -109,7 +109,7 @@ export async function createQuote(request) {
   if (request.mode === 'goal' && request.targetDate > '2026-09-02') {
     throw apiError(
       'NO_EXPIRY',
-      'No expiry is available on or after the requested date.',
+      'No end date is available on or after the requested date.',
       {
         longestAvailableDate: '2026-09-02T08:00:00.000Z',
         shortfallDays: 36.4,

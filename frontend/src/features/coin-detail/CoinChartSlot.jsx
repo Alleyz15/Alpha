@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CandlestickSeries, ColorType, createChart } from 'lightweight-charts';
 import { Button } from '../../components/ui/index.js';
 
@@ -14,7 +14,7 @@ function toChartCandles(candles) {
   }));
 }
 
-function CandlestickChart({ candles }) {
+const CandlestickChart = memo(function CandlestickChart({ candles }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -69,9 +69,9 @@ function CandlestickChart({ candles }) {
   }, [candles]);
 
   return <div className="coin-chart-slot__canvas" ref={containerRef} aria-label="Candlestick chart" />;
-}
+});
 
-export default function CoinChartSlot({ symbol, apiClient }) {
+function CoinChartSlot({ symbol, apiClient }) {
   const [range, setRange] = useState('1D');
   const [state, setState] = useState({ status: 'loading', data: null });
   const requestId = useRef(0);
@@ -94,7 +94,10 @@ export default function CoinChartSlot({ symbol, apiClient }) {
   }, [loadCandles]);
 
   const payload = state.data;
-  const candles = payload ? toChartCandles(payload.candles) : [];
+  const candles = useMemo(
+    () => (payload ? toChartCandles(payload.candles) : []),
+    [payload],
+  );
 
   return (
     <section className="coin-chart-slot" aria-label={`${symbol} Binance candlestick chart`}>
@@ -102,7 +105,7 @@ export default function CoinChartSlot({ symbol, apiClient }) {
         <div>
           <span>Binance market chart</span>
           <strong>{payload?.pair ? `${symbol}/${payload.quoteCurrency}` : `${symbol}/USDT`}</strong>
-          <small>{payload ? `Source: ${payload.source} · ${payload.interval} candles` : 'Source: Binance'}</small>
+          <small>{payload ? `Source: ${payload.source} · ${symbol}/${payload.quoteCurrency} · ${payload.range || range}` : `Source: Binance · ${symbol}/USDT · ${range}`}</small>
         </div>
         <div className="coin-chart-ranges" role="group" aria-label="Chart timeframe">
           {RANGES.map((option) => (
@@ -139,3 +142,5 @@ export default function CoinChartSlot({ symbol, apiClient }) {
     </section>
   );
 }
+
+export default memo(CoinChartSlot);

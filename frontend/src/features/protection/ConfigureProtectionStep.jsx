@@ -66,9 +66,10 @@ export default function ConfigureProtectionStep({
       </div>
 
       <div className="protection-reality-row" aria-label="What is real and simulated">
-        <RealityBadge kind={contextReality?.price} label="Live market price" />
-        <RealityBadge kind={contextReality?.balance} label="Simulated holding" />
+        <RealityBadge kind={contextReality?.quote ?? contextReality?.price} label="Live market quote" />
+        <RealityBadge kind={contextReality?.balance} label="Simulated balance" />
         <RealityBadge kind={executionKind} label={executionLabel} />
+        <RealityBadge kind={contextReality?.settlement} label="On-chain settlement" />
       </div>
 
       {refreshError && !quote && (
@@ -218,7 +219,7 @@ export default function ConfigureProtectionStep({
                       </span>
                       <span className="protection-tier-stat"><small>Protection floor</small><MonoValue as="strong">{tier.floor}</MonoValue></span>
                       <span className="protection-tier-stat"><small>{tier.sizeConfirmed ? 'Protected amount' : 'Computed protection amount'}</small><strong>{tier.protectedAmount}</strong></span>
-                      <span className="protection-tier-stat"><small>Premium</small><MonoValue as="strong">{tier.cost}</MonoValue></span>
+                      <span className="protection-tier-stat"><small>Cost</small><MonoValue as="strong">{tier.cost}</MonoValue></span>
                       <span className="protection-tier-stat"><small>End date</small><strong>{tier.expiry}</strong></span>
                       {!tier.sizeConfirmed && <span className="protection-tier-size-warning">Size check incomplete</span>}
                     </button>
@@ -227,7 +228,7 @@ export default function ConfigureProtectionStep({
               ) : (
                 <div className="protection-choice-placeholder" role="status">
                   <span aria-hidden="true">○</span>
-                  <p>Your live protection choices will appear here. Alpha will not estimate or invent premiums.</p>
+                  <p>Your live protection choices will appear here. Alpha will not estimate or invent costs.</p>
                 </div>
               )}
 
@@ -269,7 +270,7 @@ export default function ConfigureProtectionStep({
             <div><dt>Protection floor</dt><dd className="numeric">{selectedTier?.floor ?? '—'}</dd></div>
             <div><dt>{selectedTier?.sizeConfirmed ? 'Protected amount' : 'Computed protection amount'}</dt><dd>{selectedTier?.protectedAmount ?? '—'}</dd></div>
             <div><dt>Ends</dt><dd>{selectedTier?.expiry ?? '—'}</dd></div>
-            <div className="protection-summary-total"><dt>Premium</dt><dd className="numeric">{selectedTier?.cost ?? '—'}</dd></div>
+            <div className="protection-summary-total"><dt>Cost</dt><dd className="numeric">{selectedTier?.cost ?? '—'}</dd></div>
           </dl>
 
           <Button
@@ -283,7 +284,7 @@ export default function ConfigureProtectionStep({
           <p className="protection-summary-note">
             {quote
               ? 'The quote price is fixed while you review. The backend verifies its identifiers again before recording the request.'
-              : 'Get a live quote to see actual choices and their premiums. Alpha does not estimate these values in the browser.'}
+              : 'Get a live quote to see actual choices and their costs. Alpha does not estimate these values in the browser.'}
           </p>
         </Card>
       </div>

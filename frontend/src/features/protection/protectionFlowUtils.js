@@ -92,6 +92,6 @@ export function purchaseStatusView(purchase) {
     tone: 'warning',
     label: 'Waiting for operator',
     title: 'Your request is waiting for execution.',
-    message: 'Alpha recorded the request and held the premium. The application operator will execute it on Base after the safety checks pass.',
+    message: 'Alpha recorded the request and held the funds. The application operator will execute it on Base after the safety checks pass.',
   };
 }

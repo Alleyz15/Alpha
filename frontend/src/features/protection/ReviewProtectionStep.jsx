@@ -54,7 +54,7 @@ export default function ReviewProtectionStep({
             <div><dt>Amount requested</dt><dd>{quote.requestedAmount}</dd></div>
             <div><dt>{tier.sizeConfirmed ? 'Protected amount' : 'Computed protection amount'}</dt><dd>{tier.protectedAmount}</dd></div>
             <div><dt>Protection floor</dt><dd className="numeric">{tier.floor}</dd></div>
-            <div><dt>Protection premium</dt><dd className="numeric">{tier.cost}</dd></div>
+            <div><dt>Protection cost</dt><dd className="numeric">{tier.cost}</dd></div>
             <div><dt>Maximum loss on protected portion</dt><dd className="numeric">{tier.maximumLoss}</dd></div>
             <div><dt>Settlement currency</dt><dd>{tier.paysIn}</dd></div>
           </dl>
@@ -82,11 +82,12 @@ export default function ReviewProtectionStep({
           <div className="protection-reality-panel">
             <h2>What is real—and what is not</h2>
             <div>
-              <RealityBadge kind={contextReality?.price} label="Live quote" />
-              <RealityBadge kind={contextReality?.balance} label="Simulated holding" />
+              <RealityBadge kind={contextReality?.quote ?? contextReality?.price} label="Live market quote" />
+              <RealityBadge kind={contextReality?.balance} label="Simulated balance" />
               <RealityBadge kind={operatorExecution ? 'operator' : 'live'} label={operatorExecution ? 'Operator execution' : 'Backend execution'} />
+              <RealityBadge kind={contextReality?.settlement} label="On-chain settlement" />
             </div>
-            <p>The asset holding and USDC balance are seeded for the demo. The quote comes from the live market. Confirming records a request and holds the simulated USDC premium; the Status page will report whether execution is still pending or actually on-chain.</p>
+            <p>The asset holding and USDC balance are seeded for the demo. The quote comes from the live market. Confirming records a request and holds the simulated USDC cost; the Status page will report whether execution is still pending or actually on-chain.</p>
           </div>
 
           {purchaseError && <Alert tone="error" title={purchaseError.title}>{purchaseError.message}</Alert>}

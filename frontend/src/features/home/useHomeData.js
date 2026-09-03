@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const initialSource = { state: 'loading', data: null, refreshError: false };
 
-export default function useHomeData(apiClient, summaryPollInterval = 45_000, candlePollInterval = 300_000) {
+export default function useHomeData(apiClient, summaryPollInterval = 45_000) {
   const [portfolio, setPortfolio] = useState(initialSource);
   const [market, setMarket] = useState(initialSource);
   const [candles, setCandles] = useState({});
   const [candleFailures, setCandleFailures] = useState([]);
   const mounted = useRef(true);
-  const candleLoadedAt = useRef(0);
+  const requestedCandleSymbols = useRef(new Set());
 
   const updateSource = useCallback((setter, result) => {
     if (!mounted.current) return;
@@ -28,17 +28,18 @@ export default function useHomeData(apiClient, summaryPollInterval = 45_000, can
     updateSource(setMarket, marketResult);
   }, [apiClient, updateSource]);
 
-  const loadCandles = useCallback(async (symbols, force = false) => {
-    if (!symbols.length) return;
-    if (!force && Date.now() - candleLoadedAt.current < candlePollInterval) return;
+  const loadCandles = useCallback(async (symbols) => {
+    const unrequestedSymbols = symbols.filter((symbol) => !requestedCandleSymbols.current.has(symbol));
+    if (!unrequestedSymbols.length) return;
+    unrequestedSymbols.forEach((symbol) => requestedCandleSymbols.current.add(symbol));
     const results = await Promise.allSettled(
-      symbols.map((symbol) => apiClient.getAssetCandles(symbol, '1W')),
+      unrequestedSymbols.map((symbol) => apiClient.getAssetCandles(symbol, '1W')),
     );
     if (!mounted.current) return;
     const nextCandles = {};
     const failed = [];
     results.forEach((result, index) => {
-      const symbol = symbols[index];
+      const symbol = unrequestedSymbols[index];
       if (result.status === 'fulfilled' && Array.isArray(result.value?.candles)) {
         nextCandles[symbol] = result.value.candles;
       } else {
@@ -47,8 +48,7 @@ export default function useHomeData(apiClient, summaryPollInterval = 45_000, can
     });
     setCandles((current) => ({ ...current, ...nextCandles }));
     setCandleFailures(failed);
-    candleLoadedAt.current = Date.now();
-  }, [apiClient, candlePollInterval]);
+  }, [apiClient]);
 
   useEffect(() => {
     mounted.current = true;
@@ -65,22 +65,15 @@ export default function useHomeData(apiClient, summaryPollInterval = 45_000, can
     const summaryTimer = window.setInterval(() => {
       if (document.visibilityState !== 'hidden') loadSummary();
     }, summaryPollInterval);
-    const candleTimer = window.setInterval(() => {
-      if (document.visibilityState !== 'hidden') {
-        const symbols = market.data?.assets?.map((asset) => asset.symbol).filter(Boolean) ?? [];
-        if (symbols.length) loadCandles(symbols, true);
-      }
-    }, candlePollInterval);
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') loadSummary();
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.clearInterval(summaryTimer);
-      window.clearInterval(candleTimer);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [candlePollInterval, loadCandles, loadSummary, market.data, summaryPollInterval]);
+  }, [loadSummary, summaryPollInterval]);
 
   return {
     portfolio,

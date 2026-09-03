@@ -45,7 +45,7 @@ export const journeySteps = [
   {
     number: '04',
     title: 'Review before continuing',
-    body: 'The quoted price is fixed during review. Alpha shows the selected protection, maximum loss, expiry, and any unprotected amount before a request is made.',
+    body: 'The quoted price is fixed during review. Alpha shows the selected protection, maximum loss, end date, and any unprotected amount before a request is made.',
     label: 'Fixed quote review',
   },
   {

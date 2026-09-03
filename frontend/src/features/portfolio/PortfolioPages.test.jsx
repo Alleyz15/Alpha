@@ -36,7 +36,7 @@ const protectedPosition = {
 };
 
 describe('Phase 6 pages', () => {
-  it('shows one truthful action per holding and excludes cash from protection rows', async () => {
+  it('shows truthful buy and history actions and excludes cash from protection rows', async () => {
     const user = userEvent.setup();
     const secondProtection = {
       ...protectedPosition,
@@ -85,20 +85,19 @@ describe('Phase 6 pages', () => {
 
     const table = await screen.findByRole('table');
     const summary = screen.getByRole('region', { name: 'Portfolio summary' });
-    expect(within(summary).getByText('Next expiry')).toBeVisible();
+    expect(within(summary).getByText('Next protection end')).toBeVisible();
     expect(within(summary).getByText('5 Sept 2026')).toBeVisible();
     expect(screen.queryByPlaceholderText('Search your holdings')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Go to Alpha Welcome' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back to Home' })).toBeVisible();
     expect(within(table).getAllByRole('row')).toHaveLength(3);
     expect(within(table).queryByText('USDC')).not.toBeInTheDocument();
-    expect(within(table).getAllByRole('button')).toHaveLength(2);
+    expect(within(table).getAllByRole('button')).toHaveLength(3);
     expect(within(table).getByText('Protected · 2 positions')).toBeVisible();
-    expect(within(table).getByRole('button', { name: /View positions/ })).toBeVisible();
-    expect(within(table).getByRole('button', { name: 'Buy protection' })).toBeVisible();
+    expect(within(table).getByRole('button', { name: /View history/ })).toBeVisible();
+    expect(within(table).getAllByRole('button', { name: 'Buy protection' })).toHaveLength(2);
     expect(screen.getByText(/Open an asset to see its complete history, including settled and failed requests/)).toBeVisible();
 
-    await user.click(within(table).getByRole('button', { name: /View positions/ }));
+    await user.click(within(table).getByRole('button', { name: /View history/ }));
     expect(await screen.findByRole('heading', { name: 'Recorded positions' })).toBeVisible();
     expect(screen.getByText('5 positions')).toBeVisible();
     expect(screen.getByText('Not needed')).toBeVisible();
@@ -110,25 +109,6 @@ describe('Phase 6 pages', () => {
       .toBeGreaterThan(cards.findLastIndex((text) => text.includes('Active')));
     expect(cards.findIndex((text) => text.includes('Failed')))
       .toBeGreaterThan(cards.findIndex((text) => text.includes('Not needed')));
-  });
-
-  it('returns from Portfolio to Home without reloading the page', async () => {
-    const user = userEvent.setup();
-    const apiClient = {
-      getPortfolio: vi.fn().mockResolvedValue(portfolio),
-      getPositions: vi.fn().mockResolvedValue({ positions: [] }),
-    };
-    render(
-      <MemoryRouter initialEntries={['/portfolio']}>
-        <Routes>
-          <Route path="/portfolio" element={<PortfolioPage apiClient={apiClient} />} />
-          <Route path="/markets" element={<div>Opened Home</div>} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    await user.click(await screen.findByRole('button', { name: 'Back to Home' }));
-    expect(screen.getByText('Opened Home')).toBeVisible();
   });
 
   it('renders the requested contract and order sections without payout or PnL cards', async () => {
@@ -152,7 +132,7 @@ describe('Phase 6 pages', () => {
     expect(screen.getByRole('heading', { name: 'Contract overview' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Live tracking' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Order details' })).toBeVisible();
-    expect(screen.getByText('Automatic at expiry')).toBeVisible();
+    expect(screen.getByText('Automatic on the end date')).toBeVisible();
     expect(await screen.findByLabelText(/Price tracking chart/)).toBeVisible();
     expect(screen.queryByText('Estimated payout')).not.toBeInTheDocument();
     expect(screen.queryByText('Current PnL')).not.toBeInTheDocument();

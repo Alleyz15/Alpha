@@ -1,5 +1,6 @@
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
+import SiteNavigation from './components/SiteNavigation.jsx';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
@@ -46,7 +47,6 @@ function CoinDetailRoute() {
       symbol={normalizedSymbol}
       apiClient={liveApi}
       onBack={() => navigate('/markets')}
-      onDashboard={() => navigate('/portfolio')}
       onProtect={() => navigate(`/protect/${normalizedSymbol}`)}
     />
   );
@@ -72,19 +72,30 @@ function NotFoundPage() {
   );
 }
 
+function SiteLayout() {
+  return (
+    <>
+      <SiteNavigation />
+      <Outlet />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<WelcomeRoute />} />
-      <Route path="/markets" element={<HomePage />} />
-      <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
-      <Route path="/home" element={<Navigate replace to="/markets" />} />
-      <Route path="/portfolio" element={<PortfolioPage />} />
-      <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
-      <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
-      <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
-      <Route path="/protect/:symbol" element={<ProtectionRoute />} />
-      <Route path="*" element={<NotFoundPage />} />
+      <Route element={<SiteLayout />}>
+        <Route path="/" element={<WelcomeRoute />} />
+        <Route path="/markets" element={<HomePage />} />
+        <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
+        <Route path="/home" element={<Navigate replace to="/markets" />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
+        <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
+        <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
+        <Route path="/protect/:symbol" element={<ProtectionRoute />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
     </Routes>
   );
 }
