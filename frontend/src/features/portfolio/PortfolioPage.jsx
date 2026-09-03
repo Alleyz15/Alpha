@@ -5,6 +5,7 @@ import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ClockIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
 import { Alert, AsyncState, Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
 import VaultDepositsSection from './VaultDepositsSection.jsx';
+import LendingEntryCard from './LendingEntryCard.jsx';
 import { buildPortfolioRows, formatDate, formatUsdc } from './portfolioViewModel.js';
 
 export default function PortfolioPage({ apiClient = liveApi }) {
@@ -107,6 +108,8 @@ export default function PortfolioPage({ apiClient = liveApi }) {
               </section>
 
               <VaultDepositsSection apiClient={apiClient} positions={positions} usdcAvailable={usdcAvailable} />
+
+              <LendingEntryCard apiClient={apiClient} />
 
               <Card className="portfolio-overview-card">
                 <div className="portfolio-section-heading">

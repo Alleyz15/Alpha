@@ -4,6 +4,8 @@ export default function SiteNavigation() {
   const { pathname } = useLocation();
   const marketsActive = pathname === '/markets' || pathname.startsWith('/coin/') || pathname.startsWith('/protect/');
   const portfolioActive = pathname === '/portfolio' || pathname.startsWith('/positions/') || pathname.startsWith('/protection/');
+  const vaultActive = pathname === '/vault';
+  const lendingActive = pathname === '/lending';
 
   return (
     <header className="site-navigation">
@@ -26,6 +28,25 @@ export default function SiteNavigation() {
             aria-current={portfolioActive ? 'page' : undefined}
           >
             My Portfolio
+          </Link>
+          {/*
+            Both of these routes existed with nothing linking to them - the only
+            ways in were the cards near the bottom of the welcome page or typing
+            the URL.
+          */}
+          <Link
+            to="/vault"
+            className={vaultActive ? 'is-active' : undefined}
+            aria-current={vaultActive ? 'page' : undefined}
+          >
+            Vault
+          </Link>
+          <Link
+            to="/lending"
+            className={lendingActive ? 'is-active' : undefined}
+            aria-current={lendingActive ? 'page' : undefined}
+          >
+            Lending
           </Link>
         </nav>
       </div>
