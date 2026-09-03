@@ -20,10 +20,14 @@
 // becomes a way to enumerate other people's rows.
 
 import { getLoan, listLoansByUser } from '../db/loans.js';
+import { getPosition } from '../db/positions.js';
 import { amountOwed, requestRepayment, confirmRepayment } from '../lending/repay.js';
+import { creditLimitFor } from '../lending/credit.js';
+import { runDisbursePreflight, disburse } from '../lending/disburse.js';
 import { getDemoUser } from './demoUser.js';
 import { ApiError } from './errors.js';
-import { loanView, checksView } from './loanView.js';
+import { payoutRecipient } from './recipient.js';
+import { loanView, creditLimitView, checksView } from './loanView.js';
 
 /**
  * Resolve a loan the demo user owns, or refuse.
@@ -59,6 +63,100 @@ function owedOrNull(loan) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a position the demo user owns, or refuse.
+ */
+async function ownedPosition(positionId) {
+  const user = await getDemoUser();
+  const position = await getPosition(positionId);
+
+  if (!position || position.user_id !== user.id) {
+    throw new ApiError('NOT_FOUND', `No position ${positionId}.`);
+  }
+  return position;
+}
+
+/**
+ * How much could ACTUALLY be borrowed, and which limit is binding.
+ *
+ * ===========================================================================
+ * A CREDIT LIMIT AND A WALLET BALANCE ARE DIFFERENT FACTS. ONE OF THEM IS OURS.
+ * ===========================================================================
+ *
+ *   creditLimitUsdc   what the protection guarantees, less this loan's
+ *                     interest. A property of the option the user owns.
+ *   walletUsdc        what our operator wallet can actually send today.
+ *
+ * Today they disagree by a lot: the put backing this endpoint guarantees about
+ * $257, and the wallet holds about $55. So a full-limit draw is impossible -
+ * and that is an operations fact, not a statement about the user's collateral.
+ *
+ * Telling someone "you can only borrow $55 against this" would be false. Their
+ * protection is worth $257 and their entitlement has not changed; OUR float is
+ * what ran out. The interface has to be able to say which, so `boundBy` names
+ * it and both figures travel together.
+ *
+ * @param {object} limit - a creditLimitFor() result
+ * @param {object} preflight - a runDisbursePreflight() result
+ */
+function borrowableView(limit, preflight) {
+  const walletUsdc = preflight?.funds?.usdc ?? null;
+
+  const borrowableUsdc = walletUsdc === null
+    ? limit.creditLimitUsdc
+    : Math.min(limit.creditLimitUsdc, walletUsdc);
+
+  const boundBy = walletUsdc !== null && walletUsdc < limit.creditLimitUsdc
+    ? 'wallet'
+    : 'credit_limit';
+
+  return {
+    borrowableNowUsdc: Math.round(borrowableUsdc * 1e6) / 1e6,
+    // 'credit_limit' - the protection is the constraint, which is the product
+    // working. 'wallet' - WE cannot fund it today, which is not about the user.
+    boundBy,
+    walletUsdc,
+    // Only present when our float is the binding constraint, so an interface
+    // cannot accidentally render an operations shortfall as a credit decision.
+    walletShortfallUsdc: boundBy === 'wallet'
+      ? Math.round((limit.creditLimitUsdc - walletUsdc) * 1e6) / 1e6
+      : null,
+  };
+}
+
+/**
+ * Turn a failed disburse pre-flight into a refusal that names the right cause.
+ *
+ * Check 3 is the credit limit and check 4 is the wallet. Conflating them would
+ * tell a user their protection is worth less than it is.
+ */
+function refusedDisbursement(preflight, limit, principalUsdc) {
+  const failed = (preflight?.checks ?? []).filter((c) => !c.pass);
+  const walletShort = failed.some((c) => c.label.includes('wallet holds the principal'));
+
+  if (walletShort) {
+    const funded = borrowableView(limit, preflight);
+    return new ApiError('INSUFFICIENT_FLOAT',
+      `We cannot fund ${principalUsdc} USDC right now. This is our limit, not yours — `
+      + `your protection still supports ${limit.creditLimitUsdc} USDC. `
+      + `The most we can send today is ${funded.borrowableNowUsdc} USDC.`, {
+        requestedUsdc: principalUsdc,
+        ...creditLimitView(limit),
+        ...funded,
+        checks: checksView(preflight.checks),
+        sent: false,
+      });
+  }
+
+  return new ApiError('PRECONDITION_FAILED',
+    'This loan cannot be disbursed. Nothing was sent.', {
+      requestedUsdc: principalUsdc,
+      ...creditLimitView(limit),
+      checks: checksView(preflight?.checks),
+      sent: false,
+    });
 }
 
 /**
@@ -215,4 +313,144 @@ export async function postRepay(loanId, body) {
     checks: checksView(result.checks),
     repaid: true,
   };
+}
+
+/**
+ * GET /api/loans/offer?positionId=...
+ *
+ * What could be borrowed against a position, with the equation shown and every
+ * check run. Sends nothing, writes nothing.
+ */
+export async function getLoanOffer(positionId) {
+  const position = await ownedPosition(positionId);
+  const limit = creditLimitFor(position);
+  const recipient = payoutRecipient();
+
+  // The full limit, so the checks describe the most that could be drawn.
+  const pre = await runDisbursePreflight({
+    position, recipient, principalRaw: limit.creditLimitRaw,
+  });
+
+  return {
+    positionId: position.id,
+    ...creditLimitView(limit),
+    ...borrowableView(limit, pre),
+
+    recipientAddress: recipient,
+    checks: checksView(pre.checks),
+    sent: false,
+  };
+}
+
+/**
+ * POST /api/loans   { positionId, principalUsdc }
+ *
+ * Borrow against protection already held. **This sends real USDC.**
+ *
+ * ---------------------------------------------------------------------------
+ * ONE IRREVERSIBLE WRITE, BECAUSE THE PUT ALREADY EXISTS.
+ * ---------------------------------------------------------------------------
+ *
+ * This endpoint never buys an option. Buying a put and disbursing a loan are
+ * irreversible in different ways - the first leaves you owning an asset, the
+ * second creates an obligation - and fusing them would produce a state with no
+ * remedy: "we bought you an option you did not ask for". So the products chain:
+ * buy protection, then borrow against it.
+ *
+ * ---------------------------------------------------------------------------
+ * THE CLIENT CHOOSES ONE NUMBER, AND ONLY DOWNWARD.
+ * ---------------------------------------------------------------------------
+ *
+ * `principalUsdc` is bounded by a limit derived from the position - strike x
+ * contracts, less the interest this loan will charge (BR-39). The client can
+ * ask for LESS than the limit, never more, and the limit itself never comes
+ * from the request.
+ *
+ * Held rather than returned early, unlike the vault: the pre-flight is eight
+ * local and RPC checks rather than a settlement scan, and the transfer is one
+ * block. Measured end to end at a few seconds, against the maturity
+ * pre-flight's 316.
+ */
+export async function postLoan(body) {
+  if (!body || typeof body !== 'object') {
+    throw new ApiError('INVALID_REQUEST', 'A JSON body is required.');
+  }
+
+  const { positionId, principalUsdc } = body;
+
+  if (typeof positionId !== 'string' || positionId.trim() === '') {
+    throw new ApiError('INVALID_REQUEST', 'positionId is required.', { field: 'positionId' });
+  }
+  if (typeof principalUsdc !== 'number' || !Number.isFinite(principalUsdc) || principalUsdc <= 0) {
+    throw new ApiError('INVALID_REQUEST', 'principalUsdc must be a positive number.', {
+      field: 'principalUsdc',
+    });
+  }
+
+  const position = await ownedPosition(positionId.trim());
+
+  // Derived from the position, never from the request. The client can only ask
+  // for less.
+  let limit;
+  try {
+    limit = creditLimitFor(position);
+  } catch (error) {
+    throw new ApiError('CONFLICT',
+      'This position cannot back a loan yet — it has no confirmed size on chain.', {
+        positionId: position.id,
+        reason: error.message,
+      });
+  }
+
+  const principalRaw = BigInt(Math.round(principalUsdc * 1e6));
+
+  if (principalRaw > limit.creditLimitRaw) {
+    throw new ApiError('CREDIT_LIMIT_EXCEEDED',
+      `You can borrow up to ${limit.creditLimitUsdc} USDC against this protection.`, {
+        requestedUsdc: principalUsdc,
+        ...creditLimitView(limit),
+      });
+  }
+
+  const recipient = payoutRecipient();
+
+  try {
+    const result = await disburse({
+      positionId: position.id,
+      recipient,
+      principalRaw,
+      confirmed: true,
+    });
+
+    const loan = await getLoan(result.loanId);
+
+    return {
+      loanId: result.loanId,
+      loan: loanView(loan, owedOrNull(loan)),
+      ...creditLimitView(limit),
+      principalUsdc: result.principalUsdc,
+      txHash: result.txHash,
+      explorerUrl: result.explorerUrl,
+      recipientAddress: recipient,
+      sent: true,
+    };
+  } catch (error) {
+    if (error?.code === 'DISBURSE_PREFLIGHT_FAILED') {
+      throw refusedDisbursement(error.preflight, limit, principalUsdc);
+    }
+    if (error?.code === 'DISBURSE_REVERTED') {
+      throw new ApiError('TRANSFER_REVERTED',
+        'The transfer was rejected on chain. Nothing was sent.', {
+          loanId: error.loanId, sent: false,
+        });
+    }
+    if (error?.code === 'DISBURSE_OUTCOME_UNKNOWN') {
+      throw new ApiError('OUTCOME_UNKNOWN',
+        'We lost contact before we could confirm the transfer. It may have been sent. '
+        + 'Do not try again — check with the team.', {
+          loanId: error.loanId, sent: null, doNotRetry: true,
+        });
+    }
+    throw error;
+  }
 }

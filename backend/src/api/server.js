@@ -12,7 +12,7 @@ import {
   getPositionDetail, getPortfolio,
 } from './routes.js';
 import {
-  getLoans, getLoanDetail, postRepaymentRequest, postRepay,
+  getLoans, getLoanDetail, postRepaymentRequest, postRepay, getLoanOffer, postLoan,
 } from './loanRoutes.js';
 import {
   getVaults, getVaultDetail, getMaturityPreflight, postMature,
@@ -76,6 +76,19 @@ const routes = [
   { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
   { method: 'GET', path: '/api/portfolio', handler: () => getPortfolio() },
   { method: 'GET', path: '/api/loans', handler: () => getLoans() },
+  // Literals ABOVE the /api/loans/:loanId pattern.
+  {
+    method: 'GET',
+    path: '/api/loans/offer',
+    handler: (_body, { query }) => getLoanOffer(query.get('positionId')),
+  },
+  {
+    method: 'POST',
+    path: '/api/loans',
+    // Held rather than 202: eight local and RPC checks, then a one-block
+    // transfer. Nothing here scans the chain the way the maturity check does.
+    handler: (body) => postLoan(body),
+  },
   { method: 'GET', path: '/api/vault', handler: () => getVaults() },
   // Literals, ABOVE the /api/vault/:vaultId pattern. 'deposit' is not a uuid so
   // the pattern could not capture it, but keeping the ordering habit means the
@@ -170,17 +183,41 @@ const routes = [
   },
 ];
 
-/** Match a request against the table, returning the route and its captures. */
+/**
+ * Match a request against the table, returning the route and its captures.
+ *
+ * ---------------------------------------------------------------------------
+ * THE METHOD IS PART OF THE MATCH, NOT A CHECK APPLIED AFTERWARDS.
+ * ---------------------------------------------------------------------------
+ *
+ * This used to return the first route whose PATH matched and then report
+ * whether the method happened to agree. That was fine while every path had one
+ * method, and broke the moment /api/loans gained a POST beside its GET: the GET
+ * entry matched first, the method did not agree, and a valid POST got 405.
+ *
+ * So it looks for a path AND method match first, and only falls back to a
+ * path-only match to distinguish 405 from 404. Those two answers are different
+ * and both are worth keeping.
+ */
 function matchRoute(method, pathname) {
+  const candidates = [];
+
   for (const r of routes) {
     if (r.pattern) {
       const m = pathname.match(r.pattern);
-      if (m) return { route: r, params: m.slice(1), methodOk: r.method === method };
+      if (m) candidates.push({ route: r, params: m.slice(1) });
     } else if (r.path === pathname) {
-      return { route: r, params: [], methodOk: r.method === method };
+      candidates.push({ route: r, params: [] });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+
+  const exact = candidates.find((c) => c.route.method === method);
+  if (exact) return { ...exact, methodOk: true };
+
+  // The path exists but not for this method: 405, not 404.
+  return { ...candidates[0], methodOk: false };
 }
 
 async function handle(req, res) {

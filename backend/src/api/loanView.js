@@ -65,6 +65,19 @@ export function creditLimitView(limit) {
     interestReservedUsdc: usdc(limit.interestReservedUsdc),
 
     annualRatePct: limit.annualRatePct,
+    // ------------------------------------------------------------------
+    // THE LIMIT DRIFTS UPWARD AS EXPIRY APPROACHES, AND THAT IS SAFE.
+    // ------------------------------------------------------------------
+    //
+    // The limit is protectedValue / (1 + rate x term/365), so as the term
+    // shrinks the divisor shrinks and the limit rises toward the protected
+    // value. Three calls seconds apart returned 257.237754, 257.237755 and
+    // 257.237756.
+    //
+    // The direction is what makes it harmless: a user shown a figure and
+    // clicking a moment later is always WITHIN the newer limit, never over
+    // it. If this ever moved the other way, a displayed limit would become
+    // a refusal between the render and the click.
     termDays: limit.termDays,
     dueAt: limit.dueAt,
   };

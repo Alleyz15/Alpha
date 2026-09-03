@@ -19,6 +19,7 @@
 import { getSigningClient, getWalletAddress } from '../thetanuts/signer.js';
 import { usdcAddress, getWalletBalances } from '../thetanuts/wallet.js';
 import { creditLimitFor, interestRateAnnualPct, dueAtFor } from './credit.js';
+import { resolveFillFailure } from '../thetanuts/fillOutcome.js';
 import { db, unwrap } from '../db/client.js';
 import { getPosition } from '../db/positions.js';
 
@@ -147,7 +148,13 @@ export async function disburse({ positionId, recipient, principalRaw, confirmed 
 
   const preflight = await runDisbursePreflight({ position, recipient, principalRaw: principal });
   if (!preflight.pass) {
-    throw new Error('disburse refused: pre-flight failed. Nothing was sent.');
+    // Typed, so a caller other than the CLI can tell WHICH refusal this is -
+    // and in particular can tell a credit limit (theirs) from a wallet balance
+    // (ours). Different facts, and only one of them is the user's problem.
+    throw Object.assign(
+      new Error('disburse refused: pre-flight failed. Nothing was sent.'),
+      { code: 'DISBURSE_PREFLIGHT_FAILED', preflight, sent: false },
+    );
   }
 
   // BR-14's logic: the row exists before the transfer, so an interrupted
@@ -170,28 +177,60 @@ export async function disburse({ positionId, recipient, principalRaw, confirmed 
   );
 
   const client = getSigningClient();
+
+  // Captured BEFORE the transfer so a failure can be told apart from a refusal.
+  let nonceBefore = null;
+  try {
+    nonceBefore = await client.provider.getTransactionCount(getWalletAddress(), 'latest');
+  } catch {
+    nonceBefore = null;
+  }
+
   let receipt;
   try {
     receipt = await client.erc20.transfer(usdcAddress(), recipient, principal);
   } catch (error) {
-    // A revert is a definite answer: nothing moved.
-    const reverted = /revert|insufficient/i.test(error?.message ?? '');
-    if (reverted) {
+    // ---------------------------------------------------------------------
+    // THE ERROR'S OWN CLAIM IS NOT EVIDENCE. ASK THE CHAIN.
+    // ---------------------------------------------------------------------
+    //
+    // This was `/revert|insufficient/i.test(error.message)` - the same mistake
+    // that marked a successful fill as failed on 3 Sep. The SDK maps every
+    // unrecognised Error to a ContractRevertError, so the words it produces say
+    // nothing about what the chain actually did.
+    const outcome = await resolveFillFailure({
+      error, nonceBefore, wallet: getWalletAddress(), provider: client.provider,
+    });
+
+    if (outcome.kind === 'succeeded') {
+      // The transfer WORKED and only the reporting broke. Marking the loan
+      // defaulted here would deny sending money the borrower has received.
+      console.warn(`[disburse] transfer threw but SUCCEEDED (${outcome.evidence}). Continuing.`);
+      receipt = { ...outcome.receipt, hash: outcome.txHash };
+    } else if (outcome.kind === 'reverted' || outcome.kind === 'not_sent') {
       // Checked: an unchecked update here would leave a loan marked active
       // against a transfer that never happened, and say nothing about it.
       const marked = await db.from('loans').update({ status: 'defaulted' }).eq('id', loan.id);
       if (marked.error) {
         console.error('[disburse] FAILED to mark loan', loan.id, 'defaulted:', marked.error.message);
       }
-      throw new Error(`disbursement reverted, nothing was sent: ${error?.message ?? error}`);
+      throw Object.assign(
+        new Error(`disbursement ${outcome.kind}, nothing was sent (${outcome.evidence})`),
+        { code: 'DISBURSE_REVERTED', sent: false, loanId: loan.id },
+      );
+    } else {
+      // NOT an answer. The transfer may have landed; retrying would send twice.
+      // The row stays with a null disbursement_tx for a human.
+      throw Object.assign(
+        new Error(
+          `disbursement outcome UNKNOWN for loan ${loan.id} (${outcome.evidence}): ` +
+          `${error?.message ?? error}\n` +
+          `The transfer may have landed. DO NOT RETRY — check ` +
+          `https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
+        ),
+        { code: 'DISBURSE_OUTCOME_UNKNOWN', sent: null, loanId: loan.id },
+      );
     }
-    // Anything else is NOT an answer. The transfer may have landed; retrying
-    // would send twice. The row stays with a null disbursement_tx for a human.
-    throw new Error(
-      `disbursement outcome UNKNOWN for loan ${loan.id}: ${error?.message ?? error}\n` +
-      `The transfer may have landed. DO NOT RETRY — check ` +
-      `https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
-    );
   }
 
   const txHash = receipt?.hash ?? receipt?.transactionHash ?? null;

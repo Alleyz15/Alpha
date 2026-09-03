@@ -11,6 +11,109 @@ protection, then borrow against it.
 
 ---
 
+## `GET /api/loans/offer?positionId=...`
+
+What could be borrowed against a position, with the equation shown and all
+eight checks run. **Sends nothing, writes nothing.**
+
+```json
+{
+  "positionId": "e619686f-...",
+
+  "protectionFloorUsdc": 2360,
+  "numContracts": 0.109011,
+  "protectedValueUsdc": 257.26596,
+  "interestReservedUsdc": 0.028205,
+  "creditLimitUsdc": 257.237755,
+  "annualRatePct": 5,
+  "termDays": 0.8,
+  "dueAt": "2026-09-04T08:00:00Z",
+
+  "borrowableNowUsdc": 55.686223,
+  "boundBy": "wallet",
+  "walletUsdc": 55.686223,
+  "walletShortfallUsdc": 201.551532,
+
+  "checks": [ ... ],
+  "sent": false
+}
+```
+
+### The equation is the product's claim, so it ships as components
+
+```
+protectionFloorUsdc $2,360  x  numContracts 0.109011
+  = protectedValueUsdc $257.26596
+  - interestReservedUsdc $0.028205
+  = creditLimitUsdc $257.237755
+```
+
+Render these; do not recompute them. Two implementations of one equation
+eventually disagree, and the disagreement would be about money.
+
+**The limit drifts slightly upward** as expiry approaches — the interest reserve
+shrinks with the term. A user shown a figure and clicking a moment later is
+always *within* the newer limit, never over it.
+
+### `boundBy` — the two limits are not the same fact
+
+| `boundBy` | Means |
+|---|---|
+| `credit_limit` | The protection is the constraint. **This is the product working.** |
+| `wallet` | **Our** operator float cannot fund it today. Nothing to do with the user. |
+
+Today the put guarantees **$257.24** and our wallet holds **$55.69**, so
+`boundBy` is `wallet` and `walletShortfallUsdc` is $201.55.
+
+**Never render a wallet shortfall as a credit decision.** *"You can only borrow
+$55"* is false — their protection is worth $257 and their entitlement has not
+changed; our float ran out. Say so: *"We can fund $55.69 of your $257.24 limit
+right now."*
+
+`walletShortfallUsdc` is `null` whenever the credit limit is binding, so the
+field cannot be shown by accident.
+
+---
+
+## `POST /api/loans`   `{ positionId, principalUsdc }`
+
+**Sends real USDC.** Held rather than 202 — eight checks and a one-block
+transfer, seconds rather than the maturity check's 316.
+
+The put must already exist. This endpoint never buys one: buying a put and
+disbursing a loan are irreversible in different ways, and fusing them would
+produce *"we bought you an option you did not ask for"*. The products chain —
+buy protection, then borrow against it.
+
+`principalUsdc` is the one number the client chooses, and **only downward**. The
+limit is derived from the position; borrowing less than it is normal.
+
+Success returns `{ loanId, loan, creditLimitUsdc, ...components, principalUsdc,
+txHash, explorerUrl, recipientAddress, sent: true }`.
+
+### Refusals, and which of them are about the user
+
+| Status | Code | Whose limit | Means |
+|---|---|---|---|
+| 400 | `CREDIT_LIMIT_EXCEEDED` | **theirs** | More than the protection supports |
+| 503 | `INSUFFICIENT_FLOAT` | **ours** | Our wallet cannot fund it. Their limit is unchanged |
+| 412 | `PRECONDITION_FAILED` | — | Another check failed; `details.checks` says which |
+| 409 | `CONFLICT` | — | The position cannot back a loan yet |
+| 404 | `NOT_FOUND` | — | No such position, or not theirs |
+| 502 | `TRANSFER_REVERTED` | — | Rejected on chain. Nothing sent |
+| 409 | `OUTCOME_UNKNOWN` | — | **May have sent. `doNotRetry: true`** |
+
+`INSUFFICIENT_FLOAT` is 503, not 400, deliberately: the request is valid and the
+collateral sufficient. A 400 would blame the caller for our float.
+
+Its message says so outright:
+
+> We cannot fund 257.237754 USDC right now. This is our limit, not yours — your
+> protection still supports 257.237755 USDC. The most we can send today is
+> 55.686223 USDC.
+
+---
+
 ## `GET /api/loans`
 
 The user's loans, newest first. `{ "loans": [ ... ] }`, each shaped as below.

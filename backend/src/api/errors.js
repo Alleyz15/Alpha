@@ -44,6 +44,12 @@ const STATUS_BY_CODE = {
   // body carries doNotRetry and `sent: null` rather than false.
   OUTCOME_UNKNOWN: 409,
 
+  // The user asked to borrow more than their protection supports. Theirs.
+  CREDIT_LIMIT_EXCEEDED: 400,
+  // OUR operator wallet cannot fund the draw. 503, not 400: the request is
+  // valid and the user's collateral is sufficient - we are the constraint, and
+  // it is temporary. A 400 would blame the caller for our float.
+  INSUFFICIENT_FLOAT: 503,
   INVALID_REQUEST: 400,
   UPSTREAM_ERROR: 502,
 };
