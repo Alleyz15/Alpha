@@ -634,8 +634,8 @@ interest, and it is the only difference between the two lines.
 ```
 protectionFloorUsdc $2,360  x  numContracts 0.109011
   = protectedValueUsdc  $257.26596
-  - interestReservedUsdc    $0.028107
-  = creditLimitUsdc     $257.237853
+  - interestReservedUsdc    $0.028106
+  = creditLimitUsdc     $257.237854      <- as stored on loan d486ee11
 ```
 
 The borrower drew **5 of 257.24** — under 2% of the line. The API returns those
@@ -647,6 +647,41 @@ recomputes them in the browser.
 ratio would produce the same number with or without the option, which would make
 the product's central claim false.
 
+#### Why the sixth decimal moves
+
+Recompute that equation and you may get `257.237853`, or `257.237855`, instead of
+the `257.237854` stored on the loan. **The difference is real, it is expected,
+and it is not a rounding error** — it is worth stating plainly, because a
+reviewer who spots a figure that will not reproduce should be able to tell a
+known cause from a bug.
+
+The interest is reserved out of the floor over the *remaining* term, solved
+backwards:
+
+```
+creditLimit = floor / (1 + rate x termRemaining/365)
+```
+
+`termRemaining` shrinks with the clock, so the reserve shrinks and the limit
+grows — continuously, at
+
+```
+257.26596 x 5% / 31,536,000 s  =  0.00000041 USDC per second
+```
+
+or **one unit of the sixth decimal about every 2.5 seconds.** The floor
+(`257.26596`) is fixed — it is strike x contracts and nothing else — and
+`floor = limit + interestReserved` holds exactly at every instant, because the
+arithmetic runs in integers (`BigInt`, 6dp) with no floating-point step. What
+moves is only where the split falls.
+
+So `257.237854` is not a rounded `257.237853`. It is the same function evaluated
+a second or two apart: `257.237853` is what it returns for the row's `created_at`
+of 12:51:27.45 UTC, and `257.237854` is what was computed and stored as that row
+was written. The stored one is the one that binds. Every other figure quoted for
+this loan reproduces exactly — this one is a reading with a clock attached, and
+reproducing it means supplying the same instant.
+
 ### Two limits, and only one of them is the borrower's
 
 The wallet held 55.69 USDC against a 257.24 limit, so a full draw was impossible.
@@ -655,6 +690,11 @@ Asking for one returns **503, not 400**:
 > We cannot fund 257.237754 USDC right now. **This is our limit, not yours** —
 > your protection still supports 257.237755 USDC. The most we can send today is
 > 55.686223 USDC.
+
+That response is quoted as it was returned, four minutes before the loan was
+written, which is why it says `257.237755` rather than `257.237854` — the same
+clock effect described above, over a longer gap. It is left unedited on purpose:
+**a quoted response that has been tidied up is no longer evidence.**
 
 A credit limit is a fact about the user's collateral. A wallet balance is a fact
 about our float. Rendering the second as the first would tell someone their
