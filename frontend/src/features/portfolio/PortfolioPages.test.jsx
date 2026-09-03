@@ -75,6 +75,7 @@ describe('Phase 6 pages', () => {
       <MemoryRouter initialEntries={['/portfolio']}>
         <Routes>
           <Route path="/portfolio" element={<PortfolioPage apiClient={apiClient} />} />
+          <Route path="/markets" element={<div>Opened Home</div>} />
           <Route path="/positions/:symbol" element={<DashboardPage apiClient={apiClient} assetFilter="BTC" />} />
           <Route path="/protection/:positionId" element={<div>Opened protection</div>} />
           <Route path="/protect/:symbol" element={<div>Opened checkout</div>} />
@@ -83,6 +84,12 @@ describe('Phase 6 pages', () => {
     );
 
     const table = await screen.findByRole('table');
+    const summary = screen.getByRole('region', { name: 'Portfolio summary' });
+    expect(within(summary).getByText('Next expiry')).toBeVisible();
+    expect(within(summary).getByText('5 Sept 2026')).toBeVisible();
+    expect(screen.queryByPlaceholderText('Search your holdings')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Go to Alpha Welcome' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to Home' })).toBeVisible();
     expect(within(table).getAllByRole('row')).toHaveLength(3);
     expect(within(table).queryByText('USDC')).not.toBeInTheDocument();
     expect(within(table).getAllByRole('button')).toHaveLength(2);
@@ -103,6 +110,25 @@ describe('Phase 6 pages', () => {
       .toBeGreaterThan(cards.findLastIndex((text) => text.includes('Active')));
     expect(cards.findIndex((text) => text.includes('Failed')))
       .toBeGreaterThan(cards.findIndex((text) => text.includes('Not needed')));
+  });
+
+  it('returns from Portfolio to Home without reloading the page', async () => {
+    const user = userEvent.setup();
+    const apiClient = {
+      getPortfolio: vi.fn().mockResolvedValue(portfolio),
+      getPositions: vi.fn().mockResolvedValue({ positions: [] }),
+    };
+    render(
+      <MemoryRouter initialEntries={['/portfolio']}>
+        <Routes>
+          <Route path="/portfolio" element={<PortfolioPage apiClient={apiClient} />} />
+          <Route path="/markets" element={<div>Opened Home</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Back to Home' }));
+    expect(screen.getByText('Opened Home')).toBeVisible();
   });
 
   it('renders the requested contract and order sections without payout or PnL cards', async () => {

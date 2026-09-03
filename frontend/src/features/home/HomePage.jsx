@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
@@ -15,19 +15,6 @@ import {
 import useHomeAnimations from './useHomeAnimations.js';
 import useHomeData from './useHomeData.js';
 
-function PortfolioIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4z" /><path d="M8 7V5h8v2M4 11h16M10 15h4" /></svg>;
-}
-
-function MarketIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16" /><path d="m7 15 4-4 3 2 5-6" /></svg>;
-}
-
-function initials(displayName) {
-  if (!displayName) return 'A';
-  return displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-}
-
 function ChangeChip({ asset, compact = false }) {
   const numeric = Number(asset.priceChange24hPct);
   const available = Number.isFinite(numeric);
@@ -40,35 +27,16 @@ function ChangeChip({ asset, compact = false }) {
   );
 }
 
-function HomeRail({ navigate }) {
-  return (
-    <aside className="home-rail" aria-label="Primary navigation">
-      <button className="home-rail__brand" type="button" onClick={() => navigate('/')} aria-label="Alpha Welcome">α</button>
-      <nav>
-        <button className="is-active" type="button" aria-current="page" aria-label="Markets"><MarketIcon /></button>
-        <button type="button" onClick={() => navigate('/portfolio')} aria-label="Portfolio"><PortfolioIcon /></button>
-      </nav>
-      <button className="home-rail__help" type="button" onClick={() => navigate('/#product-reality')} aria-label="Product reality">?</button>
-    </aside>
-  );
-}
-
 export default function HomePage({ apiClient = liveApi }) {
   const navigate = useNavigate();
   const rootRef = useRef(null);
-  const [query, setQuery] = useState('');
-  const { demo, portfolio, market, candles, candleFailures, retry } = useHomeData(apiClient);
+  const { portfolio, market, candles, candleFailures, retry } = useHomeData(apiClient);
 
   const assets = useMemo(
     () => (market.data?.assets ?? []).map((asset) => toHomeMarketAsset(asset, candles[asset.symbol] ?? [])),
     [candles, market.data],
   );
   const trending = useMemo(() => rankTrendingAssets(assets), [assets]);
-  const visibleAssets = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return assets;
-    return assets.filter((asset) => `${asset.name} ${asset.symbol}`.toLowerCase().includes(normalized));
-  }, [assets, query]);
   const updateLabel = marketUpdateLabel(assets);
   const marketKey = assets.map((asset) => `${asset.symbol}:${asset.priceUsd}:${asset.priceChange24hPct}`).join('|');
   useHomeAnimations(rootRef, marketKey);
@@ -77,24 +45,7 @@ export default function HomePage({ apiClient = liveApi }) {
 
   return (
     <div className="home-shell" ref={rootRef}>
-      <HomeRail navigate={navigate} />
       <main className="home-main">
-        <header className="home-topbar">
-          <label className="home-search">
-            <span aria-hidden="true">⌕</span>
-            <span className="sr-only">Search cryptocurrencies</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search cryptocurrencies" />
-          </label>
-          <div className="home-topbar__actions">
-            <Button className="home-protection-button" variant="ghost" onClick={() => navigate('/portfolio')}>
-              <ShieldIcon size={17} /> Protection overview
-            </Button>
-            <div className="home-avatar" aria-label={demo.data?.displayName ? `Signed in as ${demo.data.displayName}` : 'Alpha user'}>
-              {initials(demo.data?.displayName)}
-            </div>
-          </div>
-        </header>
-
         {marketRefreshingFailed && (
           <Alert tone="warning" title="A live refresh was interrupted">
             The last successful values remain visible. Alpha will retry automatically while this page is open.
@@ -195,23 +146,29 @@ export default function HomePage({ apiClient = liveApi }) {
               <p>The provider did not return real market data. No prices were invented.</p>
               <Button variant="ghost" size="small" onClick={retry}>Try again</Button>
             </div>
-          ) : visibleAssets.length === 0 ? (
-            <div className="home-market-error">
-              <strong>No matching cryptocurrency</strong>
-              <p>No supported asset matches “{query}”.</p>
-            </div>
           ) : (
-            <div className="home-table-scroll">
+            <div className="home-table-scroll" tabIndex={0} role="region" aria-label="Scrollable supported assets table">
               <table className="home-market-table">
                 <thead><tr><th>Coin</th><th>Price</th><th>24h change</th><th>Market cap</th><th>7d trend (Binance USDT)</th></tr></thead>
                 <tbody>
-                  {visibleAssets.map((asset) => (
-                    <tr className="home-market-row" key={asset.symbol}>
+                  {assets.map((asset) => (
+                    <tr
+                      className="home-market-row"
+                      key={asset.symbol}
+                      tabIndex={0}
+                      aria-label={`View ${asset.name} coin details`}
+                      onClick={() => navigate(`/coin/${asset.symbol}`)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        navigate(`/coin/${asset.symbol}`);
+                      }}
+                    >
                       <td>
-                        <button className="home-coin-link" type="button" onClick={() => navigate(`/coin/${asset.symbol}`)}>
+                        <span className="home-coin-identity">
                           <AssetLogo symbol={asset.symbol} name={asset.name} size="small" />
                           <span><strong>{asset.name}</strong><small>{asset.symbol}</small></span>
-                        </button>
+                        </span>
                       </td>
                       <td className="numeric">{asset.priceLabel}</td>
                       <td><ChangeChip asset={asset} /></td>

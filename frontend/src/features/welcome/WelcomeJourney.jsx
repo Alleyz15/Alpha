@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { animate } from 'animejs';
 import { journeySteps } from './welcomeContent.js';
 
 export default function WelcomeJourney() {
   const [activeStep, setActiveStep] = useState(0);
   const checkpointRefs = useRef([]);
+  const stageRef = useRef(null);
 
   useEffect(() => {
     if (typeof IntersectionObserver !== 'function') return undefined;
@@ -18,6 +20,29 @@ export default function WelcomeJourney() {
     checkpointRefs.current.forEach((node) => node && observer.observe(node));
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!stageRef.current || typeof window.matchMedia !== 'function') return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+
+    let animation;
+    try {
+      animation = animate(
+        stageRef.current.querySelectorAll('.welcome-journey__stage-label, h3, p:last-of-type'),
+        {
+          opacity: [.35, 1],
+          y: [16, 0],
+          duration: 560,
+          delay: (_, index) => index * 65,
+          ease: 'outExpo',
+        },
+      );
+    } catch {
+      animation = null;
+    }
+
+    return () => animation?.revert?.();
+  }, [activeStep]);
 
   const active = journeySteps[activeStep];
 
@@ -47,7 +72,7 @@ export default function WelcomeJourney() {
           ))}
         </div>
 
-        <article className="welcome-journey__stage" aria-live="polite">
+        <article className="welcome-journey__stage" aria-live="polite" ref={stageRef}>
           <div className="welcome-journey__stage-index">STEP {active.number} / 06</div>
           <p className="welcome-journey__stage-label">{active.label}</p>
           <h3>{active.title}</h3>

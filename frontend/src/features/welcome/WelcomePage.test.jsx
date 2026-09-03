@@ -42,6 +42,16 @@ describe('WelcomePage', () => {
     expect(screen.queryByText('Balanced')).not.toBeInTheDocument();
     expect(screen.queryByText('Basic')).not.toBeInTheDocument();
     expect(screen.queryByText('Enhanced')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'How Alpha works' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'How it works' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Live market' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Product reality' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Markets' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'My Portfolio' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Footer' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Protection without the trading-language barrier' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Protection should feel like a plan, not a trading terminal.' })).toBeVisible();
     expect(client.getMarketContext).toHaveBeenCalledTimes(1);
   });
 
