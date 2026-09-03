@@ -391,6 +391,27 @@ describe('LendingPage', () => {
     expect(screen.getByText(/your limit is \$257\.24 USDC/)).toBeVisible();
   });
 
+  it('refuses an amount above what we can fund, and says why', async () => {
+    // `max` on a number input does not stop anyone typing past it, so the gate
+    // has to be the submit condition. Gating on the credit limit let an amount
+    // through that the backend refuses with INSUFFICIENT_FLOAT.
+    const user = await openBorrowForm(apiClient({ getLoanOffer: vi.fn().mockResolvedValue(walletBound) }));
+    await user.type(await screen.findByLabelText(/Amount to borrow/), '100');
+
+    expect(await screen.findByText('More than we can send today')).toBeVisible();
+    expect(screen.getByText(/The most we can send right now is \$55\.69 USDC/)).toBeVisible();
+    expect(screen.getByText(/not your credit limit/)).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Borrow 100 USDC/ })).toBeDisabled();
+  });
+
+  it('allows an amount inside the fundable ceiling', async () => {
+    const user = await openBorrowForm(apiClient({ getLoanOffer: vi.fn().mockResolvedValue(walletBound) }));
+    await user.type(await screen.findByLabelText(/Amount to borrow/), '50');
+
+    expect(screen.queryByText('More than we can send today')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Borrow 50 USDC/ })).toBeEnabled();
+  });
+
   it('shows one figure when the protection, not our float, is the ceiling', async () => {
     await openBorrowForm(apiClient());
 

@@ -81,7 +81,16 @@ function OfferAndBorrow({ lending }) {
 
   const hint = borrowableHint(offer);
   const amount = Number(principalInput);
-  const submitDisabled = !principalInput || !Number.isFinite(amount) || amount <= 0 || amount > offer.creditLimitUsdc
+  const ceiling = borrowableCeiling(offer);
+
+  // Against the ceiling that can actually be funded, not the credit limit.
+  // The field carries `max`, but `max` on a number input only drives
+  // validation and the steppers - it does not stop anyone typing a larger
+  // number, so gating on the limit let an amount through that the backend
+  // would refuse with INSUFFICIENT_FLOAT.
+  const overCeiling = Number.isFinite(amount) && amount > ceiling;
+  const submitDisabled = !principalInput || !Number.isFinite(amount) || amount <= 0
+    || overCeiling
     || borrowState === 'submitting';
 
   return (
@@ -118,6 +127,20 @@ function OfferAndBorrow({ lending }) {
           disabled={borrowState === 'submitting' || borrowState === 'success'}
         />
       </FormField>
+
+      {/*
+        Say why, rather than only greying the button out. A disabled control
+        with no explanation reads as a broken page, and the reason here is one
+        the user can act on by typing a smaller number.
+      */}
+      {overCeiling && (
+        <Alert tone="warning" title="More than we can send today">
+          {`The most we can send right now is ${formatUsdc(ceiling) ?? '—'}. `}
+          {offer.boundBy === 'wallet'
+            ? 'That is our operator float, not your credit limit — your protection still supports the full amount.'
+            : 'That is what your protection supports.'}
+        </Alert>
+      )}
 
       {borrowState === 'error' && borrowError && (() => {
         const described = describeLoanError(borrowError, getApiErrorCode(borrowError));
