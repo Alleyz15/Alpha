@@ -20,6 +20,36 @@ const STATUS_BY_CODE = {
   // temporary by nature and the interface should say "unavailable, try again"
   // rather than "something is broken".
   MARKET_DATA_UNAVAILABLE: 503,
+  // A repayment transaction was supplied and did not hold up. 400 rather than
+  // 422: the caller can fix it by sending the right transaction, and the
+  // response carries the checklist so they can see which check failed.
+  REPAYMENT_UNVERIFIED: 400,
+  // The action is not available in the resource's current state - a loan that
+  // is already repaid, a vault already matured. 409, because nothing about the
+  // request is malformed; it simply arrived too late.
+  CONFLICT: 409,
+  // A money-moving action whose checks did not pass. Nothing was sent.
+  PRECONDITION_FAILED: 412,
+  // The chain rejected the transfer. Nothing moved - this is a definite answer
+  // and it is safe to say so.
+  TRANSFER_REVERTED: 502,
+
+  // ---------------------------------------------------------------------
+  // NOT A FAILURE. The transaction MAY have landed.
+  // ---------------------------------------------------------------------
+  //
+  // 502 would sit beside every other upstream problem and invite a retry
+  // button; a retry here pays twice and cannot be undone. 409 says the
+  // request cannot be repeated, which is exactly the instruction, and the
+  // body carries doNotRetry and `sent: null` rather than false.
+  OUTCOME_UNKNOWN: 409,
+
+  // The user asked to borrow more than their protection supports. Theirs.
+  CREDIT_LIMIT_EXCEEDED: 400,
+  // OUR operator wallet cannot fund the draw. 503, not 400: the request is
+  // valid and the user's collateral is sufficient - we are the constraint, and
+  // it is temporary. A 400 would blame the caller for our float.
+  INSUFFICIENT_FLOAT: 503,
   INVALID_REQUEST: 400,
   UPSTREAM_ERROR: 502,
 };

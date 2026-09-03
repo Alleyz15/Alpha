@@ -23,6 +23,7 @@ import { getBuyablePutOrders } from './orders.js';
 import { runPreflight } from './preflight.js';
 import { getPosition, transitionPosition } from '../db/positions.js';
 import { getQuote } from '../db/quotes.js';
+import { resolveFillFailure, extractUsdcSpent } from './fillOutcome.js';
 import { refundBalance } from '../db/balances.js';
 
 /**
@@ -322,7 +323,11 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
     );
   }
 
-  const { liveOrder, usdcAmountRaw, position } = prepared;
+  // `quote` is destructured because the refund path needs it. It was omitted,
+  // and `Number(quote?.premium ?? 0)` in the catch below was a ReferenceError
+  // in EVERY execution - optional chaining guards a null value, never an
+  // undeclared identifier. It surfaced the first time a fill failed for real.
+  const { liveOrder, usdcAmountRaw, position, quote } = prepared;
   const client = getSigningClient();
 
   // Outcome unknown from here until the receipt says otherwise.
@@ -338,37 +343,68 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
     },
   });
 
+  // Captured BEFORE the call so a failure can be told apart from a refusal:
+  // an unchanged nonce proves nothing left the wallet. See resolveFillFailure.
+  const wallet = getWalletAddress();
+  let nonceBefore = null;
+  try {
+    nonceBefore = await client.provider.getTransactionCount(wallet, 'latest');
+  } catch {
+    // Unreadable here means resolveFillFailure cannot use the nonce and will
+    // answer 'unknown' rather than 'not_sent'. Conservative, and correct.
+    nonceBefore = null;
+  }
+
   let result;
   try {
     // The amount is ALWAYS passed. fillOrder() with no amount fills the
     // maximum available, which would spend the whole wallet.
     result = await client.optionBook.fillOrder(liveOrder, usdcAmountRaw);
   } catch (error) {
-    // A revert is a definite answer: nothing was bought, nothing was charged.
-    const reverted = error?.code === 'CONTRACT_REVERT' ||
-      error?.code === 'CALL_EXCEPTION' ||
-      /revert/i.test(error?.message ?? '');
+    // ---------------------------------------------------------------------
+    // THE ERROR'S OWN OPINION IS IGNORED. WE ASK THE CHAIN.
+    // ---------------------------------------------------------------------
+    //
+    // The SDK maps every unrecognised Error to a ContractRevertError, so
+    // `error.code === 'CONTRACT_REVERT'` is true for an RPC failure reading a
+    // receipt. Trusting it on 3 Sep marked a successful fill as `failed`.
+    const outcome = await resolveFillFailure({
+      error, nonceBefore, wallet, provider: client.provider,
+    });
 
-    if (reverted) {
+    if (outcome.kind === 'succeeded') {
+      // The fill WORKED and only the reporting broke. Carry on with the
+      // receipt we just read: recording anything else would throw away a
+      // position we own and have paid for.
+      console.warn(
+        `[fill] fillOrder threw but the transaction SUCCEEDED (${outcome.evidence}). ` +
+        'Continuing with the on-chain receipt.',
+      );
+      result = { ...outcome.receipt, hash: outcome.txHash };
+    } else if (outcome.kind === 'reverted' || outcome.kind === 'not_sent') {
+      // Definite: either the receipt says status 0, or the nonce never moved.
+      // Only these two justify a terminal state and a refund.
       await transitionPosition(positionId, {
         toStatus: 'failed',
         eventType: 'failed',
-        payload: { error: String(error?.message ?? error).slice(0, 500) },
+        payload: {
+          error: String(error?.message ?? error).slice(0, 400),
+          outcome: outcome.kind,
+          evidence: outcome.evidence,
+          txHash: outcome.txHash,
+        },
       });
 
-      // The fill definitively did not happen, so the user must be made whole.
       // A COMPENSATING WRITE, never a deletion: the trail reads
       // debit -> fill failed -> refund. A debit that disappears looks like it
       // never happened, and "we cannot tell whether the user was charged" is
       // worse than either charging or not charging.
-      //
-      // Only on a revert. A TIMEOUT must NOT refund - see below.
       try {
         const premium = Number(quote?.premium ?? 0);
         if (premium > 0) {
           await refundBalance({
             userId: position.user_id, asset: 'USDC', amount: premium,
-            positionId, reason: 'fill reverted; premium refunded',
+            positionId, reason: `fill ${outcome.kind}; premium refunded`,
           });
         }
       } catch (refundError) {
@@ -377,18 +413,22 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
         console.error('[fill] REFUND FAILED for position', positionId, '-', refundError.message);
       }
 
-      throw new Error(`fill reverted, nothing was bought: ${error?.message ?? error}`);
+      throw new Error(
+        `fill ${outcome.kind}, nothing was bought (${outcome.evidence}): ${error?.message ?? error}`,
+      );
+    } else {
+      // UNKNOWN. The transaction may have landed. The row stays at
+      // pending_verification - written before the broadcast - and NOTHING is
+      // refunded: crediting a user whose fill may have succeeded pays for the
+      // option twice.
+      throw new Error(
+        `fill outcome UNKNOWN for position ${positionId} (${outcome.evidence}): ` +
+        `${error?.message ?? error}
+` +
+        `The transaction may have landed. Position stays pending_verification. DO NOT RETRY — ` +
+        `check https://basescan.org/address/${wallet} and resolve by hand.`,
+      );
     }
-
-    // Anything else - a timeout, a dropped connection - is NOT an answer. The
-    // transaction may have landed. Retrying would spend twice and create a
-    // second option nobody asked for, so the row stays at
-    // pending_verification and a human resolves it against chain state.
-    throw new Error(
-      `fill outcome UNKNOWN for position ${positionId}: ${error?.message ?? error}\n` +
-      `The transaction may have landed. Position is pending_verification. DO NOT RETRY — ` +
-      `check https://basescan.org/address/${getWalletAddress()} and resolve by hand.`,
-    );
   }
 
   // fillOrder's return shape differs between SDK versions; take the hash and
@@ -400,7 +440,9 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
   // The real premium, read from the USDC that actually left the wallet, rather
   // than the figure we quoted. They should match; if they do not, the row
   // should record what happened, not what was expected.
-  const premiumPaid = extractUsdcSpent(receipt, getWalletAddress()) ?? Number(usdcAmountRaw) / 1e6;
+  const premiumPaid = extractUsdcSpent(
+    receipt, getWalletAddress(), client.chainConfig.tokens.USDC.address,
+  ) ?? Number(usdcAmountRaw) / 1e6;
 
   // The count that actually filled. A fill executes by USDC amount, so it can
   // land a hair off the quoted count; read the authoritative on-chain size so
@@ -455,41 +497,6 @@ export async function executeFill(positionId, { confirmed = false } = {}) {
   };
 }
 
-/** ERC20 Transfer(address,address,uint256) */
-const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-
-/**
- * The USDC that actually left the wallet, from the receipt's Transfer logs.
- * Returns null if it cannot be determined - the caller falls back to the
- * quoted figure rather than recording a wrong one.
- */
-function extractUsdcSpent(receipt, fromAddress) {
-  try {
-    const usdc = getSigningClient().chainConfig.tokens.USDC.address.toLowerCase();
-    const from = fromAddress.toLowerCase().slice(2).padStart(64, '0');
-
-    // SUM every outgoing transfer, not just the first. A fill moves USDC out
-    // twice: the premium to the maker, and a protocol fee to the OptionBook.
-    // Recording only the premium understates what the position cost - the
-    // indexer's entryPrice is the total, and the row should agree with it.
-    let total = 0n;
-    let found = false;
-
-    for (const log of receipt?.logs ?? []) {
-      if (log.address?.toLowerCase() !== usdc) continue;
-      if (log.topics?.[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
-      if (log.topics?.[1]?.toLowerCase().slice(2) !== from) continue;
-      total += BigInt(log.data);
-      found = true;
-    }
-
-    if (found) return Number(total) / 1e6;
-  } catch {
-    // Deliberately quiet: this is a nicety, and failing to parse a log must
-    // never take down a fill that already succeeded.
-  }
-  return null;
-}
 
 /**
  * The option contract created by this fill. Best effort: the first address

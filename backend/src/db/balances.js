@@ -36,6 +36,33 @@ export async function getBalance(userId, asset) {
 }
 
 /**
+ * How much of an asset a user holds, as a NUMBER.
+ *
+ * ---------------------------------------------------------------------------
+ * getBalance RETURNS A ROW. THIS RETURNS THE AMOUNT.
+ * ---------------------------------------------------------------------------
+ *
+ * `Number(await getBalance(...))` is NaN, because a row object is not a number.
+ * NaN compares false to everything, so a guard written that way answers "no"
+ * to `held >= amount` AND "no" to `held < amount` - it never fires, in the
+ * permissive direction. That shipped in the vault deposit endpoint and was
+ * caught by a live request for 999999 USDC coming back 202.
+ *
+ * A missing row means the user holds none of that asset, which is a genuine
+ * zero rather than an absence - unlike a price or a premium, where zero would
+ * be a claim.
+ *
+ * @param {string} userId
+ * @param {string} asset
+ * @returns {Promise<number>}
+ */
+export async function getBalanceAmount(userId, asset) {
+  const row = await getBalance(userId, asset);
+  const amount = Number(row?.amount ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+/**
  * Charge a user for a purchase. Atomic: the check and the decrement happen
  * together or not at all.
  *
