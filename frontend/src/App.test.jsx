@@ -65,7 +65,7 @@ const orderBook = {
 };
 
 const candles = {
-  symbol: 'ETH', pair: 'ETHUSDT', quoteCurrency: 'USDT', range: '1D', interval: '5m',
+  symbol: 'ETH', pair: 'ETHUSDT', quoteCurrency: 'USDT', interval: '5m',
   candles: [{ timestamp: 1788310800000, open: 2410, high: 2420, low: 2405, close: 2415, volume: 100 }],
   source: 'Binance', updatedAt: '2026-09-02T04:12:12.000Z',
 };
