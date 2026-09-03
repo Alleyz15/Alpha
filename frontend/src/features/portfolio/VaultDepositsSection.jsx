@@ -1,10 +1,50 @@
 import { useMemo } from 'react';
 import AssetLogo from '../../components/AssetLogo.jsx';
 import AssetPicker from '../../components/AssetPicker.jsx';
+import { ExternalIcon } from '../../components/Icons.jsx';
 import { Alert, AsyncState, Button, Card, FormField, StatusBadge } from '../../components/ui/index.js';
 import { formatUsdc } from '../../utils/usdc.js';
 import { buildVaultRows, formatDate, formatParticipationPct } from './vaultDepositsViewModel.js';
 import useVaultDeposits from './useVaultDeposits.js';
+
+/**
+ * The two transactions behind one deposit.
+ *
+ * Buying the position and collecting the deposit are separate events, so they
+ * are separate links, named for which one they are. A url is null until that
+ * event has happened - an active deposit has been bought and not collected -
+ * and a link to a transaction that does not exist would claim it did.
+ */
+function VaultOnChain({ depositUrl, maturityUrl }) {
+  if (!depositUrl && !maturityUrl) return <span aria-hidden="true">—</span>;
+
+  return (
+    <div className="lending-onchain-links">
+      {depositUrl && (
+        <a
+          className="pd-explorer-link"
+          href={depositUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="View the deposit transaction on BaseScan"
+        >
+          Deposited <ExternalIcon size={13} />
+        </a>
+      )}
+      {maturityUrl && (
+        <a
+          className="pd-explorer-link"
+          href={maturityUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="View the transaction that returned this deposit on BaseScan"
+        >
+          Collected <ExternalIcon size={13} />
+        </a>
+      )}
+    </div>
+  );
+}
 
 function VaultDepositForm({ vault, usdcAvailable }) {
   const { phase } = vault;
@@ -149,9 +189,11 @@ export default function VaultDepositsSection({ apiClient, positions, usdcAvailab
               <tr>
                 <th>Tracks</th>
                 <th>Principal</th>
+                <th>Returned</th>
                 <th>Upside share</th>
                 <th>Status</th>
                 <th>Maturity</th>
+                <th>On chain</th>
               </tr>
             </thead>
             <tbody>
@@ -173,9 +215,16 @@ export default function VaultDepositsSection({ apiClient, positions, usdcAvailab
                     </div>
                   </td>
                   <td className="numeric">{row.principalLabel}</td>
+                  {/*
+                    Beside the principal on purpose: "3.00 in, 3.00 back" is a
+                    line anyone can check, and it is the guarantee actually
+                    happening rather than a sentence claiming it will.
+                  */}
+                  <td className="numeric">{row.returnedLabel}</td>
                   <td>{row.upsideLabel}</td>
                   <td><StatusBadge tone={row.statusTone}>{row.statusLabel}</StatusBadge></td>
                   <td>{row.maturityLabel}</td>
+                  <td><VaultOnChain depositUrl={row.depositUrl} maturityUrl={row.maturityUrl} /></td>
                 </tr>
               ))}
             </tbody>

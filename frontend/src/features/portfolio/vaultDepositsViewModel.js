@@ -67,6 +67,14 @@ export function buildVaultRows(vaults = [], positions = []) {
       name: identity.name,
       principalLabel: formatUsdc(vault.principalUsdc) ?? '—',
       upsideLabel: upsideShareLabel(vault, position),
+      // Null until the deposit is returned. NOT zero: a returned deposit of
+      // nothing has never happened and would be a different, alarming fact.
+      returnedLabel: vault.returnedUsdc === null || vault.returnedUsdc === undefined
+        ? '—'
+        : (formatUsdc(vault.returnedUsdc) ?? '—'),
+      // The buy is recorded on the position, the return on the vault row.
+      depositUrl: position?.explorerUrl ?? null,
+      maturityUrl: vault.maturityUrl ?? null,
       statusTone: status.tone,
       statusLabel: status.label,
       maturityLabel: formatDate(vault.maturity),

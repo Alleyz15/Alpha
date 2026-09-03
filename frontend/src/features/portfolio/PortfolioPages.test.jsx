@@ -636,3 +636,76 @@ describe('Vault deposits, read as a deposit', () => {
     expect(within(section).getByText(/A flat or\s+falling market simply returns what you put in/)).toBeVisible();
   });
 });
+
+describe('Vault deposits, on-chain and returned', () => {
+  const matured = {
+    vaultId: 'vault-2', positionId: 'call-1', status: 'matured',
+    principalUsdc: 3, participationPct: 23.5422, maturity: '2026-09-03T08:00:00Z',
+    returnedUsdc: 3,
+    maturityUrl: 'https://basescan.org/tx/0x72cb94ba',
+  };
+
+  function client(vaults) {
+    return vaultApiClient({
+      getPositions: vi.fn().mockResolvedValue({
+        positions: [{
+          positionId: 'call-1', asset: 'ETH', role: 'upside', upsideThresholdUsdc: 2580,
+          explorerUrl: 'https://basescan.org/tx/0x696a1004',
+        }],
+      }),
+      getVaults: vi.fn().mockResolvedValue({ vaults }),
+    });
+  }
+
+  it('shows what came back beside what went in', async () => {
+    // "3.00 in, 3.00 back" is the guarantee happening, not a sentence saying
+    // it will.
+    renderPortfolio(client([matured]));
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    expect(await within(section).findByText('Returned')).toBeVisible();
+    // Assert the Returned cell itself, found by its header. Checking that the
+    // row merely contains "$3.00 USDC" would pass on the principal alone,
+    // which is the same figure - the assertion has to name the column.
+    const headers = [...section.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const row = within(section).getByText('Matured').closest('tr');
+    const cells = [...row.querySelectorAll('td')];
+    expect(cells[headers.indexOf('Returned')].textContent.trim()).toBe('$3.00 USDC');
+    expect(cells[headers.indexOf('Principal')].textContent.trim()).toBe('$3.00 USDC');
+    // Adjacent, so the two read as one line.
+    expect(headers.indexOf('Returned')).toBe(headers.indexOf('Principal') + 1);
+  });
+
+  it('shows a dash, not zero, while a deposit has not been returned', async () => {
+    // A returned deposit of nothing has never happened and would be alarming.
+    renderPortfolio(client([{ ...matured, status: 'active', returnedUsdc: null, maturityUrl: null }]));
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    const headers = [...(await within(section).findAllByRole('columnheader'))].map((th) => th.textContent.trim());
+    const row = within(section).getByText('Active').closest('tr');
+    const cell = row.querySelectorAll('td')[headers.indexOf('Returned')];
+    expect(cell.textContent).toBe('—');
+    expect(within(section).queryByText('$0.00 USDC')).toBeNull();
+  });
+
+  it('links the purchase and the collection separately', async () => {
+    renderPortfolio(client([matured]));
+
+    const deposited = await screen.findByRole('link', { name: 'View the deposit transaction on BaseScan' });
+    const collected = screen.getByRole('link', { name: 'View the transaction that returned this deposit on BaseScan' });
+
+    expect(deposited).toHaveAttribute('href', 'https://basescan.org/tx/0x696a1004');
+    expect(collected).toHaveAttribute('href', 'https://basescan.org/tx/0x72cb94ba');
+    expect(deposited).toHaveTextContent('Deposited');
+    expect(collected).toHaveTextContent('Collected');
+  });
+
+  it('offers no collection link before the deposit has been collected', async () => {
+    // An active deposit has been bought and not returned. A link to a
+    // transaction that does not exist would claim it happened.
+    renderPortfolio(client([{ ...matured, status: 'active', returnedUsdc: null, maturityUrl: null }]));
+
+    expect(await screen.findByRole('link', { name: 'View the deposit transaction on BaseScan' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /returned this deposit/ })).toBeNull();
+  });
+});
