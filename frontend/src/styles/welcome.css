@@ -1104,10 +1104,48 @@
   font-size: 20px;
 }
 
-.welcome-beyond-card p {
+.welcome-beyond-card > p {
   margin: 0;
-  flex: 1;
   color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/*
+  The step list, not the intro paragraph, is now what absorbs spare height -
+  the two cards sit side by side and their buttons should still line up when
+  one card's copy runs a line longer than the other's.
+*/
+.welcome-beyond-card__steps {
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+}
+
+.welcome-beyond-card__steps li {
+  display: grid;
+  gap: 2px;
+}
+
+/* The same numeral treatment the benefit cards use - mono, small, signal. */
+.welcome-beyond-card__steps span {
+  color: var(--signal);
+  font: 600 11px var(--font-mono);
+}
+
+.welcome-beyond-card__steps strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.welcome-beyond-card__steps p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
   line-height: 1.6;
 }
 
