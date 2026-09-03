@@ -11,6 +11,7 @@ const liveApi = vi.hoisted(() => ({
   getAssetOrderBook: vi.fn(),
   getPositions: vi.fn(),
   getPortfolio: vi.fn(),
+  getVaults: vi.fn(),
   createQuote: vi.fn(),
   purchaseQuote: vi.fn(),
 }));
@@ -89,6 +90,7 @@ describe('application routes', () => {
     liveApi.getAssetsOverview.mockResolvedValue(assetOverview);
     liveApi.getAssetCandles.mockResolvedValue(candles);
     liveApi.getAssetOrderBook.mockResolvedValue(orderBook);
+    liveApi.getVaults.mockResolvedValue({ vaults: [] });
   });
 
   it('opens /markets directly on the real-data markets page', async () => {
