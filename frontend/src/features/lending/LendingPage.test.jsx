@@ -355,7 +355,11 @@ describe('LendingPage', () => {
     expect(await screen.findByText('On chain')).toBeVisible();
     expect(screen.queryByRole('link', { name: /transaction on BaseScan/ })).toBeNull();
 
-    const cell = screen.getByText('On chain').closest('table').querySelectorAll('tbody td')[4];
+    // Located by its header rather than a fixed index, so adding a column
+    // does not silently point this assertion at a different cell.
+    const table = screen.getByText('On chain').closest('table');
+    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const cell = table.querySelectorAll('tbody tr')[0].querySelectorAll('td')[headers.indexOf('On chain')];
     expect(cell.textContent).toBe('—');
   });
 
@@ -452,5 +456,48 @@ describe('LendingPage', () => {
 
     const row = (await screen.findByText('Repaying')).closest('tr');
     expect(within(row).getByText('$4.60 USDC')).toBeVisible();
+  });
+
+  // ---------------------------------------------------------------------
+  // Which protection a loan is drawn against, and what it will cost.
+  // ---------------------------------------------------------------------
+
+  it('names the protection behind each loan and links to it', async () => {
+    // The page is called "Borrow Against Your Protection" and the list showed
+    // no sign of which protection. Two loans on two floors were identical.
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [activeLoan] }) }));
+
+    const link = await screen.findByRole('link', { name: 'ETH · $2,360.00 USDC floor' });
+    expect(link).toHaveAttribute('href', '/protection/pos-1');
+  });
+
+  it('still links to the protection when the position is not in hand', async () => {
+    // "Cannot name it" and "has no collateral" are different facts. The
+    // protection page fetches by id, so the link works regardless.
+    const orphan = { ...activeLoan, positionId: 'pos-gone' };
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [orphan] }) }));
+
+    const link = await screen.findByRole('link', { name: 'View protection' });
+    expect(link).toHaveAttribute('href', '/protection/pos-gone');
+  });
+
+  it('shows what a typed amount would cost to repay, marked as an estimate', async () => {
+    const user = await openBorrowForm(apiClient());
+    await user.type(await screen.findByLabelText(/Amount to borrow/), '50');
+
+    // 50 x 5%/yr x 0.8/365 = 0.005479...; ceil to 6dp -> 50.005480 -> $50.01
+    expect(await screen.findByText(/50\.01 USDC/)).toBeVisible();
+    expect(screen.getByText('5% a year')).toBeVisible();
+    expect(screen.getByText(/An estimate/)).toBeVisible();
+    expect(screen.getByText(/fixed when you borrow/)).toBeVisible();
+  });
+
+  it('shows no estimate until there is an amount to estimate', async () => {
+    // An estimate of nothing is neither an estimate nor a fact.
+    await openBorrowForm(apiClient());
+
+    expect(await screen.findByLabelText(/Amount to borrow/)).toHaveValue(null);
+    expect(screen.queryByText('You would repay')).toBeNull();
+    expect(screen.queryByText(/An estimate/)).toBeNull();
   });
 });

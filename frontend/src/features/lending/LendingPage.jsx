@@ -9,6 +9,7 @@ import {
   borrowableHint,
   buildCollateralRows,
   buildLoanRows,
+  estimateRepayment,
   describeLoanError,
   failingChecks,
   formatDate,
@@ -89,6 +90,7 @@ function OfferAndBorrow({ lending }) {
   // number, so gating on the limit let an amount through that the backend
   // would refuse with INSUFFICIENT_FLOAT.
   const overCeiling = Number.isFinite(amount) && amount > ceiling;
+  const estimate = estimateRepayment(offer, principalInput);
   const submitDisabled = !principalInput || !Number.isFinite(amount) || amount <= 0
     || overCeiling
     || borrowState === 'submitting';
@@ -127,6 +129,35 @@ function OfferAndBorrow({ lending }) {
           disabled={borrowState === 'submitting' || borrowState === 'success'}
         />
       </FormField>
+
+      {/*
+        What it costs, before committing to it. Rendered only for a usable
+        amount: an estimate of nothing is neither an estimate nor a fact, and
+        printing a hopeful $0.00 under an empty field is worse than silence.
+      */}
+      {estimate && !overCeiling && (
+        <dl className="pd-detail-list lending-estimate">
+          <div>
+            <dt>Interest rate</dt>
+            <dd className="numeric">{`${estimate.annualRatePct}% a year`}</dd>
+          </div>
+          <div>
+            <dt>Repay by</dt>
+            <dd>{formatDate(offer.dueAt)}</dd>
+          </div>
+          <div>
+            <dt>You would repay</dt>
+            <dd className="numeric">
+              <MonoValue as="strong">{`≈ ${formatUsdc(estimate.totalUsdc) ?? '—'}`}</MonoValue>
+            </dd>
+          </div>
+          <p className="lending-estimate__note">
+            An estimate: interest runs with the clock, so the amount is a little
+            lower the sooner you borrow. The exact figure is fixed when you borrow,
+            and shown in Your loans.
+          </p>
+        </dl>
+      )}
 
       {/*
         Say why, rather than only greying the button out. A disabled control
@@ -384,13 +415,22 @@ function LoansList({ lending, rows }) {
     <div className="portfolio-table-scroll">
       <table className="portfolio-table">
         <thead>
-          <tr><th>Principal</th><th>Status</th><th>Due date</th><th>Amount owed</th><th>On chain</th><th><span className="sr-only">Action</span></th></tr>
+          <tr><th>Principal</th><th>Backed by</th><th>Status</th><th>Due date</th><th>Amount owed</th><th>On chain</th><th><span className="sr-only">Action</span></th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <Fragment key={row.loanId}>
               <tr>
                 <td className="numeric">{row.principalLabel}</td>
+                <td>
+                  {/*
+                    Always a link. The protection page fetches by id, so it
+                    works even when this list could not name the position.
+                  */}
+                  <Link className="lending-collateral-link" to={`/protection/${row.positionId}`}>
+                    {row.collateralLabel ?? 'View protection'}
+                  </Link>
+                </td>
                 <td><StatusBadge tone={row.statusTone}>{row.statusLabel}</StatusBadge></td>
                 <td>{row.dueLabel}</td>
                 <td className="numeric">{row.owedLabel}</td>
@@ -427,7 +467,7 @@ function LoansList({ lending, rows }) {
               {lending.repayFlows[row.loanId] && (
                 <tr>
                   {/* Spans every column, including the new On chain one. */}
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <RepaymentFlow
                       loanId={row.loanId}
                       flow={lending.repayFlows[row.loanId]}
@@ -449,7 +489,10 @@ function LoansList({ lending, rows }) {
 export default function LendingPage({ apiClient = liveApi }) {
   const lending = useLendingData(apiClient);
   const collateralRows = useMemo(() => buildCollateralRows(lending.positions), [lending.positions]);
-  const loanRows = useMemo(() => buildLoanRows(lending.loans), [lending.loans]);
+  const loanRows = useMemo(
+    () => buildLoanRows(lending.loans, lending.positions),
+    [lending.loans, lending.positions],
+  );
 
   return (
     <main className="portfolio-page">
