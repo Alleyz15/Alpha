@@ -15,6 +15,105 @@ it as a failure.
 
 ---
 
+## `GET /api/vault/deposit-preflight?asset=ETH&principalUsdc=3`
+
+Prices the deposit and runs every check. **Sends nothing, writes nothing.**
+
+It is the same `runDepositPreflight` the real deposit runs, so the numbers
+shown are the numbers that will be used — a dry run on a different path is not
+a dry run.
+
+```json
+{
+  "asset": "ETH",
+  "principalUsdc": 3,
+
+  "yieldPortionUsdc": 2.998847,
+  "optionPortionUsdc": 0.001153,
+  "yieldIsSimulated": true,
+
+  "participationPct": 27.8451,
+  "exposureUsdc": 0.835352,
+
+  "spotUsdc": 2407.37,
+  "upsideThresholdUsdc": 2580,
+  "maturity": "2026-09-06T08:00:00Z",
+  "daysToMaturity": 2.8,
+  "premiumPerContractUsdc": 3.671245,
+  "contracts": 0.000345,
+
+  "pass": true,
+  "checks": [{ "label": "...", "pass": true, "detail": "..." }],
+  "availableUsdc": 249.462422,
+  "affordable": true,
+  "wouldSend": true,
+  "sent": false
+}
+```
+
+`affordable` and `wouldSend` are computed against the *current* balance at
+request time; a deposit made after this call can still fail on funds if the
+balance moved in between. `wouldSend` is `pass && affordable` — both must hold.
+
+---
+
+## `POST /api/vault/deposit`   `{ asset, principalUsdc }`
+
+Buys a real call on Base. **Returns `202 Accepted`, not a result** — the fill
+is 9–30 seconds against a book that re-signs every 60, so the request is not
+held.
+
+```json
+{
+  "accepted": true,
+  "started": true,
+  "sent": null,
+  "depositJob": { "state": "running", "startedAt": "...", "elapsedSeconds": 0, "error": null },
+  "pollUrl": "/api/vault",
+  "expectedSeconds": 30
+}
+```
+
+**The client sends a principal and nothing else that becomes money.**
+`principalUsdc` is the one number the user chooses, bounded by their balance.
+Everything downstream — the yield/option split, the strike, the premium, the
+contract count, the participation rate — is computed server-side from the live
+book. A browser cannot name a premium, a strike, or a participation
+percentage.
+
+**Poll `/api/vault`, not a single vault id — the vault does not exist yet
+when the 202 comes back.** The row appears in that list at `status: "pending"`
+the moment it is written, before the call is bought, then moves to `active`
+once the fill confirms. `pending` is what `positions` calls
+`pending_verification` — the row exists (BR-14) but the purchase has not been
+proven yet.
+
+**The balance is debited on success, not before — deliberately the opposite
+of protection.** Protection debits first and compensates on failure, because
+the operator fills it hours later and the money must be reserved across that
+gap. A deposit has no such gap: the call is bought inside this same job, so
+the simulated USDC balance moves only after the fill is confirmed. A failed
+deposit therefore needs no compensating write — nothing was ever debited.
+
+**Clicking twice does not start two purchases.** The job is keyed by
+`deposit:<userId>`, not by vault — the vault does not exist yet, so the user
+is the only thing there is to lock on. A second `POST` while the first is
+running returns `started: false` and the same `depositJob`.
+
+**`sent: null` on the 202 means the same thing it means on `/mature`:** at
+that instant nothing has been sent and nothing has been ruled out. Once
+`depositJob.state` reaches `done` or `failed`, read the vault row itself for
+the real answer, the same as maturity.
+
+### Errors
+
+| Status | Code | Means |
+|---|---|---|
+| 400 | `INVALID_REQUEST` | Missing `asset`, or `principalUsdc` is not a positive number |
+| 400 | `BALANCE_EXCEEDED` | `principalUsdc` exceeds the user's USDC balance |
+
+---
+
 ## `GET /api/vault` · `GET /api/vault/:vaultId`
 
 ```json
@@ -72,6 +171,13 @@ real — it comes from a premium actually paid for an option actually held
 
 **`maturable` / `reason`** decide the button. Every refusal carries a reason;
 `maturable: false` with nothing to show is how a dead button appears.
+
+**`status` has six values:** `pending` (row written, call not yet bought —
+see `POST /api/vault/deposit` above) → `active` (call held) → `maturing`
+(return transfer prepared, outcome not yet known) → `matured` (returned), or
+`superseded` / `failed` off that path. A `pending` row has no `call` yet, so
+`vaultView` returns `call: null` for it the same way it does before the
+backing position has been read.
 
 ---
 
