@@ -83,3 +83,17 @@
 .lending-onchain-links a:focus-visible {
   text-decoration: underline;
 }
+
+/*
+  The disbursement note. It carries an address the user has to act on later,
+  so it is given room to wrap rather than being squeezed onto one line like
+  the short caption it replaced.
+*/
+.lending-spend-note {
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.lending-spend-note .alpha-mono-value {
+  word-break: break-all;
+}
