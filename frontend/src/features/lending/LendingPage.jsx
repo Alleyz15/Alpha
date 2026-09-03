@@ -14,6 +14,7 @@ import {
   failingChecks,
   formatDate,
   formatUsdc,
+  formatUsdcPrecise,
 } from './lendingViewModel.js';
 
 function CollateralPicker({ rows, selectedPositionId, onSelect }) {
@@ -160,6 +161,16 @@ function OfferAndBorrow({ lending }) {
           <div>
             <dt>Repay by</dt>
             <dd>{formatDate(offer.dueAt)}</dd>
+          </div>
+          <div>
+            {/*
+              At 2dp the interest on a two-day loan disappears - "repay $50.00"
+              against "borrow 50" reads as though nothing was calculated. Shown
+              at USDC's own six decimals, and only on this line: the total
+              stays in the page's ordinary money format.
+            */}
+            <dt>Interest</dt>
+            <dd className="numeric">{`≈ ${formatUsdcPrecise(estimate.interestUsdc) ?? '—'}`}</dd>
           </div>
           <div>
             <dt>You would repay</dt>

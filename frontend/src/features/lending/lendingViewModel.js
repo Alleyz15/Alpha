@@ -56,6 +56,33 @@ export function owedNowUsdc(loan) {
 }
 
 /**
+ * USDC at the precision the number actually carries.
+ *
+ * The shared formatUsdc() is fixed at 2dp, which is right for balances and
+ * totals and wrong for interest: over a two-day tenor at 5% a year, the
+ * interest on a demo-sized loan is a fraction of a cent, and 2dp renders it as
+ * $0.00 - which reads as "no interest is being charged" rather than "the
+ * interest is small". Six decimals is USDC's own precision, so nothing here is
+ * finer than the ledger.
+ *
+ * Trailing zeros are trimmed below 6dp but never below 2, so an ordinary
+ * amount still looks like money.
+ */
+const preciseUsdc = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+});
+
+export function formatUsdcPrecise(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return `${preciseUsdc.format(numeric)} USDC`;
+}
+
+/**
  * What a loan of `principalUsdc` would cost to repay.
  *
  * ---------------------------------------------------------------------------

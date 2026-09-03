@@ -488,6 +488,9 @@ describe('LendingPage', () => {
     // 50 x 5%/yr x 0.8/365 = 0.005479...; ceil to 6dp -> 50.005480 -> $50.01
     expect(await screen.findByText(/50\.01 USDC/)).toBeVisible();
     expect(screen.getByText('5% a year')).toBeVisible();
+    // The interest is a fraction of a cent over this tenor. Shown at USDC's
+    // own precision so it does not render as $0.00 and look uncalculated.
+    expect(screen.getByText(/0\.005479 USDC/)).toBeVisible();
     expect(screen.getByText(/An estimate/)).toBeVisible();
     expect(screen.getByText(/fixed when you borrow/)).toBeVisible();
   });

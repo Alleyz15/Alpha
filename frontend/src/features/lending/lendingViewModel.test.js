@@ -7,7 +7,7 @@
 // including the ceil - so the two cannot drift apart silently.
 
 import { describe, expect, it } from 'vitest';
-import { estimateRepayment, buildLoanRows } from './lendingViewModel.js';
+import { estimateRepayment, buildLoanRows, formatUsdcPrecise } from './lendingViewModel.js';
 
 /** The backend's arithmetic, written out again from repay.js. */
 function backendAmountOwed(principalUsdc, annualRatePct, termDays) {
@@ -82,5 +82,32 @@ describe('buildLoanRows collateral', () => {
   it('falls back to the symbol alone when the floor is missing', () => {
     const [row] = buildLoanRows([loan], [{ ...position, protectionFloorUsdc: null }]);
     expect(row.collateralLabel).toBe('ETH');
+  });
+});
+
+describe('formatUsdcPrecise', () => {
+  it('keeps a sub-cent amount visible instead of rounding it to nothing', () => {
+    // The whole reason it exists: 2dp turns the interest on a two-day loan
+    // into $0.00, which reads as "no interest" rather than "a small one".
+    expect(formatUsdcPrecise(0.0019)).toBe('$0.0019 USDC');
+    expect(formatUsdcPrecise(0.000547)).toBe('$0.000547 USDC');
+  });
+
+  it('still looks like money for ordinary amounts', () => {
+    expect(formatUsdcPrecise(50)).toBe('$50.00 USDC');
+    expect(formatUsdcPrecise(1234.5)).toBe('$1,234.50 USDC');
+  });
+
+  it('never shows more precision than USDC has', () => {
+    // 6 decimals is the token's own precision; anything finer is invented.
+    expect(formatUsdcPrecise(0.0000001)).toBe('$0.00 USDC');
+    expect(formatUsdcPrecise(0.1234567)).toBe('$0.123457 USDC');
+  });
+
+  it('returns null for anything it cannot format', () => {
+    expect(formatUsdcPrecise(null)).toBeNull();
+    expect(formatUsdcPrecise(undefined)).toBeNull();
+    expect(formatUsdcPrecise('')).toBeNull();
+    expect(formatUsdcPrecise('abc')).toBeNull();
   });
 });
