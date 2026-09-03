@@ -180,4 +180,121 @@ describe('LendingPage', () => {
     expect(await screen.findByText(/sent by the borrower to the lender/)).toBeVisible();
     expect(screen.getByText(/expected 0xc169c7c0 -> 0x4fB77837, not found/)).toBeVisible();
   });
+
+  // ---------------------------------------------------------------------
+  // Recovering a repayment that is already in flight.
+  // ---------------------------------------------------------------------
+  //
+  // The transfer instruction lives only in `repayFlows`, which is in-memory.
+  // A refresh empties it, and the loan is by then `repaying` rather than
+  // `active` - so the old gate hid both the instruction AND the button that
+  // could bring it back. In real use that left an empty action cell and the
+  // only way out was calling the API by hand.
+
+  const repayingLoan = {
+    ...activeLoan,
+    status: 'repaying',
+    repaymentExpectedUsdc: 5.000547,
+    repaymentRequestedAt: '2026-09-03T19:48:36Z',
+  };
+
+  const fixedTransfer = {
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    tokenSymbol: 'USDC',
+    from: '0xc169c7c000cAA28807Ab2585D707C7A6457d718E',
+    to: '0x4fB77837bf2A0B86D167627Ded2E894f92F15127',
+    amountUsdc: 5.000547,
+    amountRaw: '5000547',
+  };
+
+  it('a repaying loan can recover its instruction after the page state is lost', async () => {
+    // No repayFlows entry - exactly what a refresh leaves behind.
+    const user = userEvent.setup();
+    const client = apiClient({
+      getLoans: vi.fn().mockResolvedValue({ loans: [repayingLoan] }),
+      postRepaymentRequest: vi.fn().mockResolvedValue({
+        loan: repayingLoan, transfer: fixedTransfer, alreadyFixed: true,
+      }),
+    });
+    renderLending(client);
+
+    const button = await screen.findByRole('button', { name: 'View repayment instructions' });
+    expect(button).toBeVisible();
+    expect(screen.queryByText('Send exactly')).toBeNull();
+
+    await user.click(button);
+
+    expect(client.postRepaymentRequest).toHaveBeenCalledWith('loan-1');
+    expect(await screen.findByText('Send exactly')).toBeVisible();
+    expect(await screen.findByLabelText('Your transaction hash')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Submit repayment' })).toBeVisible();
+  });
+
+  it('shows all four transfer fields, with the source address present', async () => {
+    // `from` and `token` were missing. A transfer correct in every other
+    // respect but sent from the wrong address is refused by the backend, so
+    // the address the user must send FROM is the one field they cannot guess.
+    const user = userEvent.setup();
+    const client = apiClient({
+      getLoans: vi.fn().mockResolvedValue({ loans: [repayingLoan] }),
+      postRepaymentRequest: vi.fn().mockResolvedValue({
+        loan: repayingLoan, transfer: fixedTransfer, alreadyFixed: true,
+      }),
+    });
+    renderLending(client);
+
+    await user.click(await screen.findByRole('button', { name: 'View repayment instructions' }));
+
+    expect(await screen.findByText('From this address')).toBeVisible();
+    expect(screen.getByText('Token')).toBeVisible();
+    expect(screen.getByText(fixedTransfer.from)).toBeVisible();
+    expect(screen.getByText(fixedTransfer.to)).toBeVisible();
+    expect(screen.getByText(fixedTransfer.token)).toBeVisible();
+    // Addresses are for copying: they must appear whole, not truncated.
+    expect(screen.getByText(fixedTransfer.from).textContent).toBe(fixedTransfer.from);
+  });
+
+  it('says the transfer must come from that address, not from "your own wallet"', async () => {
+    // The old copy read "Send this from your own wallet", which has no
+    // direction at all when the user controls more than one address.
+    const user = userEvent.setup();
+    const client = apiClient({
+      getLoans: vi.fn().mockResolvedValue({ loans: [repayingLoan] }),
+      postRepaymentRequest: vi.fn().mockResolvedValue({
+        loan: repayingLoan, transfer: fixedTransfer, alreadyFixed: true,
+      }),
+    });
+    renderLending(client);
+
+    await user.click(await screen.findByRole('button', { name: 'View repayment instructions' }));
+
+    expect(await screen.findByText(/It must come from the address above/)).toBeVisible();
+    expect(screen.getByText(/will not be accepted/)).toBeVisible();
+    expect(screen.queryByText(/from your own wallet/)).toBeNull();
+  });
+
+  it('a failed request offers a retry rather than dead-ending', async () => {
+    // Once repayFlows has an entry the row's own button is hidden, so a
+    // failure with no retry is the same trap in a different place.
+    const user = userEvent.setup();
+    const postRepaymentRequest = vi.fn()
+      .mockRejectedValueOnce(new Error('The service could not complete this request.'))
+      .mockResolvedValueOnce({ loan: repayingLoan, transfer: fixedTransfer, alreadyFixed: true });
+
+    const client = apiClient({
+      getLoans: vi.fn().mockResolvedValue({ loans: [repayingLoan] }),
+      postRepaymentRequest,
+    });
+    renderLending(client);
+
+    await user.click(await screen.findByRole('button', { name: 'View repayment instructions' }));
+    expect(await screen.findByText('Could not start repayment')).toBeVisible();
+
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    expect(retry).toBeVisible();
+    await user.click(retry);
+
+    expect(postRepaymentRequest).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('Send exactly')).toBeVisible();
+  });
 });
