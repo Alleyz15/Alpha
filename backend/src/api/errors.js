@@ -50,6 +50,12 @@ const STATUS_BY_CODE = {
   // valid and the user's collateral is sufficient - we are the constraint, and
   // it is temporary. A 400 would blame the caller for our float.
   INSUFFICIENT_FLOAT: 503,
+  // A vault deposit was previewed for an asset that has no above-spot buyable
+  // call on the book right now. 409, not 400 or 502: the request is well-formed
+  // and nothing is broken - the market for this asset is simply thin at this
+  // moment, and the interface should say so and offer another asset. The
+  // message is safe to surface, so it passes through rather than being scrubbed.
+  NO_BUYABLE_CALLS: 409,
   INVALID_REQUEST: 400,
   UPSTREAM_ERROR: 502,
 };
