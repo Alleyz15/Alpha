@@ -566,3 +566,216 @@ oversights.
 was already printed, and the figure it got wrong was cosmetic. It is written here
 anyway, because a report that only records the parts that went well is not
 evidence.
+
+---
+
+## 9. Lending, end to end — 31 Aug and 3 Sep 2026
+
+Borrow against protection you already hold, then repay from your own wallet.
+**Two loans, one complete and one live.**
+
+### The chain the product makes
+
+The two products are not side by side, they are sequential: the put is bought
+first and the loan is drawn against it. That ordering is a design decision, not
+an accident of implementation.
+
+> Buying a put is irreversible but **self-contained** — you end up owning an
+> asset. Disbursing a loan is irreversible and **creates an obligation**. Fusing
+> them into one action manufactures a state with no compensating move: *"we
+> bought you an option you did not ask for."*
+
+So `POST /api/loans` takes a `positionId` and never buys anything.
+
+### Loan 1 — complete cycle, 31 Aug to 1 Sep
+
+| | |
+|---|---|
+| Backing put | `efa8d071` — $2,300 floor, 0.001999 contracts, premium 0.022186 USDC |
+| Put purchase | [`0x637242ca…`](https://basescan.org/tx/0x637242cabaf89a69cea5d240da3ef4ab78b380df1292f87b6df8a58a33a0fd94) |
+| Disbursement | [`0x29165d16…`](https://basescan.org/tx/0x29165d16cb9ad2a38f7fa875c0d436464cd9a91090e3f6699074be134fa0201b) — 4.5977 USDC |
+| Repayment | [`0x02c37705…`](https://basescan.org/tx/0x02c37705b14fd86072b76108f0181869680d1998684e5dcea57eb41e069a6a09) — 9.198822 USDC sent against 4.599411 owed |
+| Status | `repaid` |
+
+The put settled `expired_worthless` at **$2,403.46** on 3 Sep — the price
+finished above the floor, so the protection was never needed and the collateral
+was never called on. **That is the loan being safe rather than the loan being
+lucky:** the credit limit is set so the guarantee covers the debt whatever the
+price does, and the case where the price rises is the boring one.
+
+This loan was written under the **old** credit rule, which is why its principal
+equals its protected value exactly. BR-39 was revised the same day to reserve
+the interest out of the limit.
+
+### Loan 2 — live, 3 Sep
+
+| | |
+|---|---|
+| Backing put | `e619686f` — $2,360 floor, 0.109011 contracts, premium 0.46096 USDC |
+| Put purchase | [`0x2913c6e2…`](https://basescan.org/tx/0x2913c6e20389de6e56ff605db47396688561c2167ee765d51d56a680b1091847) |
+| Disbursement | [`0x183fb463…`](https://basescan.org/tx/0x183fb4632d06b098d76e856aacf7e54220af80b655b4446d963cc3381ba74576) — 5 USDC, block 50825272 |
+| Loan | `d486ee11`, `active`, due 4 Sep 08:00 UTC |
+
+Read at the block boundary rather than from the API's own report:
+
+```
+operator   55.686223 -> 50.686223
+recipient   3.000380 ->  8.000380
+```
+
+### The equation is the entire claim
+
+```
+protectionFloorUsdc $2,360  x  numContracts 0.109011
+  = protectedValueUsdc  $257.26596
+  - interestReservedUsdc    $0.028107
+  = creditLimitUsdc     $257.237853
+```
+
+The borrower drew **5 of 257.24** — under 2% of the line. The API returns those
+four numbers as separate fields rather than a total, because a total is a figure
+the user has to trust and the components are one they can check. Nothing
+recomputes them in the browser.
+
+**The credit limit is derived, never configured.** A hardcoded loan-to-value
+ratio would produce the same number with or without the option, which would make
+the product's central claim false.
+
+### Two limits, and only one of them is the borrower's
+
+The wallet held 55.69 USDC against a 257.24 limit, so a full draw was impossible.
+Asking for one returns **503, not 400**:
+
+> We cannot fund 257.237754 USDC right now. **This is our limit, not yours** —
+> your protection still supports 257.237755 USDC. The most we can send today is
+> 55.686223 USDC.
+
+A credit limit is a fact about the user's collateral. A wallet balance is a fact
+about our float. Rendering the second as the first would tell someone their
+protection is worth a fifth of what it is.
+
+### What is owed, and what is *fixed*
+
+The live loan owes **5.000547 USDC** — 5 principal plus 0.000546 interest over
+0.7976 days — but `repaymentExpectedUsdc` is still `null`, and that is the
+point. The figure becomes binding only when the borrower asks for it.
+
+> Interest accrues with the clock. A single-step repayment would show one number,
+> accept that number, and call it short — with both figures correct at the moment
+> each was computed, and the discrepancy invisible to everyone.
+
+### The repayment is verified, not trusted
+
+We sign nothing. The borrower transfers from their own wallet and hands us a
+hash, and every conclusion comes from decoding that receipt. The real 1 Sep
+repayment shows why the obvious check is the wrong one:
+
+```
+tx.to    = 0x833589fC...   the USDC contract, not the lender
+tx.value = 0               no ETH moved
+
+decoded from the logs:
+  0xc169c7c0...  ->  0x4fB77837...   9.198822 USDC
+```
+
+A check written against `to` and `value` would accept **any** transaction sent
+to USDC — including one that transferred nothing — and reject **every** real
+repayment. Seven checks run against the *stored* expectation, and one
+transaction can never close two loans.
+
+---
+
+## 10. The vault, end to end — 31 Aug and 3 Sep 2026
+
+Principal protection with a share of the upside. **Three deposits: one
+superseded, one completed, one live.**
+
+| Vault | Principal | Participation | Backing call | Outcome |
+|---|---|---|---|---|
+| `2dbc767a` | 100 USDC | 23.0965% | [`0x7930bc42…`](https://basescan.org/tx/0x7930bc428fbca01749f7d4afae3bceec44123107dd5049cbd075f44196cb47b0) $2,660 | `superseded` |
+| `5026d7f8` | 3 USDC | 23.5422% | [`0xd7fec53c…`](https://basescan.org/tx/0xd7fec53c5595750aff0ed994b6ded292b93c93a12185d8856ce0ef4cc0be70ac) $2,680 | **matured, 3 USDC returned** |
+| `caaddf96` | 3 USDC | 27.8451% | [`0x696a1004…`](https://basescan.org/tx/0x696a10049460813f11f018de203f898ae9fbcb8ae16c55ddf5a847719d4b10c1) $2,580 | `active`, matures 6 Sep |
+
+The completed one returned its principal whole on 3 Sep via
+[`0x72cb94ba…`](https://basescan.org/tx/0x72cb94ba1260e0dab6576f05ef2bf0de672cbc2da4e0d597c5c8df16aa4ab6c5)
+— section 8 covers why a zero payout is the promise working rather than a
+failure.
+
+### Participation comes from a premium that was actually paid
+
+The live deposit, priced against the book on 3 Sep:
+
+```
+principal        3.000000 USDC
+  yield portion  2.998847   SIMULATED (BR-37) — no yield source exists
+  option portion 0.001153   REAL — buys the call
+
+premium          $3.67124551 per contract, from the live book
+contracts        0.000345
+exposure         $0.835352
+PARTICIPATION    27.8451%   = exposure / principal
+```
+
+**27.8451% is not a setting.** It is a quotient of two measured numbers: the
+exposure a real premium bought, over the deposit. Two deposits of the same size
+on different days produce different participation — 23.5422% on 31 Aug against
+27.8451% on 3 Sep — because the book moved. A configured rate would be identical
+both times, and would be a claim rather than a result.
+
+The chain took **0.001150** of the 0.001153 quoted: 0.001007 to the maker and
+0.000143 in protocol fees.
+
+---
+
+### The four-second window
+
+**This is the only place in the repository where a fixed ordering bug is
+observable as a sequence rather than argued from code.**
+
+The original deposit bought the call and inserted the vault row *afterwards*. A
+process dying between those two steps left an option on chain that nothing in
+the database recorded owning — the one place BR-14's rule had not been applied.
+Worse, the insert's failure was handled with `if (vault.error) console.error(…)`,
+so a failed row printed a wallet summary and exited zero.
+
+The fix inverts the order. Polling `/api/vault` through a real deposit shows it
+happening:
+
+```
+t+2s    no vault row yet
+t+4s    vault caaddf96   status=pending      <- row exists, call NOT yet bought
+t+12s   vault caaddf96   status=active       <- call confirmed on chain
+```
+
+**Under the old code, t+4s was empty.** That gap is the whole bug, and it is now
+a state you can watch a deposit pass through rather than a paragraph asking you
+to believe something. The `pending` status exists for exactly those eight
+seconds.
+
+A definitively refused fill sends the vault to `failed`. An **unknown** outcome
+leaves it at `pending` with its position at `pending_verification` — never a
+guess in either direction.
+
+---
+
+### Two premiums this document records because the database may not
+
+`7a7d1153` and `2ebf82f8` — the two vault calls bought by the original script —
+carry `premium_paid: null`, because that script never recorded it. Read back
+from their receipts:
+
+```
+7a7d1153   0.036441 USDC
+2ebf82f8   0.001016 USDC
+```
+
+**They were not written to the rows.** Both positions are `expired_worthless`,
+which BR-19 makes terminal and immutable: *corrections are new rows, not edits.*
+Recording them here is what that rule intends — the figures are preserved
+without editing a settled position.
+
+The third such row, `154d37f5`, was still `active` and was corrected in place
+through `transitionPosition`, so it left an event.
+
+Three further positions carry `premium_paid: null` with no transaction hash.
+That null is correct: nothing was bought, so nothing was paid.
