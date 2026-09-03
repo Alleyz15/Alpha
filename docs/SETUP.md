@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Twenty-one instances now, one family.** The shape:
+**Twenty-two instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -665,6 +665,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `approve 9 --confirm` | one transaction, raising 5.86 to 9 | **two**; the reset landed and the raise ran out of gas, leaving 0 |
 | the CoinGecko overview | six assets, all priced | four; `per_page=4` dropped the two smallest, which rendered as coins with no data |
 | fill of position `e619686f` | the fill failed | it SUCCEEDED — tx `0x2913c6e2`, status 1, 0.46096 USDC spent |
+| `POST /api/vault/deposit` balance guard | refuses a deposit above the balance | `Number(row)` is NaN, so it refused nothing — 999999 USDC returned 202 |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -722,6 +723,37 @@ trade: the defect is understood, bounded, and known to affect only display.
 has ever been decided by one of these reads - the transaction hash and the
 receipt status are what the scripts act on. If one ever gates a decision, this
 stops being a display bug.
+
+#### NaN answers "no" to every question, including the one that would refuse
+
+The vault deposit checked the user could afford it:
+
+```js
+const held = await getBalance(user.id, 'USDC');   // returns a ROW
+if (Number(held) < principalUsdc) { ...refuse... }
+```
+
+`getBalance` returns a row, and `Number({...})` is `NaN`. NaN compares false to
+everything, so `held < amount` is false **and** `held >= amount` is also false.
+The guard answered no to both questions about the same balance, and the request
+went through. A live `POST` for 999999 USDC came back `202`.
+
+Nothing was spent - the deposit pre-flight refused downstream, because the
+wallet could not fund the option portion. But the only thing standing between
+that request and a purchase was a check that had already been bypassed, and the
+defence that held was the one further in.
+
+> **A comparison against NaN is not a failed check, it is an absent one.** It
+> reads like a guard, it passes review like a guard, and it refuses nothing.
+
+`quote.js` had it right and names the variable `balanceRow`. The fix is not to
+correct two call sites but to remove the trap: `getBalanceAmount()` returns a
+number, treats a missing row as a genuine zero, and there is now no reason for
+anything to call `Number()` on a balance again.
+
+**Caught by a live request, not by a test.** The unit tests exercised the
+deposit path with injected balances that were already numbers, so the coercion
+never happened. A test can only be wrong in the same way the code is.
 
 #### A path that only runs on failure is a path nothing exercises
 

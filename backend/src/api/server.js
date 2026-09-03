@@ -16,6 +16,7 @@ import {
 } from './loanRoutes.js';
 import {
   getVaults, getVaultDetail, getMaturityPreflight, postMature,
+  postVaultDeposit, getDepositPreflight,
 } from './vaultRoutes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
@@ -76,6 +77,21 @@ const routes = [
   { method: 'GET', path: '/api/portfolio', handler: () => getPortfolio() },
   { method: 'GET', path: '/api/loans', handler: () => getLoans() },
   { method: 'GET', path: '/api/vault', handler: () => getVaults() },
+  // Literals, ABOVE the /api/vault/:vaultId pattern. 'deposit' is not a uuid so
+  // the pattern could not capture it, but keeping the ordering habit means the
+  // next literal added is safe without anyone having to check.
+  {
+    method: 'GET',
+    path: '/api/vault/deposit-preflight',
+    handler: (_body, { query }) => getDepositPreflight(query.get('asset'), query.get('principalUsdc')),
+  },
+  {
+    method: 'POST',
+    path: '/api/vault/deposit',
+    // Accepted, not done. Buying the call is 9-30 seconds.
+    successStatus: 202,
+    handler: (body) => postVaultDeposit(body),
+  },
 
   // Coin Detail market data. DISPLAY ONLY - CoinGecko and Binance, read-only,
   // and nothing they return prices a trade. This literal sits ABOVE the

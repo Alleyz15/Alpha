@@ -22,6 +22,8 @@ import { payoutRecipient } from './recipient.js';
 import { vaultView, maturability } from './vaultView.js';
 import { checksView } from './loanView.js';
 import { startJob, getJob, jobView } from './jobs.js';
+import { depositToVault, runDepositPreflight, defaultDepositDeps } from '../vault/deposit.js';
+import { getBalanceAmount, debitBalance } from '../db/balances.js';
 
 /**
  * Resolve a vault the demo user owns, or refuse.
@@ -260,4 +262,166 @@ export function maturityJobError(error) {
     return { code: 'OUTCOME_UNKNOWN', message: error.message, sent: null, doNotRetry: true };
   }
   return { code: error.code ?? 'UPSTREAM_ERROR', message: error.message, sent: error.sent ?? false, doNotRetry: Boolean(error.doNotRetry) };
+}
+
+/**
+ * POST /api/vault/deposit   { asset, principalUsdc }
+ *
+ * Buys a real call on Base. **Returns 202** — the fill is 9-30 seconds against
+ * a book that re-signs every 60, so the request is not held.
+ *
+ * ---------------------------------------------------------------------------
+ * THE CLIENT SENDS A PRINCIPAL AND NOTHING ELSE THAT BECOMES MONEY.
+ * ---------------------------------------------------------------------------
+ *
+ * `principalUsdc` is the one number the user chooses, and it is bounded by
+ * their balance. Everything downstream - the yield/option split, the strike,
+ * the premium, the contract count, the participation rate - is computed on the
+ * server from the live book. A browser cannot name a premium, a strike, or a
+ * participation percentage.
+ *
+ * ---------------------------------------------------------------------------
+ * THE BALANCE IS DEBITED ON SUCCESS, NOT BEFORE. DELIBERATELY DIFFERENT.
+ * ---------------------------------------------------------------------------
+ *
+ * Protection debits first and compensates on failure, because the operator
+ * fills it HOURS later and the money has to be reserved across that gap. A
+ * deposit has no such gap: the call is bought inside this job, and the job is
+ * keyed by user so a second deposit cannot start while one is running.
+ *
+ * So the balance moves only once the call is confirmed - which means a failed
+ * deposit needs no compensating write at all. That is the point: we have just
+ * spent a day on a refund path that had never run, and the best refund path is
+ * one that does not need to exist.
+ */
+export async function postVaultDeposit(body) {
+  if (!body || typeof body !== 'object') {
+    throw new ApiError('INVALID_REQUEST', 'A JSON body is required.');
+  }
+
+  const { asset, principalUsdc } = body;
+
+  if (typeof asset !== 'string' || asset.trim() === '') {
+    throw new ApiError('INVALID_REQUEST', 'asset is required.', { field: 'asset' });
+  }
+  if (typeof principalUsdc !== 'number' || !Number.isFinite(principalUsdc) || principalUsdc <= 0) {
+    throw new ApiError('INVALID_REQUEST', 'principalUsdc must be a positive number.', {
+      field: 'principalUsdc',
+    });
+  }
+
+  const symbol = asset.trim().toUpperCase();
+  const user = await getDemoUser();
+
+  // The user cannot deposit money they do not have. Checked here so the refusal
+  // is immediate rather than arriving through a poll two seconds later.
+  const held = await getBalanceAmount(user.id, 'USDC');
+  if (held < principalUsdc) {
+    throw new ApiError('BALANCE_EXCEEDED',
+      `Deposit of ${principalUsdc} USDC exceeds the ${held} USDC available.`, {
+        requestedUsdc: principalUsdc,
+        availableUsdc: held,
+      });
+  }
+
+  // Keyed by USER, not by vault - the vault does not exist yet, and the thing
+  // being guarded against is a second click starting a second purchase.
+  const key = `deposit:${user.id}`;
+
+  const { started, job } = startJob(key, async () => {
+    const deps = await defaultDepositDeps();
+
+    const result = await depositToVault(
+      { userId: user.id, asset: symbol, principalUsdc, confirmed: true },
+      deps,
+    );
+
+    // The call is confirmed on chain. Only now does the simulated balance move.
+    // A failure above reaches here not at all, so there is nothing to reverse.
+    await debitBalance({
+      userId: user.id,
+      asset: 'USDC',
+      amount: principalUsdc,
+      reason: `deposit into principal-protected vault ${result.vault.id}`,
+    });
+
+    return {
+      vaultId: result.vault.id,
+      positionId: result.position.id,
+      participationPct: Number(result.vault.participation_rate),
+      txHash: result.txHash,
+      explorerUrl: result.explorerUrl,
+      sent: true,
+    };
+  });
+
+  return {
+    accepted: true,
+    started,
+    // Nothing has been sent AND nothing has been ruled out. False would be a
+    // claim we cannot make at this instant.
+    sent: null,
+    depositJob: jobView(job),
+    // The vault id does not exist yet, so the poll target is the list. The row
+    // appears there as 'pending' the moment it is written - before the fill.
+    pollUrl: '/api/vault',
+    expectedSeconds: 30,
+  };
+}
+
+/**
+ * GET /api/vault/deposit-preflight?asset=ETH&principalUsdc=3
+ *
+ * Prices the deposit and runs every check. Sends nothing, writes nothing.
+ *
+ * The SAME function the buy runs, so the figures shown are the figures that
+ * will be used - a dry run that exercises a different path is not a dry run.
+ */
+export async function getDepositPreflight(asset, principalUsdcRaw) {
+  const symbol = (asset ?? 'ETH').trim().toUpperCase();
+  const principalUsdc = Number(principalUsdcRaw);
+
+  if (!Number.isFinite(principalUsdc) || principalUsdc <= 0) {
+    throw new ApiError('INVALID_REQUEST', 'principalUsdc must be a positive number.', {
+      field: 'principalUsdc',
+    });
+  }
+
+  const user = await getDemoUser();
+  const held = await getBalanceAmount(user.id, 'USDC');
+  const deps = await defaultDepositDeps();
+
+  const pre = await runDepositPreflight({ asset: symbol, principalUsdc }, deps);
+  const q = pre.quote;
+
+  return {
+    asset: q.asset,
+    principalUsdc: q.principalUsdc,
+
+    // The split, which is what makes the guarantee legible: the yield portion
+    // grows back to the principal, and the option portion is the only money at
+    // risk.
+    yieldPortionUsdc: q.yieldPortion,
+    optionPortionUsdc: q.optionPortion,
+    // BR-37. The interface must say so wherever this number appears.
+    yieldIsSimulated: true,
+
+    // BR-38: from the premium actually quoted for a call actually on the book.
+    participationPct: q.participationPct,
+    exposureUsdc: q.exposureUsdc,
+
+    spotUsdc: Math.round(q.spot * 100) / 100,
+    upsideThresholdUsdc: q.strike,
+    maturity: q.expiry.toISOString(),
+    daysToMaturity: Math.round(q.daysToExpiry * 100) / 100,
+    premiumPerContractUsdc: q.premiumPerContract,
+    contracts: q.contracts,
+
+    pass: pre.pass,
+    checks: checksView(pre.checks),
+    availableUsdc: held,
+    affordable: held >= principalUsdc,
+    wouldSend: pre.pass && held >= principalUsdc,
+    sent: false,
+  };
 }
