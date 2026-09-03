@@ -1034,3 +1034,20 @@
 @media (max-width: 820px) {
   .lending-entry-card__link { width: 100%; text-align: center; }
 }
+
+/*
+  The two claims under the Vault Deposits heading. Kept narrow so they read as
+  a note rather than a paragraph of marketing, and muted so the table stays the
+  focus - they exist to stop a misreading, not to sell.
+*/
+.vault-deposits-note {
+  max-width: 74ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.vault-deposits-note strong {
+  color: var(--text);
+}
