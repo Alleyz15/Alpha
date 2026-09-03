@@ -128,3 +128,22 @@
 .lending-collateral-link:focus-visible {
   text-decoration: underline;
 }
+
+.lending-no-forced-sale {
+  max-width: 68ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.lending-no-forced-sale strong {
+  color: var(--text);
+}
+
+.lending-equation small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}

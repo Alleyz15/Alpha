@@ -80,6 +80,11 @@ function OfferAndBorrow({ lending }) {
   }
   if (!offer) return null;
 
+  // The asset the selected protection covers, for the units on "Protection
+  // covers". Falls back to nothing rather than guessing a symbol.
+  const coveredSymbol = lending.positions
+    ?.find((position) => position.positionId === offer.positionId)?.asset ?? '';
+
   const hint = borrowableHint(offer);
   const amount = Number(principalInput);
   const ceiling = borrowableCeiling(offer);
@@ -99,9 +104,20 @@ function OfferAndBorrow({ lending }) {
     <>
       <dl className="pd-detail-list lending-equation">
         <div><dt>Protection floor</dt><dd className="numeric">{formatUsdc(offer.protectionFloorUsdc) ?? '—'}</dd></div>
-        <div><dt>Contracts covered</dt><dd className="numeric">{offer.numContracts}</dd></div>
+        {/*
+          Not "contracts". The number is the amount of the asset the protection
+          covers - protectedAmount, numContracts and collateralContracts are
+          the same figure - and it is a factor in the credit limit below, so
+          removing it would break the reader's ability to check the sum. BR-3
+          forbids the word, not the quantity.
+        */}
+        <div><dt>Protection covers</dt><dd className="numeric">{`${offer.numContracts} ${coveredSymbol}`}</dd></div>
         <div><dt>Protected value</dt><dd className="numeric">{formatUsdc(offer.protectedValueUsdc) ?? '—'}</dd></div>
-        <div><dt>Interest reserved</dt><dd className="numeric">{formatUsdc(offer.interestReservedUsdc) ?? '—'}</dd></div>
+        <div>
+          <dt>Interest set aside</dt>
+          <dd className="numeric">{formatUsdc(offer.interestReservedUsdc) ?? '—'}</dd>
+          <small>Held back from your limit so the debt can never exceed your floor.</small>
+        </div>
         <div><dt>Your credit limit</dt><dd className="numeric"><MonoValue as="strong">{formatUsdc(offer.creditLimitUsdc) ?? '—'}</MonoValue></dd></div>
         <div><dt>Due date</dt><dd>{formatDate(offer.dueAt)}</dd></div>
       </dl>
@@ -502,6 +518,22 @@ export default function LendingPage({ apiClient = liveApi }) {
             <span className="portfolio-eyebrow">Lending</span>
             <h1>Borrow Against Your Protection</h1>
             <p>Borrow USDC against a protection position you already hold — no separate credit check, no selling early.</p>
+            {/*
+              The difference from ordinary collateralised borrowing, and the
+              reason it holds. Verified rather than asserted: a loan's due date
+              is its protection's end date (dueAtFor), and the credit limit is
+              the floor times the size less reserved interest, so the debt
+              cannot outgrow what the floor guarantees.
+
+              Said in plain words on purpose. "No liquidation" and "no margin
+              call" only mean something to someone who has already been through
+              one.
+            */}
+            <p className="lending-no-forced-sale">
+              <strong>And no forced sale if the price drops:</strong> your loan is due
+              when your protection ends, and you can never borrow more than your floor
+              guarantees.
+            </p>
           </div>
         </section>
 

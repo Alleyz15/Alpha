@@ -500,4 +500,38 @@ describe('LendingPage', () => {
     expect(screen.queryByText('You would repay')).toBeNull();
     expect(screen.queryByText(/An estimate/)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------
+  // Wording.
+  // ---------------------------------------------------------------------
+
+  it('gives the covered amount its units, and never says "contracts"', async () => {
+    // The figure is the amount of the asset the protection covers, and it is a
+    // factor in the credit limit - removing it would stop the reader checking
+    // the sum. BR-3 forbids the word, not the quantity.
+    await openBorrowForm(apiClient());
+
+    expect(await screen.findByText('Protection covers')).toBeVisible();
+    expect(screen.getByText('0.109011 ETH')).toBeVisible();
+    expect(screen.queryByText(/contracts/i)).toBeNull();
+  });
+
+  it('says what the interest set aside is for', async () => {
+    await openBorrowForm(apiClient());
+
+    expect(await screen.findByText('Interest set aside')).toBeVisible();
+    expect(screen.getByText(/never exceed your floor/)).toBeVisible();
+    expect(screen.queryByText('Interest reserved')).toBeNull();
+  });
+
+  it('states that a price drop cannot force a sale', async () => {
+    // The difference from ordinary collateralised borrowing, in words that do
+    // not assume the reader has met a margin call.
+    renderLending(apiClient());
+
+    expect(await screen.findByText(/no forced sale if the price drops/i)).toBeVisible();
+    expect(screen.getByText(/due\s+when your protection ends/)).toBeVisible();
+    expect(screen.queryByText(/liquidat/i)).toBeNull();
+    expect(screen.queryByText(/margin call/i)).toBeNull();
+  });
 });
