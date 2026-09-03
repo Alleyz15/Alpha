@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Twenty instances now, one family.** The shape:
+**Twenty-one instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -664,6 +664,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
 | `approve 9 --confirm` | one transaction, raising 5.86 to 9 | **two**; the reset landed and the raise ran out of gas, leaving 0 |
 | the CoinGecko overview | six assets, all priced | four; `per_page=4` dropped the two smallest, which rendered as coins with no data |
+| fill of position `e619686f` | the fill failed | it SUCCEEDED — tx `0x2913c6e2`, status 1, 0.46096 USDC spent |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
@@ -721,6 +722,67 @@ trade: the defect is understood, bounded, and known to affect only display.
 has ever been decided by one of these reads - the transaction hash and the
 receipt status are what the scripts act on. If one ever gates a decision, this
 stops being a display bug.
+
+#### A path that only runs on failure is a path nothing exercises
+
+**This is the shape behind several of the entries above, and it deserves its own
+name.** On 3 Sep a fill succeeded on chain and was recorded as `failed`. Two
+independent faults, both in code that only executes when something has already
+gone wrong, and neither had ever run:
+
+**1. We trusted a classification we should have corroborated.** The SDK's
+`mapContractError` ends like this:
+
+```js
+return new ContractRevertError(`Contract call failed: ${error.message}`, error);
+```
+
+Every unrecognised `Error` becomes a `ContractRevertError`. So `error.code ===
+'CONTRACT_REVERT'` answers **yes** to an RPC failure reading a receipt. Our code
+asked "was this a revert?" and the SDK said yes to something that was not a
+revert at all.
+
+**2. The refund path threw `ReferenceError: quote is not defined`.** `quote` was
+never destructured from `prepareFill`'s result, and `quote?.premium ?? 0` does
+not help: **optional chaining guards a null value, not an undeclared
+identifier.** That line was broken in every execution since it was written, and
+it surfaced the first time a fill failed for real.
+
+The two cancelled: the refund would have been wrong, and the bug prevented it.
+The 0.460963 debit stands and is correct.
+
+> **A refund path that has never run is a hypothesis.** So is every state that
+> only a human reaches. `pending_verification`, `needs_review`,
+> `failRefusedFill`, the disburse and maturity catch blocks, `doNotRetry` - none
+> of them are exercised by the happy path, and being clean today is luck rather
+> than evidence.
+
+**The rule now:**
+
+> **Before broadcasting, a revert claim is useful — nothing has been sent, so
+> being wrong is free. After broadcasting, only the chain knows, and a claim is
+> not evidence.**
+
+`resolveFillFailure` therefore ignores the error's classification entirely and
+establishes the outcome from two chain facts:
+
+| Evidence | Outcome | Refund? |
+|---|---|---|
+| receipt `status: 1` | **succeeded** — carry on with the receipt | no |
+| receipt `status: 0` | reverted | yes |
+| nonce unchanged | nothing was ever sent | yes |
+| anything else | **unknown** → stays `pending_verification` | **no** |
+
+The nonce is what separates "reverted during gas estimation, nothing sent" from
+"sent, and we cannot see it". It assumes one fill at a time from the wallet,
+which the operator model guarantees; a concurrent transaction would turn
+`not_sent` into `unknown`, which errs safe.
+
+It lives in `fillOutcome.js` with **no imports at all**, because `fill.js`
+reaches `db/client.js` at module load and could not be imported by a test - the
+same shape that once made `stress.js` and `repay.js` untestable. Fourteen tests
+drive all four outcomes, verified by reinstating the old "trust the SDK"
+behaviour and watching five of them fail.
 
 #### A check that is correct and unusable: the 316-second pre-flight
 
