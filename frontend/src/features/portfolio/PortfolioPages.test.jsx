@@ -71,6 +71,7 @@ describe('Phase 6 pages', () => {
       getPositions: vi.fn().mockResolvedValue({ positions }),
       getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
       getVaults: vi.fn().mockResolvedValue({ vaults: [] }),
+      getLoans: vi.fn().mockResolvedValue({ loans: [] }),
     };
     render(
       <MemoryRouter initialEntries={['/portfolio']}>
@@ -190,6 +191,7 @@ function vaultApiClient(overrides = {}) {
     getPositions: vi.fn().mockResolvedValue({ positions: [] }),
     getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
     getVaults: vi.fn().mockResolvedValue({ vaults: [] }),
+    getLoans: vi.fn().mockResolvedValue({ loans: [] }),
     getDepositPreflight: vi.fn(),
     postVaultDeposit: vi.fn(),
     ...overrides,
@@ -432,5 +434,92 @@ describe('Vault Deposits section', () => {
 
       expect(await screen.findByText('This is taking longer than expected, refresh to check status')).toBeVisible();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The lending entry on the portfolio.
+// ---------------------------------------------------------------------------
+//
+// /lending had nothing linking to it: the only ways in were a card near the
+// bottom of the welcome page or typing the URL. This card is an entry point
+// carrying two real figures - it is deliberately NOT a second lending UI.
+
+const openLoan = {
+  loanId: 'loan-1',
+  status: 'active',
+  principalUsdc: 5,
+  repaymentExpectedUsdc: null,
+  owed: { principalUsdc: 5, interestUsdc: 0.000547, totalUsdc: 5.000547 },
+};
+
+describe('Lending entry card', () => {
+  it('links to /lending and shows the open loan count and outstanding total', async () => {
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockResolvedValue({
+        loans: [
+          openLoan,
+          { ...openLoan, loanId: 'loan-2', status: 'repaying', repaymentExpectedUsdc: 2.5 },
+          // Closed loans are neither counted nor owed.
+          { ...openLoan, loanId: 'loan-3', status: 'repaid' },
+        ],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const link = await screen.findByRole('link', { name: 'Open Lending' });
+    expect(link).toHaveAttribute('href', '/lending');
+
+    // The link renders before the loans request resolves, so the figures have
+    // to be awaited - asserting on them straight after finding the link races
+    // the fetch and passes or fails on timing.
+    const card = link.closest('.lending-entry-card');
+    expect(await within(card).findByText('2')).toBeVisible();
+    expect(within(card).getByText('Active loans')).toBeVisible();
+    // 5.000547 live + 2.5 fixed = 7.500547, rendered by formatUsdc at 2dp.
+    expect(within(card).getByText(/\$7\.50 USDC/)).toBeVisible();
+  });
+
+  it('prefers the fixed repayment figure over the live owed total', async () => {
+    // Once a borrower has been quoted a number, that number is what binds.
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockResolvedValue({
+        loans: [{ ...openLoan, repaymentExpectedUsdc: 9.999999 }],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const card = (await screen.findByRole('link', { name: 'Open Lending' })).closest('.lending-entry-card');
+    expect(await within(card).findByText(/\$10\.00 USDC/)).toBeVisible();
+    expect(within(card).queryByText(/\$5\.00 USDC/)).toBeNull();
+  });
+
+  it('withholds the total when a loan could not be priced, but still counts it', async () => {
+    // A total that silently drops a loan reads as the whole debt and is
+    // smaller than it. The count does not need the figure, so it stays exact.
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockResolvedValue({
+        loans: [openLoan, { ...openLoan, loanId: 'loan-2', repaymentExpectedUsdc: null, owed: null }],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const card = (await screen.findByRole('link', { name: 'Open Lending' })).closest('.lending-entry-card');
+    expect(await within(card).findByText(/could not be priced/)).toBeVisible();
+    expect(within(card).getByText('2')).toBeVisible();
+    expect(within(card).queryByText(/\$5\.00 USDC/)).toBeNull();
+  });
+
+  it('still offers the link when the loans request fails', async () => {
+    // Hiding the entry because a number failed would remove the only route to
+    // the page that could explain the failure.
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockRejectedValue(new Error('backend down')),
+    });
+    renderPortfolio(apiClient);
+
+    const link = await screen.findByRole('link', { name: 'Open Lending' });
+    expect(link).toHaveAttribute('href', '/lending');
+    expect(await screen.findByText(/Loan figures could not be loaded/)).toBeVisible();
   });
 });
