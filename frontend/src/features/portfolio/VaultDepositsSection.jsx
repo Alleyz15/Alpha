@@ -100,6 +100,26 @@ export default function VaultDepositsSection({ apiClient, positions, usdcAvailab
         <div>
           <span className="portfolio-eyebrow">Principal-protected</span>
           <h2>Vault Deposits</h2>
+          {/*
+            The two claims, kept apart. Principal protection is a guarantee;
+            the upside is not, and a screen that implied both would look like
+            it had failed on the ordinary day - the 3 Sep deposit returned in
+            full with no rise to share, which is the promise working.
+
+            The second line exists because "27.85%" is read as a return unless
+            something says otherwise. It is a share of the RISE: on a 4% move
+            it is about 1.08% of the deposit, not 27.85%.
+          */}
+          <p className="vault-deposits-note">
+            <strong>Your deposit comes back in full, whatever the market does.</strong>{' '}
+            You hold USDC the whole time — never the asset itself, and never its
+            downside.
+          </p>
+          <p className="vault-deposits-note">
+            If the asset ends above the threshold shown, you also receive that
+            share <strong>of the rise</strong> — not of your deposit. A flat or
+            falling market simply returns what you put in.
+          </p>
         </div>
         {!formOpen && rows.length > 0 && <Button size="small" onClick={vault.openForm}>+ New Deposit</Button>}
       </div>
@@ -127,9 +147,9 @@ export default function VaultDepositsSection({ apiClient, positions, usdcAvailab
           <table className="portfolio-table">
             <thead>
               <tr>
-                <th>Asset</th>
+                <th>Tracks</th>
                 <th>Principal</th>
-                <th>Participation</th>
+                <th>Upside share</th>
                 <th>Status</th>
                 <th>Maturity</th>
               </tr>
@@ -138,13 +158,22 @@ export default function VaultDepositsSection({ apiClient, positions, usdcAvailab
               {rows.map((row) => (
                 <tr key={row.vaultId}>
                   <td>
+                    {/*
+                      "Ethereum / ETH" is exactly how the protection table
+                      names a holding, and that sameness says the two are the
+                      same kind of thing. They are not: this is a USDC deposit
+                      that watches ETH, and the depositor never holds ETH or
+                      carries its downside. The second line says so, for the
+                      reader who scans the table without reading the note above
+                      it.
+                    */}
                     <div className="portfolio-coin-cell">
                       <AssetLogo symbol={row.symbol} name={row.name} size="small" />
-                      <span><strong>{row.name}</strong><small>{row.symbol}</small></span>
+                      <span><strong>{row.name}</strong><small>reference only</small></span>
                     </div>
                   </td>
                   <td className="numeric">{row.principalLabel}</td>
-                  <td className="numeric">{row.participationLabel}</td>
+                  <td>{row.upsideLabel}</td>
                   <td><StatusBadge tone={row.statusTone}>{row.statusLabel}</StatusBadge></td>
                   <td>{row.maturityLabel}</td>
                 </tr>
