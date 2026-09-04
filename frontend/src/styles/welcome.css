@@ -1,12 +1,36 @@
 .welcome-page {
   position: relative;
-  min-height: calc(100vh - var(--site-nav-height));
-  overflow: clip;
+  height: 100vh;
+  overflow-x: clip;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
   background:
     radial-gradient(circle at 78% 9%, var(--primary-tint), transparent 28%),
     radial-gradient(circle at 10% 24%, var(--signal-tint), transparent 22%),
     var(--bg);
   color: var(--text);
+}
+
+/*
+  Every top-level screen is a snap stop, so scrolling past one always lands
+  fully on the next rather than leaving the tail of the one before it in
+  view. scroll-snap-stop: always is the part that matters on a trackpad or a
+  fast wheel flick - without it a hard scroll can sail past two or three
+  screens in one gesture, which is exactly the "peeking at the next section"
+  this is meant to prevent.
+*/
+.welcome-page main > section,
+.welcome-page > .welcome-footer {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-page {
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+  }
 }
 
 .welcome-page main,
@@ -67,7 +91,7 @@
 .welcome-hero {
   position: relative;
   z-index: 1;
-  min-height: max(720px, calc(100svh - var(--site-nav-height)));
+  min-height: max(720px, 100svh);
   padding: 92px 0 86px;
   display: grid;
   grid-template-columns: minmax(0, .98fr) minmax(520px, 1.02fr);
@@ -617,8 +641,33 @@
   gap: clamp(48px, 8vw, 120px);
 }
 
+.welcome-journey__backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: .5;
+  pointer-events: none;
+}
+
+.welcome-journey__poly {
+  stroke: var(--border-strong);
+  stroke-width: 1.2;
+  fill: none;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.welcome-journey__poly--one,
+.welcome-journey__poly--three { stroke: var(--signal); opacity: .3; }
+.welcome-journey__poly--two,
+.welcome-journey__poly--four { stroke: var(--primary); opacity: .28; }
+.welcome-journey__poly--five { stroke: var(--border-strong); opacity: .4; }
+
 .welcome-journey__rail {
   position: absolute;
+  z-index: 1;
   top: 0;
   left: 18px;
   width: 1px;
@@ -634,6 +683,21 @@
   box-shadow: var(--glow-signal);
   transform-origin: top;
   transition: transform 520ms var(--ease-standard);
+}
+
+/* A pulse that loops down the rail on its own clock, independent of scroll
+   progress - the "something is always flowing through the pipeline" beat. */
+.welcome-journey__rail-pulse {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-circle);
+  background: var(--signal);
+  box-shadow: 0 0 12px 3px var(--signal);
+  transform: translate(-50%, -50%);
+  opacity: 0;
 }
 
 .welcome-journey__checkpoints {
@@ -681,6 +745,7 @@
 
 .welcome-journey__stage {
   position: sticky;
+  z-index: 1;
   top: 15vh;
   align-self: start;
   min-height: 520px;
@@ -770,6 +835,55 @@
   border-color: var(--signal);
   background: var(--signal-tint);
   color: var(--signal);
+}
+
+/*
+  Three nested rings counter-rotating like gears, in the stage card's own
+  empty space - a structural, always-moving widget rather than another glow
+  effect. The ring matching the current step lights up and pulses.
+*/
+.welcome-journey__mechanism {
+  position: absolute;
+  z-index: 0;
+  right: clamp(20px, 4vw, 60px);
+  bottom: clamp(76px, 9vw, 116px);
+  width: clamp(140px, 17vw, 200px);
+  height: clamp(140px, 17vw, 200px);
+  opacity: .85;
+  pointer-events: none;
+}
+
+.welcome-journey__mech-spokes line {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: .5;
+}
+
+.welcome-journey__mech-ring {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.4;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: stroke var(--duration-normal), filter var(--duration-normal);
+}
+
+.welcome-journey__mech-ring.is-active {
+  stroke: var(--signal);
+  filter: drop-shadow(0 0 6px var(--signal));
+}
+
+.welcome-journey__mech-node {
+  fill: var(--bg);
+  stroke: var(--border-strong);
+  stroke-width: 1.2;
+  transition: fill var(--duration-normal), stroke var(--duration-normal);
+}
+
+.welcome-journey__mech-node.is-active {
+  fill: var(--signal);
+  stroke: var(--signal);
+  filter: drop-shadow(0 0 5px var(--signal));
 }
 
 .welcome-journey__mobile {
@@ -871,11 +985,6 @@
 
 .welcome-market-card > footer .alpha-button {
   flex: 0 0 auto;
-}
-
-.welcome-market-card__actions {
-  display: flex;
-  gap: var(--space-2);
 }
 
 .welcome-market__note {

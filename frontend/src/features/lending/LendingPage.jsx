@@ -421,7 +421,7 @@ function OnChainLinks({ disbursementUrl, repaymentUrl }) {
     <div className="lending-onchain-links">
       {disbursementUrl && (
         <a
-          className="pd-explorer-link"
+          className="vault-onchain-link"
           href={disbursementUrl}
           target="_blank"
           rel="noreferrer"
@@ -432,7 +432,7 @@ function OnChainLinks({ disbursementUrl, repaymentUrl }) {
       )}
       {repaymentUrl && (
         <a
-          className="pd-explorer-link"
+          className="vault-onchain-link"
           href={repaymentUrl}
           target="_blank"
           rel="noreferrer"

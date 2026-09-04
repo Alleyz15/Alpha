@@ -55,7 +55,7 @@ function PositionCard({ position, isMock }) {
   );
 }
 
-export default function DashboardScreen({ positions, state, isMock, reality, onExplore }) {
+export default function DashboardScreen({ positions, state, isMock, reality }) {
   return (
     <section className="dashboard-page">
       <header className="dashboard-heading">
@@ -64,9 +64,6 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
           <h1>Protection and upside</h1>
           <p>Track protection requests, operator fills, and verifiable on-chain positions in one place.</p>
         </div>
-        <button className="alpha-button alpha-button--primary" type="button" onClick={onExplore}>
-          Explore protection
-        </button>
       </header>
 
       <RealityDisclosure variant="dashboard" isMock={isMock} reality={reality} />
@@ -91,9 +88,6 @@ export default function DashboardScreen({ positions, state, isMock, reality, onE
           <div className="empty-state-mark"><ShieldIcon /></div>
           <h2>No protection requests yet</h2>
           <p>Choose an asset to see live protection choices and create your first request.</p>
-          <button className="alpha-button alpha-button--primary" type="button" onClick={onExplore}>
-            Explore protection
-          </button>
         </section>
       ) : null}
 

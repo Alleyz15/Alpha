@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toPositionViewModel } from '../../adapters/quoteViewModel.js';
 import { liveApi } from '../../api/client.js';
 import RealityDisclosure from '../../components/RealityDisclosure.jsx';
@@ -28,7 +27,6 @@ function orderPositionHistory(positions) {
 }
 
 export default function DashboardPage({ apiClient = liveApi, assetFilter = null }) {
-  const navigate = useNavigate();
   const [demoContext, setDemoContext] = useState(null);
   const [positions, setPositions] = useState([]);
   const [positionsState, setPositionsState] = useState('loading');
@@ -66,7 +64,6 @@ export default function DashboardPage({ apiClient = liveApi, assetFilter = null 
           state={positionsState}
           isMock={false}
           reality={demoContext?.reality}
-          onExplore={() => navigate('/markets')}
         />
       </main>
 

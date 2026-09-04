@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { toPositionViewModel } from '../adapters/quoteViewModel.js';
 import DashboardScreen from './DashboardScreen.jsx';
 
@@ -27,7 +27,6 @@ describe('DashboardScreen position roles', () => {
         state="ready"
         isMock={false}
         reality={{ balance: 'simulated', quote: 'live', fill: 'operator', settlement: 'live' }}
-        onExplore={vi.fn()}
       />,
     );
 
@@ -64,7 +63,6 @@ describe('DashboardScreen position roles', () => {
         state="ready"
         isMock={false}
         reality={{ balance: 'simulated', quote: 'live', fill: 'operator', settlement: 'live' }}
-        onExplore={vi.fn()}
       />,
     );
 
@@ -82,7 +80,7 @@ describe('DashboardScreen position roles', () => {
       status: 'failed', payoutUsdc: null, fill: 'operator', paymentStatus: 'refunded', explorerUrl: null,
     });
 
-    render(<DashboardScreen positions={[position]} state="ready" isMock={false} reality={{ fill: 'operator' }} onExplore={vi.fn()} />);
+    render(<DashboardScreen positions={[position]} state="ready" isMock={false} reality={{ fill: 'operator' }} />);
 
     expect(screen.getByText('Execution failed · funds refunded')).toBeVisible();
     expect(screen.queryByText(/Waiting for the app’s operator/i)).not.toBeInTheDocument();
@@ -96,7 +94,7 @@ describe('DashboardScreen position roles', () => {
       status: 'failed', payoutUsdc: null, fill: 'operator', paymentStatus: 'held', explorerUrl: null,
     });
 
-    render(<DashboardScreen positions={[position]} state="ready" isMock={false} reality={{ fill: 'operator' }} onExplore={vi.fn()} />);
+    render(<DashboardScreen positions={[position]} state="ready" isMock={false} reality={{ fill: 'operator' }} />);
 
     expect(screen.getByText('Execution failed')).toBeVisible();
     expect(screen.queryByText(/funds refunded/i)).not.toBeInTheDocument();

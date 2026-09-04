@@ -120,7 +120,7 @@ function IdentityRotator() {
   );
 }
 
-function MarketCard({ asset, onProtect, onViewAsset }) {
+function MarketCard({ asset, onViewAsset }) {
   const unavailableMessage = asset.malformed
     ? asset.unavailableReason
     : asset.unavailableReason || 'No protection is being offered for this asset right now.';
@@ -142,19 +142,9 @@ function MarketCard({ asset, onProtect, onViewAsset }) {
       {!asset.protectionAvailable && <p className="welcome-market-card__reason">{unavailableMessage}</p>}
       <footer>
         <span>{asset.priceLabel === '—' ? 'Live price temporarily unavailable' : asset.updatedAtLabel}</span>
-        <div className="welcome-market-card__actions">
-          <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={() => onViewAsset(asset.symbol)}>
-            Market details
-          </button>
-          <button
-            className="alpha-button alpha-button--ghost alpha-button--small"
-            type="button"
-            disabled={!asset.protectionAvailable || asset.priceLabel === '—'}
-            onClick={() => onProtect(asset.symbol)}
-          >
-            Protect {asset.symbol}
-          </button>
-        </div>
+        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={() => onViewAsset(asset.symbol)}>
+          Market details
+        </button>
       </footer>
     </article>
   );
@@ -163,7 +153,6 @@ function MarketCard({ asset, onProtect, onViewAsset }) {
 export default function WelcomePage({
   apiClient,
   marketPollInterval = 30_000,
-  onProtect = () => {},
   onViewAsset = () => {},
   onGetStarted = () => {},
   onExploreLending = () => {},
@@ -185,11 +174,6 @@ export default function WelcomePage({
     ));
   }, [market]);
 
-  const selectedAsset = market?.assets.find((asset) => asset.symbol === selectedSymbol);
-  const selectedAssetAvailable = Boolean(
-    selectedAsset?.protectionAvailable && selectedAsset.priceLabel !== '—',
-  );
-
   return (
     <div className="welcome-page" ref={rootRef}>
       <div className="welcome-ambient" aria-hidden="true" />
@@ -199,7 +183,7 @@ export default function WelcomePage({
           <div className="welcome-hero__copy">
             <p className="welcome-eyebrow welcome-hero__eyebrow"><span /> LIVE DOWNSIDE PROTECTION</p>
             <h1 id="welcome-title">
-              <span className="welcome-hero__title-line">Crypto moves.</span>
+              <span className="welcome-hero__title-line welcome-hero__title-line--jump">Crypto moves.</span>
               <span className="welcome-hero__title-line welcome-gradient-text">Your plans should not have to.</span>
             </h1>
             <p className="welcome-hero__intro">Alpha turns live market protection into clear choices: how much is covered, your price floor, the amount paid, and the end date.</p>
@@ -284,7 +268,7 @@ export default function WelcomePage({
           {market && (
             <div className="welcome-market__grid">
               {market.assets.map((asset) => (
-                <MarketCard key={asset.symbol} asset={asset} onProtect={onProtect} onViewAsset={onViewAsset} />
+                <MarketCard key={asset.symbol} asset={asset} onViewAsset={onViewAsset} />
               ))}
             </div>
           )}
@@ -383,10 +367,9 @@ export default function WelcomePage({
           <button
             className="alpha-button alpha-button--primary alpha-button--large"
             type="button"
-            disabled={!selectedAssetAvailable}
-            onClick={() => onProtect(selectedSymbol)}
+            onClick={onGetStarted}
           >
-            {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Protection unavailable'} <ArrowIcon />
+            Browse the live market <ArrowIcon />
           </button>
         </section>
       </main>

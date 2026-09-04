@@ -105,7 +105,7 @@ export default function LendingEntryCard({ apiClient }) {
         </p>
       )}
 
-      <Link className="lending-entry-card__link" to="/lending">
+      <Link className="lending-entry-card__link portfolio-secondary-button" to="/lending">
         Open Lending
       </Link>
     </Card>

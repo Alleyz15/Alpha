@@ -1,11 +1,18 @@
-import { useEffect } from 'react';
-import { animate, createScope, createTimeline, onScroll, stagger, svg } from 'animejs';
+import { useLayoutEffect } from 'react';
+import { animate, createScope, createTimeline, onScroll, splitText, stagger, svg } from 'animejs';
 
 const REVEAL_ENTER = '85% start';
 const REVEAL_LEAVE = '15% end';
 
 export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: this sets each element's animation START
+  // state (low opacity, offset position). useEffect runs AFTER the browser's
+  // first paint, so on a hard refresh the page would flash fully visible for
+  // one frame and then suddenly snap to the animation's starting state before
+  // playing in - exactly the "pop" a reveal animation is supposed to avoid.
+  // useLayoutEffect runs before that first paint, so the hidden start state is
+  // already in place by the time anything is shown.
+  useLayoutEffect(() => {
     if (!rootRef.current || typeof window.matchMedia !== 'function') return undefined;
 
     let scope;
@@ -30,11 +37,10 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
         safely(() => {
           createTimeline({ defaults: { ease: 'outExpo' } })
             .add('.welcome-hero__eyebrow', { opacity: [.55, 1], y: [16, 0], duration: 650 })
-            .add('.welcome-hero__title-line', {
+            .add('.welcome-hero__title-line.welcome-gradient-text', {
               opacity: [.45, 1],
               y: [32, 0],
               duration: 820,
-              delay: stagger(110),
             }, '-=420')
             .add('.welcome-hero__intro, .welcome-hero__actions, .welcome-hero__facts', {
               opacity: [.6, 1],
@@ -43,6 +49,22 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
               delay: stagger(90),
             }, '-=500')
             .add('.welcome-snapshot', { opacity: [.55, 1], x: [30, 0], duration: 760 }, '-=620');
+        });
+
+        // "Crypto moves." jumps in character by character, once, on load -
+        // the one deliberately playful beat on an otherwise serious page.
+        // Character-split via animejs's own splitText, not hand-built spans.
+        safely(() => {
+          const { chars } = splitText('.welcome-hero__title-line--jump', { words: false, chars: true });
+          animate(chars, {
+            y: [
+              { to: '-2.75rem', ease: 'outExpo', duration: 600 },
+              { to: 0, ease: 'outBounce', duration: 800, delay: 100 },
+            ],
+            rotate: { from: '-1turn', delay: 0 },
+            delay: stagger(50, { start: 260 }),
+            ease: 'inOutCirc',
+          });
         });
 
         safely(() => {
@@ -97,6 +119,7 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
               delay: stagger(staggerBy),
               ease: 'outExpo',
               autoplay: onScroll({
+                container: rootRef.current,
                 target,
                 enter: REVEAL_ENTER,
                 leave: REVEAL_LEAVE,
@@ -113,6 +136,7 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
               y: [0, -42],
               ease: 'linear',
               autoplay: onScroll({
+                container: rootRef.current,
                 target: '.welcome-hero',
                 enter: 'start start',
                 leave: 'start end',
@@ -127,6 +151,7 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
               scale: [1, .975],
               ease: 'linear',
               autoplay: onScroll({
+                container: rootRef.current,
                 target: '.welcome-hero',
                 enter: 'start start',
                 leave: 'start end',
@@ -141,6 +166,7 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
               opacity: [.58, .18],
               ease: 'linear',
               autoplay: onScroll({
+                container: rootRef.current,
                 target: '.welcome-hero',
                 enter: 'start start',
                 leave: 'start end',
@@ -179,7 +205,7 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
     return () => scope?.revert();
   }, [rootRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!rootRef.current || !marketAssetCount || typeof window.matchMedia !== 'function') return undefined;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
 
@@ -197,6 +223,7 @@ export default function useWelcomeAnimations(rootRef, marketAssetCount = 0) {
           delay: stagger(90),
           ease: 'outExpo',
           autoplay: onScroll({
+            container: rootRef.current,
             target: grid,
             enter: REVEAL_ENTER,
             leave: REVEAL_LEAVE,

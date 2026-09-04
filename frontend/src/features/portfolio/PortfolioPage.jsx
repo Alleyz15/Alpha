@@ -128,9 +128,9 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                 </Card>
               </section>
 
-              <VaultDepositsSection apiClient={apiClient} positions={positions} usdcAvailable={usdcAvailable} />
-
               <LendingEntryCard apiClient={apiClient} />
+
+              <VaultDepositsSection apiClient={apiClient} positions={positions} usdcAvailable={usdcAvailable} />
 
               <Card className="portfolio-overview-card">
                 <div className="portfolio-section-heading">
@@ -189,7 +189,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                                   <Button
                                     variant="ghost"
                                     size="small"
-                                    className="portfolio-view-button"
+                                    className="portfolio-secondary-button"
                                     onClick={() => navigate(`/positions/${row.symbol}`)}
                                   >
                                     View history <ArrowIcon size={14} />
