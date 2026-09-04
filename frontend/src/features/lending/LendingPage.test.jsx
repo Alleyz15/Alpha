@@ -655,4 +655,68 @@ describe('LendingPage', () => {
     // Nothing is claimed to be spent, because nothing is known.
     expect(screen.getByRole('button', { name: 'Use as collateral' })).toBeEnabled();
   });
+
+  // ---------------------------------------------------------------------
+  // The amount to send, at the precision the chain compares.
+  // ---------------------------------------------------------------------
+  //
+  // The panel said "Send exactly" and then rounded to two decimals: 2.000622
+  // rendered as $2.00. Following that instruction sent 2.000000 and the
+  // repayment was refused - "sent 2.000000, owed 2.000622" - because
+  // confirmRepayment tests `match.value >= expectedRaw`. This happened for
+  // real, and the instruction was the cause.
+
+  const awkwardTransfer = {
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    tokenSymbol: 'USDC',
+    from: '0xc169c7c000cAA28807Ab2585D707C7A6457d718E',
+    to: '0x4fB77837bf2A0B86D167627Ded2E894f92F15127',
+    amountUsdc: 2.000622,
+    amountRaw: '2000622',
+  };
+
+  async function openInstruction(overrides = {}) {
+    const user = userEvent.setup();
+    const repaying = { ...activeLoan, status: 'repaying', repaymentExpectedUsdc: 2.000622 };
+    renderLending(apiClient({
+      getLoans: vi.fn().mockResolvedValue({ loans: [repaying] }),
+      postRepaymentRequest: vi.fn().mockResolvedValue({
+        loan: repaying, transfer: awkwardTransfer, alreadyFixed: true, ...overrides,
+      }),
+    }));
+    await user.click(await screen.findByRole('button', { name: 'View repayment instructions' }));
+    return user;
+  }
+
+  it('gives the amount to send in full, not rounded to cents', async () => {
+    await openInstruction();
+
+    // Scoped to the instruction panel. The loans table has its own "Amount
+    // owed" column at two decimals, which is right for a summary and wrong
+    // for an instruction - an unscoped assertion would find that instead.
+    const panel = (await screen.findByText('Send exactly')).closest('.lending-repay-flow');
+    expect(within(panel).getByText('$2.000622 USDC')).toBeVisible();
+    // The rounded figure must not appear here: sending it fails verification.
+    expect(within(panel).queryByText('$2.00 USDC')).toBeNull();
+  });
+
+  it('also gives the base-unit figure, which nothing can round', async () => {
+    await openInstruction();
+
+    const panel = (await screen.findByText('Send exactly')).closest('.lending-repay-flow');
+    expect(within(panel).getByText(/2000622 base units/)).toBeVisible();
+    expect(within(panel).getByText(/USDC has 6 decimals/)).toBeVisible();
+  });
+
+  it('omits the base-unit line when the backend did not send one', async () => {
+    // An older response shape, or a transfer built without it. Nothing is
+    // invented from the rounded figure.
+    await openInstruction({
+      transfer: { ...awkwardTransfer, amountRaw: undefined },
+    });
+
+    const panel = (await screen.findByText('Send exactly')).closest('.lending-repay-flow');
+    expect(within(panel).getByText('$2.000622 USDC')).toBeVisible();
+    expect(within(panel).queryByText(/base units/)).toBeNull();
+  });
 });
