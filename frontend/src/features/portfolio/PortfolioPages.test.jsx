@@ -71,6 +71,7 @@ describe('Phase 6 pages', () => {
       getPositions: vi.fn().mockResolvedValue({ positions }),
       getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
       getVaults: vi.fn().mockResolvedValue({ vaults: [] }),
+      getLoans: vi.fn().mockResolvedValue({ loans: [] }),
     };
     render(
       <MemoryRouter initialEntries={['/portfolio']}>
@@ -190,6 +191,7 @@ function vaultApiClient(overrides = {}) {
     getPositions: vi.fn().mockResolvedValue({ positions: [] }),
     getDemoContext: vi.fn().mockResolvedValue({ reality: { fill: 'operator' } }),
     getVaults: vi.fn().mockResolvedValue({ vaults: [] }),
+    getLoans: vi.fn().mockResolvedValue({ loans: [] }),
     getDepositPreflight: vi.fn(),
     postVaultDeposit: vi.fn(),
     ...overrides,
@@ -254,7 +256,9 @@ describe('Vault Deposits section', () => {
     const section = await screen.findByRole('region', { name: 'Vault deposits' });
     expect(await within(section).findByText('Ethereum')).toBeVisible();
     expect(within(section).getByText('$3.00 USDC')).toBeVisible();
-    expect(within(section).getByText('27.85%')).toBeVisible();
+    // No upsideThresholdUsdc on this position, so the sentence stops early
+    // rather than printing "above $-".
+    expect(within(section).getByText('27.85% of gains')).toBeVisible();
     expect(within(section).getByText('Active')).toBeVisible();
     expect(screen.getByRole('button', { name: '+ New Deposit' })).toBeVisible();
   });
@@ -432,5 +436,276 @@ describe('Vault Deposits section', () => {
 
       expect(await screen.findByText('This is taking longer than expected, refresh to check status')).toBeVisible();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The lending entry on the portfolio.
+// ---------------------------------------------------------------------------
+//
+// /lending had nothing linking to it: the only ways in were a card near the
+// bottom of the welcome page or typing the URL. This card is an entry point
+// carrying two real figures - it is deliberately NOT a second lending UI.
+
+const openLoan = {
+  loanId: 'loan-1',
+  status: 'active',
+  principalUsdc: 5,
+  repaymentExpectedUsdc: null,
+  owed: { principalUsdc: 5, interestUsdc: 0.000547, totalUsdc: 5.000547 },
+};
+
+describe('Lending entry card', () => {
+  it('links to /lending and shows the open loan count and outstanding total', async () => {
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockResolvedValue({
+        loans: [
+          openLoan,
+          { ...openLoan, loanId: 'loan-2', status: 'repaying', repaymentExpectedUsdc: 2.5 },
+          // Closed loans are neither counted nor owed.
+          { ...openLoan, loanId: 'loan-3', status: 'repaid' },
+        ],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const link = await screen.findByRole('link', { name: 'Open Lending' });
+    expect(link).toHaveAttribute('href', '/lending');
+
+    // The link renders before the loans request resolves, so the figures have
+    // to be awaited - asserting on them straight after finding the link races
+    // the fetch and passes or fails on timing.
+    const card = link.closest('.lending-entry-card');
+    expect(await within(card).findByText('2')).toBeVisible();
+    expect(within(card).getByText('Active loans')).toBeVisible();
+    // 5.000547 live + 2.5 fixed = 7.500547, rendered by formatUsdc at 2dp.
+    expect(within(card).getByText(/\$7\.50 USDC/)).toBeVisible();
+  });
+
+  it('prefers the fixed repayment figure over the live owed total', async () => {
+    // Once a borrower has been quoted a number, that number is what binds.
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockResolvedValue({
+        loans: [{ ...openLoan, repaymentExpectedUsdc: 9.999999 }],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const card = (await screen.findByRole('link', { name: 'Open Lending' })).closest('.lending-entry-card');
+    expect(await within(card).findByText(/\$10\.00 USDC/)).toBeVisible();
+    expect(within(card).queryByText(/\$5\.00 USDC/)).toBeNull();
+  });
+
+  it('withholds the total when a loan could not be priced, but still counts it', async () => {
+    // A total that silently drops a loan reads as the whole debt and is
+    // smaller than it. The count does not need the figure, so it stays exact.
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockResolvedValue({
+        loans: [openLoan, { ...openLoan, loanId: 'loan-2', repaymentExpectedUsdc: null, owed: null }],
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const card = (await screen.findByRole('link', { name: 'Open Lending' })).closest('.lending-entry-card');
+    expect(await within(card).findByText(/could not be priced/)).toBeVisible();
+    expect(within(card).getByText('2')).toBeVisible();
+    expect(within(card).queryByText(/\$5\.00 USDC/)).toBeNull();
+  });
+
+  it('still offers the link when the loans request fails', async () => {
+    // Hiding the entry because a number failed would remove the only route to
+    // the page that could explain the failure.
+    const apiClient = vaultApiClient({
+      getLoans: vi.fn().mockRejectedValue(new Error('backend down')),
+    });
+    renderPortfolio(apiClient);
+
+    const link = await screen.findByRole('link', { name: 'Open Lending' });
+    expect(link).toHaveAttribute('href', '/lending');
+    expect(await screen.findByText(/Loan figures could not be loaded/)).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The USDC balance on the portfolio.
+// ---------------------------------------------------------------------------
+//
+// The balance existed only as a hint inside the vault deposit form, so the
+// answer to "have I got anything to deposit?" sat behind the button that asks
+// you to deposit. It is now a stat card, reading the same holdings the vault
+// section reads - one request, one number, no chance of the two disagreeing.
+
+describe('USDC available card', () => {
+  it('shows the USDC holding from the portfolio, with its logo', async () => {
+    const apiClient = vaultApiClient();
+    renderPortfolio(apiClient);
+
+    const label = await screen.findByText('USDC available');
+    const card = label.closest('.portfolio-stat-card');
+
+    // The fixture holds 100 USDC.
+    expect(within(card).getByText(/\$100\.00 USDC/)).toBeVisible();
+
+    // A real image, not AssetLogo's initial-letter fallback.
+    const logo = within(card).getByRole('img', { name: 'USD Coin' });
+    expect(logo.tagName).toBe('IMG');
+    expect(logo).toHaveAttribute('src', '/assets/coins/usdc.svg');
+
+    // No extra request: the portfolio call already carries it.
+    expect(apiClient.getPortfolio).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what the balance is for, and that it is simulated', async () => {
+    // "Available" rather than "balance": this card answers a different
+    // question from Portfolio value above it - what can I move, not what do I
+    // own - which is also why the two figures overlapping is not confusing.
+    renderPortfolio(vaultApiClient());
+
+    const card = (await screen.findByText('USDC available')).closest('.portfolio-stat-card');
+    expect(within(card).getByText(/Ready to deposit into the vault/)).toBeVisible();
+    expect(within(card).getByText(/simulated balance/)).toBeVisible();
+  });
+
+  it('shows a dash rather than zero when there is no USDC holding', async () => {
+    // Zero is a real balance and would read as "you have nothing". A missing
+    // holding is not the same fact, and must not be rendered as one.
+    const apiClient = vaultApiClient({
+      getPortfolio: vi.fn().mockResolvedValue({
+        ...portfolio,
+        holdings: portfolio.holdings.filter((h) => h.asset !== 'USDC'),
+      }),
+    });
+    renderPortfolio(apiClient);
+
+    const card = (await screen.findByText('USDC available')).closest('.portfolio-stat-card');
+    expect(within(card).getByText('—')).toBeVisible();
+    expect(within(card).queryByText(/\$0\.00 USDC/)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the vault table says a deposit is.
+// ---------------------------------------------------------------------------
+
+function vaultWithThreshold(overrides = {}) {
+  return vaultApiClient({
+    getPositions: vi.fn().mockResolvedValue({
+      positions: [{ positionId: 'call-1', asset: 'ETH', role: 'upside', upsideThresholdUsdc: 2580 }],
+    }),
+    getVaults: vi.fn().mockResolvedValue({
+      vaults: [{
+        vaultId: 'vault-1', positionId: 'call-1', status: 'active',
+        principalUsdc: 3, participationPct: 27.8451, maturity: '2026-09-06T08:00:00Z',
+        ...overrides,
+      }],
+    }),
+  });
+}
+
+describe('Vault deposits, read as a deposit', () => {
+  it('states the share as a share of gains above a threshold', async () => {
+    // A bare "27.85%" reads as a yield. It is a share of the RISE: on a 4%
+    // move that is about 1.08% of the deposit.
+    renderPortfolio(vaultWithThreshold());
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    expect(await within(section).findByText('27.85% of gains above $2,580.00 USDC')).toBeVisible();
+    expect(within(section).getByText('Upside share')).toBeVisible();
+    expect(within(section).queryByText('Participation')).toBeNull();
+  });
+
+  it('says the asset is a reference, not a holding', async () => {
+    // "Ethereum / ETH" is how the protection table names a holding, and that
+    // sameness implies the same kind of thing. The depositor holds USDC.
+    renderPortfolio(vaultWithThreshold());
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    expect(await within(section).findByText('Tracks')).toBeVisible();
+    expect(within(section).getByText('reference only')).toBeVisible();
+  });
+
+  it('promises the deposit back, and does not promise the upside', async () => {
+    // Both claims, kept apart. On 3 Sep a deposit returned in full with no
+    // rise to share - a screen that had promised upside would have looked
+    // like it failed on the day the guarantee worked.
+    renderPortfolio(vaultWithThreshold());
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    expect(await within(section).findByText(/comes back in full, whatever the market does/)).toBeVisible();
+    expect(within(section).getByText(/never the asset itself, and never its/)).toBeVisible();
+    expect(within(section).getByText(/A flat or\s+falling market simply returns what you put in/)).toBeVisible();
+  });
+});
+
+describe('Vault deposits, on-chain and returned', () => {
+  const matured = {
+    vaultId: 'vault-2', positionId: 'call-1', status: 'matured',
+    principalUsdc: 3, participationPct: 23.5422, maturity: '2026-09-03T08:00:00Z',
+    returnedUsdc: 3,
+    maturityUrl: 'https://basescan.org/tx/0x72cb94ba',
+  };
+
+  function client(vaults) {
+    return vaultApiClient({
+      getPositions: vi.fn().mockResolvedValue({
+        positions: [{
+          positionId: 'call-1', asset: 'ETH', role: 'upside', upsideThresholdUsdc: 2580,
+          explorerUrl: 'https://basescan.org/tx/0x696a1004',
+        }],
+      }),
+      getVaults: vi.fn().mockResolvedValue({ vaults }),
+    });
+  }
+
+  it('shows what came back beside what went in', async () => {
+    // "3.00 in, 3.00 back" is the guarantee happening, not a sentence saying
+    // it will.
+    renderPortfolio(client([matured]));
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    expect(await within(section).findByText('Returned')).toBeVisible();
+    // Assert the Returned cell itself, found by its header. Checking that the
+    // row merely contains "$3.00 USDC" would pass on the principal alone,
+    // which is the same figure - the assertion has to name the column.
+    const headers = [...section.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const row = within(section).getByText('Matured').closest('tr');
+    const cells = [...row.querySelectorAll('td')];
+    expect(cells[headers.indexOf('Returned')].textContent.trim()).toBe('$3.00 USDC');
+    expect(cells[headers.indexOf('Principal')].textContent.trim()).toBe('$3.00 USDC');
+    // Adjacent, so the two read as one line.
+    expect(headers.indexOf('Returned')).toBe(headers.indexOf('Principal') + 1);
+  });
+
+  it('shows a dash, not zero, while a deposit has not been returned', async () => {
+    // A returned deposit of nothing has never happened and would be alarming.
+    renderPortfolio(client([{ ...matured, status: 'active', returnedUsdc: null, maturityUrl: null }]));
+
+    const section = await screen.findByRole('region', { name: 'Vault deposits' });
+    const headers = [...(await within(section).findAllByRole('columnheader'))].map((th) => th.textContent.trim());
+    const row = within(section).getByText('Active').closest('tr');
+    const cell = row.querySelectorAll('td')[headers.indexOf('Returned')];
+    expect(cell.textContent).toBe('—');
+    expect(within(section).queryByText('$0.00 USDC')).toBeNull();
+  });
+
+  it('links the purchase and the collection separately', async () => {
+    renderPortfolio(client([matured]));
+
+    const deposited = await screen.findByRole('link', { name: 'View the deposit transaction on BaseScan' });
+    const collected = screen.getByRole('link', { name: 'View the transaction that returned this deposit on BaseScan' });
+
+    expect(deposited).toHaveAttribute('href', 'https://basescan.org/tx/0x696a1004');
+    expect(collected).toHaveAttribute('href', 'https://basescan.org/tx/0x72cb94ba');
+    expect(deposited).toHaveTextContent('Deposited');
+    expect(collected).toHaveTextContent('Collected');
+  });
+
+  it('offers no collection link before the deposit has been collected', async () => {
+    // An active deposit has been bought and not returned. A link to a
+    // transaction that does not exist would claim it happened.
+    renderPortfolio(client([{ ...matured, status: 'active', returnedUsdc: null, maturityUrl: null }]));
+
+    expect(await screen.findByRole('link', { name: 'View the deposit transaction on BaseScan' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /returned this deposit/ })).toBeNull();
   });
 });

@@ -67,6 +67,25 @@ export const expansionCards = [
     id: 'lending',
     title: 'Borrow against your protection',
     body: 'Already have a protected position? Borrow USDC against it without selling early or giving up your floor. How much you can borrow comes from the protection itself, not a separate credit check.',
+    // The numbered form is the page's existing language for "here is the
+    // sequence" - the same 01/02/03 the benefits cards use.
+    steps: [
+      {
+        number: '01',
+        title: 'Start with protection you hold',
+        body: 'Your protected position stays yours, floor included. Nothing is sold.',
+      },
+      {
+        number: '02',
+        title: 'See what your floor supports',
+        body: 'The amount you can borrow is worked out from that floor, not from a credit check.',
+      },
+      {
+        number: '03',
+        title: 'Borrow and repay on Base',
+        body: 'Both transfers are real, and both can be checked on BaseScan.',
+      },
+    ],
     ctaLabel: 'Explore lending',
     href: '/lending',
   },
@@ -74,6 +93,23 @@ export const expansionCards = [
     id: 'vault',
     title: 'A deposit that comes back whole',
     body: 'Deposit USDC and get the full amount back at the end of the term. Part of it funds a real position on Base, so you can share in the upside if the market moves — with no risk to your principal.',
+    steps: [
+      {
+        number: '01',
+        title: 'Deposit USDC',
+        body: 'You see the term and how the deposit is split before you confirm.',
+      },
+      {
+        number: '02',
+        title: 'Part of it buys a real position',
+        body: 'The rest is set aside so the full deposit can come back at the end.',
+      },
+      {
+        number: '03',
+        title: 'Get the whole deposit back',
+        body: 'Plus a share of any rise. The deposit is guaranteed; the share of the rise is not.',
+      },
+    ],
     ctaLabel: 'Explore the vault',
     href: '/vault',
   },

@@ -53,7 +53,13 @@ export default function AssetPicker({
         onClick={() => setOpen((current) => !current)}
       >
         <AssetLogo symbol={selected.symbol} name={selected.name} size="xsmall" />
-        <span>{selected.name} ({selected.symbol})</span>
+        {/*
+          The label carries its own class rather than being styled as "the span
+          inside the trigger". AssetLogo's root element is ALSO a span and also a
+          direct child here, so a bare descendant selector hits both - and the
+          one that sizes the logo loses on specificity.
+        */}
+        <span className="asset-picker__label">{selected.name} ({selected.symbol})</span>
         <ChevronIcon size={14} />
       </button>
 

@@ -58,3 +58,119 @@
   color: var(--text-faint);
   font-size: 12px;
 }
+
+/*
+  The two on-chain links in a loan row.
+
+  Stacked rather than side by side: "Borrowed" and "Repaid" are separate
+  transactions and a row is narrow, so putting them on one line either wraps
+  awkwardly or pushes the action column off the table. The link styling itself
+  is .pd-explorer-link, the same treatment used on the protection detail page.
+*/
+.lending-onchain-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.lending-onchain-links a {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lending-onchain-links a:hover,
+.lending-onchain-links a:focus-visible {
+  text-decoration: underline;
+}
+
+/*
+  The disbursement note. It carries an address the user has to act on later,
+  so it is given room to wrap rather than being squeezed onto one line like
+  the short caption it replaced.
+*/
+.lending-spend-note {
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.lending-spend-note .alpha-mono-value {
+  word-break: break-all;
+}
+
+/*
+  What a loan would cost, shown before the button that commits to it.
+  Deliberately quieter than the credit-limit equation above it: that block is
+  the offer, this one is a projection of a number the user is still choosing.
+*/
+.lending-estimate {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+}
+
+.lending-estimate__note {
+  grid-column: 1 / -1;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.lending-collateral-link {
+  color: var(--signal);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.lending-collateral-link:hover,
+.lending-collateral-link:focus-visible {
+  text-decoration: underline;
+}
+
+.lending-no-forced-sale {
+  max-width: 68ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.lending-no-forced-sale strong {
+  color: var(--text);
+}
+
+.lending-equation small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/*
+  The failing checks inside a borrow refusal. Same shape as the repayment
+  flow's list; scoped so the alert's own paragraph spacing does not apply.
+*/
+.lending-failed-checks {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/*
+  A protection position that has already backed a loan. Dimmed rather than
+  hidden: "I have two protections and only one is listed" is a thing a user
+  cannot explain to themselves, while a greyed row with a reason in it is.
+*/
+.portfolio-table tr.is-spent td {
+  opacity: 0.55;
+}
+
+.portfolio-table tr.is-spent .portfolio-coin-cell small {
+  color: var(--text-muted);
+  font-style: italic;
+}
