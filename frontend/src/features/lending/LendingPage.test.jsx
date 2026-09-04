@@ -537,4 +537,58 @@ describe('LendingPage', () => {
     expect(screen.queryByText(/liquidat/i)).toBeNull();
     expect(screen.queryByText(/margin call/i)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------
+  // Which check refused the loan.
+  // ---------------------------------------------------------------------
+
+  it('names the checks that refused a disbursement, not just that one failed', async () => {
+    // The backend sends the whole checklist on PRECONDITION_FAILED. Dropping
+    // it left "This loan cannot be disbursed. Nothing was sent." as the entire
+    // explanation - true, and no help in deciding what to do next.
+    const user = userEvent.setup();
+    const error = Object.assign(new Error('This loan cannot be disbursed. Nothing was sent.'), {
+      payload: {
+        error: {
+          code: 'PRECONDITION_FAILED',
+          details: {
+            checks: [
+              { label: 'backing put is filled and on chain', pass: true, detail: 'status active' },
+              { label: 'no existing loan against this put', pass: false, detail: 'already lent: d486ee11' },
+              { label: 'callStaticTransfer succeeded', pass: false, detail: 'INSUFFICIENT_BALANCE' },
+            ],
+          },
+        },
+      },
+    });
+    renderLending(apiClient({ postLoan: vi.fn().mockRejectedValue(error) }));
+
+    await user.click(await screen.findByRole('button', { name: 'Use as collateral' }));
+    await screen.findByText('$257.24 USDC');
+    await user.type(screen.getByLabelText('Amount to borrow (USDC)'), '5');
+    await user.click(screen.getByRole('button', { name: /Borrow 5 USDC/ }));
+
+    expect(await screen.findByText('A safety check failed')).toBeVisible();
+    // The failing ones, with the reason the backend gave.
+    expect(screen.getByText(/no existing loan against this put: already lent: d486ee11/)).toBeVisible();
+    expect(screen.getByText(/callStaticTransfer succeeded: INSUFFICIENT_BALANCE/)).toBeVisible();
+    // Not the passing ones - a list of things that worked is noise here.
+    expect(screen.queryByText(/backing put is filled and on chain: status active/)).toBeNull();
+  });
+
+  it('keeps the plain message when a refusal carries no checklist', async () => {
+    const user = userEvent.setup();
+    const error = Object.assign(new Error('This loan cannot be disbursed. Nothing was sent.'), {
+      payload: { error: { code: 'PRECONDITION_FAILED' } },
+    });
+    renderLending(apiClient({ postLoan: vi.fn().mockRejectedValue(error) }));
+
+    await user.click(await screen.findByRole('button', { name: 'Use as collateral' }));
+    await screen.findByText('$257.24 USDC');
+    await user.type(screen.getByLabelText('Amount to borrow (USDC)'), '5');
+    await user.click(screen.getByRole('button', { name: /Borrow 5 USDC/ }));
+
+    expect(await screen.findByText('A safety check failed')).toBeVisible();
+    expect(screen.getByText('This loan cannot be disbursed. Nothing was sent.')).toBeVisible();
+  });
 });
