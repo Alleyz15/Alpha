@@ -7,7 +7,9 @@
 // including the ceil - so the two cannot drift apart silently.
 
 import { describe, expect, it } from 'vitest';
-import { estimateRepayment, buildLoanRows, formatUsdcPrecise } from './lendingViewModel.js';
+import {
+  estimateRepayment, buildLoanRows, formatUsdcPrecise, buildCollateralRows,
+} from './lendingViewModel.js';
 
 /** The backend's arithmetic, written out again from repay.js. */
 function backendAmountOwed(principalUsdc, annualRatePct, termDays) {
@@ -109,5 +111,47 @@ describe('formatUsdcPrecise', () => {
     expect(formatUsdcPrecise(undefined)).toBeNull();
     expect(formatUsdcPrecise('')).toBeNull();
     expect(formatUsdcPrecise('abc')).toBeNull();
+  });
+});
+
+describe('buildCollateralRows', () => {
+  const confirmed = {
+    positionId: 'p1', asset: 'ETH', role: 'protection', status: 'active',
+    verifiedOnChain: true, executionState: 'confirmed',
+    protectionFloorUsdc: 2360, expiry: '2026-09-04T08:00:00Z',
+  };
+
+  it('marks a position that any loan points at, whatever that loan is doing', () => {
+    // disburse.js check 7 filters on position_id alone. Every status here
+    // consumes the collateral, including the settled one.
+    for (const status of ['active', 'repaying', 'repaid', 'defaulted']) {
+      const [row] = buildCollateralRows([confirmed], [{ loanId: 'l1', positionId: 'p1', status }]);
+      expect(row.alreadyBorrowed).toBe(true);
+      expect(row.disabledReason).toBe('Already used as collateral');
+    }
+  });
+
+  it('leaves a position with no loan against it available', () => {
+    const [row] = buildCollateralRows([confirmed], [{ loanId: 'l1', positionId: 'other' }]);
+    expect(row.alreadyBorrowed).toBe(false);
+    expect(row.disabledReason).toBeNull();
+  });
+
+  it('treats an absent or empty loans list as "nothing known to be spent"', () => {
+    // Not as "nothing is spent" - the caller warns separately. This only says
+    // the function must not invent a restriction it cannot support.
+    expect(buildCollateralRows([confirmed])[0].alreadyBorrowed).toBe(false);
+    expect(buildCollateralRows([confirmed], [])[0].alreadyBorrowed).toBe(false);
+  });
+
+  it('ignores loans with no positionId rather than matching them to anything', () => {
+    const rows = buildCollateralRows([confirmed], [{ loanId: 'l1', positionId: null }, { loanId: 'l2' }]);
+    expect(rows[0].alreadyBorrowed).toBe(false);
+  });
+
+  it('still excludes protection that is not confirmed on chain', () => {
+    const pending = { ...confirmed, positionId: 'p2', verifiedOnChain: false };
+    const rows = buildCollateralRows([confirmed, pending], []);
+    expect(rows.map((r) => r.positionId)).toEqual(['p1']);
   });
 });

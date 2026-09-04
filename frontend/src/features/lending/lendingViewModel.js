@@ -15,17 +15,36 @@ export const LOAN_STATUS = {
  * Positions that can back a loan: confirmed on-chain protection, same test
  * portfolioViewModel.getProtectionState already uses for the Portfolio table.
  */
-export function buildCollateralRows(positions = []) {
+export function buildCollateralRows(positions = [], loans = []) {
+  // ANY loan, settled or not - the same test disburse.js check 7 makes:
+  //
+  //   db.from('loans').select('id').eq('position_id', position.id)
+  //
+  // with no status filter. BR-39's floor cannot back two draws, so a put that
+  // has ever been lent against is spent, even once the loan is repaid.
+  //
+  // Narrowing this to open loans would be the worse of the two possible
+  // disagreements with the backend: the interface would offer a choice the
+  // backend refuses, and the user would find out after filling in an amount.
+  const borrowedAgainst = new Set(
+    loans.map((loan) => loan?.positionId).filter(Boolean),
+  );
+
   return positions
     .filter((position) => getProtectionState(position) === 'active')
     .map((position) => {
       const identity = getAssetIdentity(position.asset);
+      const alreadyBorrowed = borrowedAgainst.has(position.positionId);
       return {
         positionId: position.positionId,
         symbol: identity.symbol,
         name: identity.name,
         floorLabel: formatUsdc(position.protectionFloorUsdc) ?? '—',
         expiryLabel: formatDate(position.expiry),
+        alreadyBorrowed,
+        // Shown in the cell, not only as a greyed-out button. A disabled
+        // control says "not this one" and never says why.
+        disabledReason: alreadyBorrowed ? 'Already used as collateral' : null,
       };
     });
 }
