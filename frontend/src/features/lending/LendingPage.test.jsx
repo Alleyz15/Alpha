@@ -591,4 +591,68 @@ describe('LendingPage', () => {
     expect(await screen.findByText('A safety check failed')).toBeVisible();
     expect(screen.getByText('This loan cannot be disbursed. Nothing was sent.')).toBeVisible();
   });
+
+  // ---------------------------------------------------------------------
+  // Protection that has already backed a loan.
+  // ---------------------------------------------------------------------
+  //
+  // disburse.js check 7 queries loans by position_id with NO status filter:
+  // one loan per position, for ever. The list used to offer a spent position
+  // anyway, and the refusal only arrived after an amount had been typed.
+
+  it('disables protection that has already been borrowed against, and says why', async () => {
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [activeLoan] }) }));
+
+    const button = await screen.findByRole('button', { name: 'Already used' });
+    expect(button).toBeDisabled();
+    expect(screen.getByText('Already used as collateral')).toBeVisible();
+    // The reason is in the row, not only in a greyed-out control.
+    expect(button.closest('tr')).toHaveClass('is-spent');
+  });
+
+  it('leaves protection with no loan against it selectable', async () => {
+    const otherPosition = { ...activePosition, positionId: 'pos-2', protectionFloorUsdc: 2440 };
+    renderLending(apiClient({
+      getPositions: vi.fn().mockResolvedValue({ positions: [activePosition, otherPosition] }),
+      getLoans: vi.fn().mockResolvedValue({ loans: [activeLoan] }),   // against pos-1 only
+    }));
+
+    expect(await screen.findByRole('button', { name: 'Use as collateral' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Already used' })).toBeDisabled();
+  });
+
+  it('treats a REPAID loan as spending the protection, exactly as the backend does', async () => {
+    // Pins the decision. disburse.js check 7 has no status filter, so a
+    // settled loan still consumes its collateral. Narrowing this to open
+    // loans would offer a choice the backend refuses.
+    const repaid = { ...activeLoan, status: 'repaid', repaymentExpectedUsdc: 5.000547 };
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [repaid] }) }));
+
+    expect(await screen.findByRole('button', { name: 'Already used' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Use as collateral' })).toBeNull();
+  });
+
+  it('explains a fully spent list without falling into the empty state', async () => {
+    // There IS protection - it has all been used. The "no protection yet"
+    // state would send the user to buy something they already own.
+    renderLending(apiClient({ getLoans: vi.fn().mockResolvedValue({ loans: [activeLoan] }) }));
+
+    expect(await screen.findByText('All your protection is already in use')).toBeVisible();
+    expect(screen.getByText(/Each protection position can back one loan/)).toBeVisible();
+    expect(screen.queryByText('No confirmed protection to borrow against yet')).toBeNull();
+    // The table is still there.
+    expect(screen.getByText('$2,360.00 USDC')).toBeVisible();
+  });
+
+  it('warns instead of silently unfiltering when the loans request fails', async () => {
+    // With no loans we cannot tell which protection is spent, and an
+    // unfiltered list is the defect this change removes. Degrading quietly
+    // back into it is harder to notice than saying so.
+    renderLending(apiClient({ getLoans: vi.fn().mockRejectedValue(new Error('backend down')) }));
+
+    expect(await screen.findByText('Your loans could not be loaded')).toBeVisible();
+    expect(screen.getByText(/may already be in use as collateral/)).toBeVisible();
+    // Nothing is claimed to be spent, because nothing is known.
+    expect(screen.getByRole('button', { name: 'Use as collateral' })).toBeEnabled();
+  });
 });

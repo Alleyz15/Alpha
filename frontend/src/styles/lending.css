@@ -160,3 +160,17 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+/*
+  A protection position that has already backed a loan. Dimmed rather than
+  hidden: "I have two protections and only one is listed" is a thing a user
+  cannot explain to themselves, while a greyed row with a reason in it is.
+*/
+.portfolio-table tr.is-spent td {
+  opacity: 0.55;
+}
+
+.portfolio-table tr.is-spent .portfolio-coin-cell small {
+  color: var(--text-muted);
+  font-style: italic;
+}

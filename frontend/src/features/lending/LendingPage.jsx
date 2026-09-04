@@ -17,7 +17,7 @@ import {
   formatUsdcPrecise,
 } from './lendingViewModel.js';
 
-function CollateralPicker({ rows, selectedPositionId, onSelect }) {
+function CollateralPicker({ rows, selectedPositionId, onSelect, loansUnavailable }) {
   if (rows.length === 0) {
     return (
       <div className="alpha-async-state alpha-async-state--empty">
@@ -31,19 +31,47 @@ function CollateralPicker({ rows, selectedPositionId, onSelect }) {
     );
   }
 
+  // Every row spent. Not an empty state - there IS protection, it has all been
+  // used - so the table still renders and this says why nothing can be picked.
+  const allSpent = rows.length > 0 && rows.every((row) => row.alreadyBorrowed);
+
   return (
-    <div className="portfolio-table-scroll">
+    <>
+      {loansUnavailable && (
+        <Alert tone="warning" title="Your loans could not be loaded">
+          Some of the protection below may already be in use as collateral. We
+          could not check, so nothing here is greyed out — a purchase against an
+          already-borrowed position will be refused.
+        </Alert>
+      )}
+      {allSpent && (
+        <Alert tone="info" title="All your protection is already in use">
+          Each protection position can back one loan, so these cannot be
+          borrowed against again. Buying new protection makes a new limit
+          available.
+        </Alert>
+      )}
+      <div className="portfolio-table-scroll">
       <table className="portfolio-table">
         <thead>
           <tr><th>Asset</th><th>Protection floor</th><th>End date</th><th><span className="sr-only">Action</span></th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.positionId} className={row.positionId === selectedPositionId ? 'is-selected' : ''}>
+            <tr
+              key={row.positionId}
+              className={[
+                row.positionId === selectedPositionId ? 'is-selected' : '',
+                row.alreadyBorrowed ? 'is-spent' : '',
+              ].filter(Boolean).join(' ')}
+            >
               <td>
                 <div className="portfolio-coin-cell">
                   <AssetLogo symbol={row.symbol} name={row.name} size="small" />
-                  <span><strong>{row.name}</strong><small>{row.symbol}</small></span>
+                  <span>
+                    <strong>{row.name}</strong>
+                    <small>{row.disabledReason ?? row.symbol}</small>
+                  </span>
                 </div>
               </td>
               <td className="numeric">{row.floorLabel}</td>
@@ -52,16 +80,20 @@ function CollateralPicker({ rows, selectedPositionId, onSelect }) {
                 <Button
                   size="small"
                   variant={row.positionId === selectedPositionId ? 'primary' : 'ghost'}
+                  disabled={row.alreadyBorrowed}
                   onClick={() => onSelect(row.positionId)}
                 >
-                  {row.positionId === selectedPositionId ? 'Selected' : 'Use as collateral'}
+                  {row.alreadyBorrowed
+                    ? 'Already used'
+                    : (row.positionId === selectedPositionId ? 'Selected' : 'Use as collateral')}
                 </Button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -533,7 +565,10 @@ function LoansList({ lending, rows }) {
 
 export default function LendingPage({ apiClient = liveApi }) {
   const lending = useLendingData(apiClient);
-  const collateralRows = useMemo(() => buildCollateralRows(lending.positions), [lending.positions]);
+  const collateralRows = useMemo(
+    () => buildCollateralRows(lending.positions, lending.loans),
+    [lending.positions, lending.loans],
+  );
   const loanRows = useMemo(
     () => buildLoanRows(lending.loans, lending.positions),
     [lending.loans, lending.positions],
@@ -578,7 +613,15 @@ export default function LendingPage({ apiClient = liveApi }) {
             />
           )}
           {lending.positionsState === 'ready' && (
-            <CollateralPicker rows={collateralRows} selectedPositionId={lending.selectedPositionId} onSelect={lending.selectCollateral} />
+            <CollateralPicker
+              rows={collateralRows}
+              selectedPositionId={lending.selectedPositionId}
+              onSelect={lending.selectCollateral}
+              // Without the loans we cannot tell which protection is spent, and
+              // an unfiltered list is the defect this change removes. Say so
+              // rather than degrade quietly back into it.
+              loansUnavailable={lending.loansState === 'error'}
+            />
           )}
         </Card>
 
