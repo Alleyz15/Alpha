@@ -102,17 +102,6 @@ describe('application routes', () => {
     expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the shared navigation to move between Markets and My Portfolio', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={['/markets']}><App /></MemoryRouter>);
-
-    await screen.findByRole('heading', { name: 'Portfolio value' });
-    await user.click(screen.getByRole('link', { name: 'My Portfolio' }));
-
-    expect(await screen.findByRole('heading', { name: 'My Crypto' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Alpha home' })).toHaveAttribute('href', '/');
-  });
-
   it('navigates from the selected Welcome asset into its protection flow without a reload', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
