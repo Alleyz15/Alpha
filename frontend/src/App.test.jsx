@@ -102,17 +102,6 @@ describe('application routes', () => {
     expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);
   });
 
-  it('navigates from the selected Welcome asset into its protection flow without a reload', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
-
-    await screen.findAllByText('$77,487.38 USDC');
-    await user.click(screen.getByRole('tab', { name: 'ETH' }));
-    await user.click(screen.getAllByRole('button', { name: 'Protect ETH' })[0]);
-
-    expect(await screen.findByRole('heading', { name: 'Buy protection for Ethereum' })).toBeVisible();
-  });
-
   it('navigates from Welcome to Markets through Get Started', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);

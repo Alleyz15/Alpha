@@ -17,7 +17,6 @@ function WelcomeRoute() {
   return (
     <WelcomePage
       apiClient={liveApi}
-      onProtect={(symbol) => navigate(`/protect/${symbol}`)}
       onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
       onGetStarted={() => navigate('/markets')}
       onExploreLending={() => navigate('/lending')}
