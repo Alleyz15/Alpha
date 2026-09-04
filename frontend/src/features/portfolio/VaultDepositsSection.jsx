@@ -22,7 +22,7 @@ function VaultOnChain({ depositUrl, maturityUrl }) {
     <div className="lending-onchain-links">
       {depositUrl && (
         <a
-          className="pd-explorer-link"
+          className="vault-onchain-link"
           href={depositUrl}
           target="_blank"
           rel="noreferrer"
@@ -33,7 +33,7 @@ function VaultOnChain({ depositUrl, maturityUrl }) {
       )}
       {maturityUrl && (
         <a
-          className="pd-explorer-link"
+          className="vault-onchain-link"
           href={maturityUrl}
           target="_blank"
           rel="noreferrer"
