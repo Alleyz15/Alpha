@@ -1,4 +1,5 @@
 import AssetLogo from '../../components/AssetLogo.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { AsyncState, Button, Card, MonoValue, StatusBadge } from '../../components/ui/index.js';
 import CoinChartSlot from './CoinChartSlot.jsx';
 import { formatUpdatedAt } from './coinDetailViewModel.js';
@@ -83,6 +84,8 @@ export default function CoinDetailPage({
   return (
     <div className="coin-detail-page">
       <main className="coin-detail-main">
+        <PageBackLink onClick={onBack}>Back to Markets</PageBackLink>
+
         {overview.status === 'loading' ? (
           <div className="coin-detail-state"><AsyncState state="loading" loadingLabel={`Loading live ${symbol} market data…`} /></div>
         ) : null}
@@ -109,7 +112,6 @@ export default function CoinDetailPage({
         ) : null}
         {overview.status === 'ready' ? (
           <>
-            <button className="coin-detail-back" type="button" onClick={onBack}>← Markets</button>
             <header className="coin-detail-header">
               <div className="coin-detail-identity">
                 <AssetLogo symbol={symbol} name={overview.asset.name} imageUrl={overview.asset.image} size="large" />

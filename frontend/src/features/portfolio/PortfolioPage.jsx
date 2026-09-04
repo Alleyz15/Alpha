@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ClockIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { Alert, AsyncState, Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
 import VaultDepositsSection from './VaultDepositsSection.jsx';
 import LendingEntryCard from './LendingEntryCard.jsx';
@@ -45,6 +46,8 @@ export default function PortfolioPage({ apiClient = liveApi }) {
   return (
     <main className="portfolio-page">
       <div className="portfolio-container">
+        <PageBackLink to="/markets">Back to Home</PageBackLink>
+
         <section className="portfolio-heading">
           <div>
             <span className="portfolio-eyebrow">Portfolio</span>
@@ -181,7 +184,7 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                             <td className="portfolio-action-cell">
                               <div className="portfolio-action-group">
                                 {row.protectable && (
-                                  <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
+                                  <Button size="small" onClick={() => navigate(`/protect/${row.symbol}?from=portfolio`)}>
                                     Buy protection
                                   </Button>
                                 )}

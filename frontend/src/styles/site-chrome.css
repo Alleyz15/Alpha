@@ -1,0 +1,106 @@
+:root {
+  --site-nav-height: 64px;
+}
+
+.alpha-site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  height: var(--site-nav-height);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-glass-strong);
+  backdrop-filter: blur(20px);
+}
+
+.alpha-app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.alpha-site-header__inner {
+  width: min(1600px, calc(100% - 48px));
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.alpha-site-brand {
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.alpha-site-brand__mark {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--signal-tint);
+  color: var(--signal);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.alpha-site-brand strong {
+  font: 700 14px var(--font-display);
+  letter-spacing: .12em;
+}
+
+.alpha-site-brand:hover .alpha-site-brand__mark,
+.alpha-site-brand:focus-visible .alpha-site-brand__mark {
+  border-color: var(--signal);
+  background: var(--interactive-tint);
+  box-shadow: var(--glow-signal);
+  transform: translateY(-1px);
+}
+
+.page-back-link {
+  width: max-content;
+  min-height: 32px;
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.page-back-link:hover,
+.page-back-link:focus-visible {
+  color: var(--signal);
+  transform: translateX(-2px);
+}
+
+@media (max-width: 720px) {
+  :root {
+    --site-nav-height: 56px;
+  }
+
+  .alpha-site-header__inner {
+    width: min(100% - 28px, 1600px);
+  }
+
+  .alpha-site-brand__mark {
+    width: 32px;
+    height: 32px;
+  }
+}

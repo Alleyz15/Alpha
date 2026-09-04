@@ -1,5 +1,7 @@
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
+import PageBackLink from './components/PageBackLink.jsx';
+import SiteHeader from './components/SiteHeader.jsx';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
@@ -27,13 +29,20 @@ function WelcomeRoute() {
 
 function ProtectionRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { symbol = '' } = useParams();
+  const normalizedSymbol = decodeURIComponent(symbol).toUpperCase();
+  const origin = new URLSearchParams(location.search).get('from');
+  const returnDestination = origin === 'coin'
+    ? { label: `Back to ${normalizedSymbol} details`, path: `/coin/${encodeURIComponent(normalizedSymbol)}` }
+    : { label: 'Back to My Crypto', path: '/portfolio' };
 
   return (
     <ProtectionFlowPage
-      symbol={decodeURIComponent(symbol).toUpperCase()}
+      symbol={normalizedSymbol}
       apiClient={liveApi}
-      onExit={() => navigate('/')}
+      exitLabel={returnDestination.label}
+      exitTo={returnDestination.path}
       onViewDashboard={() => navigate('/portfolio')}
     />
   );
@@ -49,7 +58,7 @@ function CoinDetailRoute() {
       symbol={normalizedSymbol}
       apiClient={liveApi}
       onBack={() => navigate('/markets')}
-      onProtect={() => navigate(`/protect/${normalizedSymbol}`)}
+      onProtect={() => navigate(`/protect/${normalizedSymbol}?from=coin`)}
     />
   );
 }
@@ -67,7 +76,7 @@ function NotFoundPage() {
           <span className="protection-eyebrow">Page not found</span>
           <h1>Alpha could not find this page.</h1>
           <p>Return to the Welcome page to choose a supported path.</p>
-          <Link className="alpha-button alpha-button--primary alpha-button--default" to="/">Back to Welcome</Link>
+          <PageBackLink to="/">Back to Welcome</PageBackLink>
         </Card>
       </div>
     </main>
@@ -76,19 +85,22 @@ function NotFoundPage() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<WelcomeRoute />} />
-      <Route path="/markets" element={<HomePage />} />
-      <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
-      <Route path="/home" element={<Navigate replace to="/markets" />} />
-      <Route path="/portfolio" element={<PortfolioPage />} />
-      <Route path="/vault" element={<VaultPage />} />
-      <Route path="/lending" element={<LendingPage />} />
-      <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
-      <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
-      <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
-      <Route path="/protect/:symbol" element={<ProtectionRoute />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    <div className="alpha-app-shell">
+      <SiteHeader />
+      <Routes>
+        <Route path="/" element={<WelcomeRoute />} />
+        <Route path="/markets" element={<HomePage />} />
+        <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
+        <Route path="/home" element={<Navigate replace to="/markets" />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/vault" element={<VaultPage />} />
+        <Route path="/lending" element={<LendingPage />} />
+        <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
+        <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
+        <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
+        <Route path="/protect/:symbol" element={<ProtectionRoute />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 .home-shell {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   display: block;
   overflow: hidden;
   background:
@@ -12,12 +12,12 @@
 .home-main {
   --content-max: 1400px;
   width: 100%;
-  height: 100svh;
+  height: calc(100svh - var(--site-nav-height));
   min-width: 0;
-  padding: var(--space-6-5) clamp(var(--space-5), 4vw, var(--space-12));
+  padding: var(--space-4) clamp(var(--space-5), 4vw, var(--space-12));
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-4);
   overflow: hidden;
 }
 
@@ -474,13 +474,13 @@
 
 @media (max-width: 760px) {
   .home-shell {
-    min-height: 100vh;
+    min-height: calc(100vh - var(--site-nav-height));
     overflow: visible;
   }
 
   .home-main {
     height: auto;
-    min-height: 100vh;
+    min-height: calc(100vh - var(--site-nav-height));
     overflow: visible;
   }
 
