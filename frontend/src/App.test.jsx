@@ -12,6 +12,7 @@ const liveApi = vi.hoisted(() => ({
   getPositions: vi.fn(),
   getPortfolio: vi.fn(),
   getVaults: vi.fn(),
+  getLoans: vi.fn(),
   createQuote: vi.fn(),
   purchaseQuote: vi.fn(),
 }));
@@ -91,6 +92,7 @@ describe('application routes', () => {
     liveApi.getAssetCandles.mockResolvedValue(candles);
     liveApi.getAssetOrderBook.mockResolvedValue(orderBook);
     liveApi.getVaults.mockResolvedValue({ vaults: [] });
+    liveApi.getLoans.mockResolvedValue({ loans: [] });
   });
 
   it('opens /markets directly on the real-data markets page', async () => {
@@ -100,28 +102,6 @@ describe('application routes', () => {
     expect(screen.getByText('$4,703.20 USDC')).toBeVisible();
     expect(screen.queryByRole('heading', { name: /Build your protection/i })).not.toBeInTheDocument();
     expect(liveApi.getPortfolio).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses the shared navigation to move between Markets and My Portfolio', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={['/markets']}><App /></MemoryRouter>);
-
-    await screen.findByRole('heading', { name: 'Portfolio value' });
-    await user.click(screen.getByRole('link', { name: 'My Portfolio' }));
-
-    expect(await screen.findByRole('heading', { name: 'My Crypto' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Alpha home' })).toHaveAttribute('href', '/');
-  });
-
-  it('navigates from the selected Welcome asset into its protection flow without a reload', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
-
-    await screen.findAllByText('$77,487.38 USDC');
-    await user.click(screen.getByRole('tab', { name: 'ETH' }));
-    await user.click(screen.getAllByRole('button', { name: 'Protect ETH' })[0]);
-
-    expect(await screen.findByRole('heading', { name: 'Buy protection for Ethereum' })).toBeVisible();
   });
 
   it('navigates from Welcome to Markets through Get Started', async () => {
@@ -151,5 +131,36 @@ describe('application routes', () => {
     expect(await screen.findByRole('heading', { name: 'Ethereum' })).toBeVisible();
     expect(screen.getByText('$2,415.57 USD')).toBeVisible();
     expect(liveApi.getAssetsOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the shared Alpha home logo and returns to Welcome without a reload', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/markets']}><App /></MemoryRouter>);
+
+    await screen.findByRole('heading', { name: 'Portfolio value' });
+    expect(screen.queryByRole('link', { name: 'Back to Welcome' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Alpha home' }));
+
+    expect(await screen.findByRole('button', { name: 'Get Started' })).toBeVisible();
+  });
+
+  it('returns Buy Protection to the originating Coin Detail page', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/coin/ETH']}><App /></MemoryRouter>);
+
+    await user.click(await screen.findByRole('button', { name: 'Protect ETH' }));
+    const backLink = await screen.findByRole('link', { name: 'Back to ETH details' });
+    expect(backLink).toHaveClass('page-back-link');
+    await user.click(backLink);
+
+    expect(await screen.findByText('$2,415.57 USD')).toBeVisible();
+  });
+
+  it('uses My Crypto as the safe Buy Protection return destination', async () => {
+    render(<MemoryRouter initialEntries={['/protect/ETH?from=portfolio']}><App /></MemoryRouter>);
+
+    const backLink = await screen.findByRole('link', { name: 'Back to My Crypto' });
+    expect(backLink).toHaveClass('page-back-link');
+    expect(backLink).toHaveAttribute('href', '/portfolio');
   });
 });

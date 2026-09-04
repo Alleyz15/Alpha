@@ -1,6 +1,7 @@
-import { Link, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
-import SiteNavigation from './components/SiteNavigation.jsx';
+import PageBackLink from './components/PageBackLink.jsx';
+import SiteHeader from './components/SiteHeader.jsx';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
@@ -18,7 +19,6 @@ function WelcomeRoute() {
   return (
     <WelcomePage
       apiClient={liveApi}
-      onProtect={(symbol) => navigate(`/protect/${symbol}`)}
       onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
       onGetStarted={() => navigate('/markets')}
       onExploreLending={() => navigate('/lending')}
@@ -29,13 +29,20 @@ function WelcomeRoute() {
 
 function ProtectionRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { symbol = '' } = useParams();
+  const normalizedSymbol = decodeURIComponent(symbol).toUpperCase();
+  const origin = new URLSearchParams(location.search).get('from');
+  const returnDestination = origin === 'coin'
+    ? { label: `Back to ${normalizedSymbol} details`, path: `/coin/${encodeURIComponent(normalizedSymbol)}` }
+    : { label: 'Back to My Crypto', path: '/portfolio' };
 
   return (
     <ProtectionFlowPage
-      symbol={decodeURIComponent(symbol).toUpperCase()}
+      symbol={normalizedSymbol}
       apiClient={liveApi}
-      onExit={() => navigate('/')}
+      exitLabel={returnDestination.label}
+      exitTo={returnDestination.path}
       onViewDashboard={() => navigate('/portfolio')}
     />
   );
@@ -51,7 +58,7 @@ function CoinDetailRoute() {
       symbol={normalizedSymbol}
       apiClient={liveApi}
       onBack={() => navigate('/markets')}
-      onProtect={() => navigate(`/protect/${normalizedSymbol}`)}
+      onProtect={() => navigate(`/protect/${normalizedSymbol}?from=coin`)}
     />
   );
 }
@@ -69,26 +76,18 @@ function NotFoundPage() {
           <span className="protection-eyebrow">Page not found</span>
           <h1>Alpha could not find this page.</h1>
           <p>Return to the Welcome page to choose a supported path.</p>
-          <Link className="alpha-button alpha-button--primary alpha-button--default" to="/">Back to Welcome</Link>
+          <PageBackLink to="/">Back to Welcome</PageBackLink>
         </Card>
       </div>
     </main>
   );
 }
 
-function SiteLayout() {
-  return (
-    <>
-      <SiteNavigation />
-      <Outlet />
-    </>
-  );
-}
-
 export default function App() {
   return (
-    <Routes>
-      <Route element={<SiteLayout />}>
+    <div className="alpha-app-shell">
+      <SiteHeader />
+      <Routes>
         <Route path="/" element={<WelcomeRoute />} />
         <Route path="/markets" element={<HomePage />} />
         <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
@@ -101,7 +100,7 @@ export default function App() {
         <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
         <Route path="/protect/:symbol" element={<ProtectionRoute />} />
         <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </div>
   );
 }

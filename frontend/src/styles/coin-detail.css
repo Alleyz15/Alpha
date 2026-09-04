@@ -85,19 +85,6 @@
   width: min(620px, 100%);
 }
 
-.coin-detail-back {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.coin-detail-back:hover {
-  color: var(--signal);
-}
-
 .coin-detail-header {
   margin: var(--space-5) 0 var(--space-6);
   display: flex;

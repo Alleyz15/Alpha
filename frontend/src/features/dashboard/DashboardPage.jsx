@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toPositionViewModel } from '../../adapters/quoteViewModel.js';
 import { liveApi } from '../../api/client.js';
 import RealityDisclosure from '../../components/RealityDisclosure.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import DashboardScreen from '../../screens/DashboardScreen.jsx';
 
 const historyPriority = {
@@ -28,7 +28,6 @@ function orderPositionHistory(positions) {
 }
 
 export default function DashboardPage({ apiClient = liveApi, assetFilter = null }) {
-  const navigate = useNavigate();
   const [demoContext, setDemoContext] = useState(null);
   const [positions, setPositions] = useState([]);
   const [positionsState, setPositionsState] = useState('loading');
@@ -61,12 +60,12 @@ export default function DashboardPage({ apiClient = liveApi, assetFilter = null 
   return (
     <div className="app-shell dashboard-shell">
       <main>
+        <PageBackLink to="/portfolio">Back to My Crypto</PageBackLink>
         <DashboardScreen
           positions={positions}
           state={positionsState}
           isMock={false}
           reality={demoContext?.reality}
-          onExplore={() => navigate('/markets')}
         />
       </main>
 

@@ -1,4 +1,5 @@
 import { ArrowIcon, ClockIcon, ShieldIcon } from '../../components/Icons.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { Alert, Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
 import ProtectionProgress from './ProtectionProgress.jsx';
 import useQuoteCountdown from './useQuoteCountdown.js';
@@ -19,7 +20,7 @@ export default function ReviewProtectionStep({
 
   return (
     <>
-      <button className="protection-back" type="button" onClick={onBack}>← Back to configure</button>
+      <PageBackLink onClick={onBack}>Back to configure</PageBackLink>
       <ProtectionProgress current="Review" />
 
       <header className="protection-heading protection-heading--review">
