@@ -167,3 +167,17 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+/*
+  The base-unit figure under the amount to send. Secondary to the USDC value,
+  but present: it is the number the on-chain check actually compares against,
+  and it cannot be rounded by anything.
+*/
+.lending-repay-flow .pd-detail-list dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+}

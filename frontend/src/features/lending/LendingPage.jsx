@@ -351,7 +351,28 @@ function RepaymentFlow({ loanId, flow, onSetTxHash, onConfirm, onRetryStart }) {
         never truncated - because the user has to copy them.
       */}
       <dl className="pd-detail-list">
-        <div><dt>Send exactly</dt><dd className="numeric"><MonoValue as="strong">{formatUsdc(flow.transfer?.amountUsdc) ?? '—'}</MonoValue></dd></div>
+        {/*
+          Six decimals, not two.
+
+          This said "Send exactly" and then rounded: 2.000622 was printed as
+          $2.00. Following the instruction sent 2.000000 and the repayment was
+          refused - "sent 2.000000, owed 2.000622" - because the check is
+          `match.value >= expectedRaw` and a single micro-unit short fails it.
+          A rounded figure under the word "exactly" is an instruction that
+          cannot be carried out.
+
+          amountRaw sits underneath because it is the unrounded value the chain
+          actually compares, and some wallets take base units directly.
+        */}
+        <div>
+          <dt>Send exactly</dt>
+          <dd className="numeric">
+            <MonoValue as="strong">{formatUsdcPrecise(flow.transfer?.amountUsdc) ?? '—'}</MonoValue>
+            {flow.transfer?.amountRaw && (
+              <small>{flow.transfer.amountRaw} base units (USDC has 6 decimals)</small>
+            )}
+          </dd>
+        </div>
         <div>
           <dt>From this address</dt>
           <dd className="numeric"><MonoValue>{flow.transfer?.from ?? '—'}</MonoValue></dd>
