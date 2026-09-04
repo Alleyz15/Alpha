@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toApiErrorViewModel, toMarketAssetViewModel, toQuoteViewModel } from '../../adapters/quoteViewModel.js';
-import { AsyncState, Button, Card } from '../../components/ui/index.js';
+import PageBackLink from '../../components/PageBackLink.jsx';
+import { AsyncState, Card } from '../../components/ui/index.js';
 import ConfigureProtectionStep from './ConfigureProtectionStep.jsx';
 import ProtectionStatusStep from './ProtectionStatusStep.jsx';
 import ReviewProtectionStep from './ReviewProtectionStep.jsx';
@@ -12,37 +13,37 @@ import {
   validateConfiguration,
 } from './protectionFlowUtils.js';
 
-function UnsupportedAsset({ symbol, onExit }) {
+function UnsupportedAsset({ symbol, exitLabel, exitTo, onExit }) {
   return (
     <main className="protection-flow">
       <div className="protection-container protection-container--state">
         <Card variant="glass" className="protection-route-error">
+          <PageBackLink to={exitTo} onClick={exitTo ? undefined : onExit}>{exitLabel}</PageBackLink>
           <span className="protection-eyebrow">Unsupported asset</span>
           <h1>Alpha cannot configure protection for “{symbol}”.</h1>
-          <p>This checkout does not recognize that asset. Return to Welcome and choose an asset offered by the live backend.</p>
-          <Button onClick={onExit}>Back to Welcome</Button>
+          <p>This checkout does not recognize that asset. Return to My Crypto and choose an asset offered by the live backend.</p>
         </Card>
       </div>
     </main>
   );
 }
 
-function AssetNotOffered({ symbol, onExit }) {
+function AssetNotOffered({ symbol, exitLabel, exitTo, onExit }) {
   return (
     <main className="protection-flow">
       <div className="protection-container protection-container--state">
         <Card variant="glass" className="protection-route-error">
+          <PageBackLink to={exitTo} onClick={exitTo ? undefined : onExit}>{exitLabel}</PageBackLink>
           <span className="protection-eyebrow">Not currently offered</span>
           <h1>{symbol} protection is not available from Alpha right now.</h1>
           <p>The asset is recognized, but it was not included in the latest live market-context response. No quote has been requested.</p>
-          <Button onClick={onExit}>Back to Welcome</Button>
         </Card>
       </div>
     </main>
   );
 }
 
-function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, marketPollInterval }) {
+function SupportedProtectionFlow({ symbol, apiClient, exitLabel, exitTo, onExit, onViewDashboard, marketPollInterval }) {
   const [step, setStep] = useState('Configure');
   const [form, setForm] = useState({ units: '', protectionPct: '10', targetDate: '' });
   const [errors, setErrors] = useState({});
@@ -99,7 +100,10 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, m
     return (
       <main className="protection-flow">
         <div className="protection-container protection-container--state">
-          <AsyncState state="loading" loadingLabel={`Loading live ${symbol} protection…`} />
+          <div className="protection-state-stack">
+            <PageBackLink to={exitTo} onClick={exitTo ? undefined : onExit}>{exitLabel}</PageBackLink>
+            <AsyncState state="loading" loadingLabel={`Loading live ${symbol} protection…`} />
+          </div>
         </div>
       </main>
     );
@@ -113,19 +117,22 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, m
     return (
       <main className="protection-flow">
         <div className="protection-container protection-container--state">
-          <AsyncState
-            state="error"
-            errorTitle="Live backend data is unavailable"
-            errorMessage="Alpha could not load the real market context and demo-account boundary, so this checkout has stopped instead of showing substitute data."
-            onRetry={retry}
-          />
+          <div className="protection-state-stack">
+            <PageBackLink to={exitTo} onClick={exitTo ? undefined : onExit}>{exitLabel}</PageBackLink>
+            <AsyncState
+              state="error"
+              errorTitle="Live backend data is unavailable"
+              errorMessage="Alpha could not load the real market context and demo-account boundary, so this checkout has stopped instead of showing substitute data."
+              onRetry={retry}
+            />
+          </div>
         </div>
       </main>
     );
   }
 
   if (!asset) {
-    return <AssetNotOffered symbol={symbol} onExit={onExit} />;
+    return <AssetNotOffered symbol={symbol} exitLabel={exitLabel} exitTo={exitTo} onExit={onExit} />;
   }
 
   const dateBounds = getDateBounds(asset.longestProtectionDays);
@@ -234,6 +241,8 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, m
             onSelectTier={setSelectedTierId}
             onContinue={continueToReview}
             onExit={onExit}
+            exitLabel={exitLabel}
+            exitTo={exitTo}
           />
         )}
 
@@ -256,6 +265,8 @@ function SupportedProtectionFlow({ symbol, apiClient, onExit, onViewDashboard, m
             quote={quote}
             tier={selectedTier}
             purchase={purchase}
+            exitLabel={exitLabel}
+            exitTo={exitTo}
             onExit={onExit}
             onViewDashboard={onViewDashboard}
           />
@@ -269,17 +280,21 @@ export default function ProtectionFlowPage({
   symbol,
   apiClient,
   onExit = () => window.location.assign('/'),
+  exitLabel = 'Back to My Crypto',
+  exitTo,
   onViewDashboard = () => window.location.assign('/portfolio'),
   marketPollInterval = 30_000,
 }) {
   if (!isKnownAsset(symbol)) {
-    return <UnsupportedAsset symbol={symbol} onExit={onExit} />;
+    return <UnsupportedAsset symbol={symbol} exitLabel={exitLabel} exitTo={exitTo} onExit={onExit} />;
   }
 
   return (
     <SupportedProtectionFlow
       symbol={symbol}
       apiClient={apiClient}
+      exitLabel={exitLabel}
+      exitTo={exitTo}
       onExit={onExit}
       onViewDashboard={onViewDashboard}
       marketPollInterval={marketPollInterval}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toPositionViewModel } from '../../adapters/quoteViewModel.js';
 import { liveApi } from '../../api/client.js';
 import RealityDisclosure from '../../components/RealityDisclosure.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import DashboardScreen from '../../screens/DashboardScreen.jsx';
 
 const historyPriority = {
@@ -59,6 +60,7 @@ export default function DashboardPage({ apiClient = liveApi, assetFilter = null 
   return (
     <div className="app-shell dashboard-shell">
       <main>
+        <PageBackLink to="/portfolio">Back to My Crypto</PageBackLink>
         <DashboardScreen
           positions={positions}
           state={positionsState}

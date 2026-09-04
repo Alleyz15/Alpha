@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { liveApi } from '../../api/client.js';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { AsyncState, RealityBadge } from '../../components/ui/index.js';
 import VaultDepositsSection from '../portfolio/VaultDepositsSection.jsx';
 
@@ -35,6 +36,8 @@ export default function VaultPage({ apiClient = liveApi }) {
   return (
     <main className="portfolio-page">
       <div className="portfolio-container">
+        <PageBackLink to="/portfolio">Back to My Crypto</PageBackLink>
+
         <section className="portfolio-heading">
           <div>
             <span className="portfolio-eyebrow">Vault</span>

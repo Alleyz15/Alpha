@@ -1,5 +1,6 @@
 import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ClockIcon, ShieldIcon } from '../../components/Icons.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import {
   Alert,
   Button,
@@ -30,6 +31,8 @@ export default function ConfigureProtectionStep({
   onSelectTier,
   onContinue,
   onExit,
+  exitLabel,
+  exitTo,
 }) {
   const secondsRemaining = useQuoteCountdown(quote?.expiresAt);
   const quoteExpired = secondsRemaining === 0;
@@ -42,7 +45,7 @@ export default function ConfigureProtectionStep({
 
   return (
     <>
-      <button className="protection-back" type="button" onClick={onExit}>← Back to Welcome</button>
+      <PageBackLink to={exitTo} onClick={exitTo ? undefined : onExit}>{exitLabel}</PageBackLink>
 
       <div className="protection-config-topline">
         <header className="protection-heading">

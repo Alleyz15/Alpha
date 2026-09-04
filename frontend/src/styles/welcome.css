@@ -1,6 +1,6 @@
 .welcome-page {
   position: relative;
-  height: 100vh;
+  height: calc(100svh - var(--site-nav-height));
   overflow-x: clip;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
@@ -91,7 +91,7 @@
 .welcome-hero {
   position: relative;
   z-index: 1;
-  min-height: max(720px, 100svh);
+  min-height: max(720px, calc(100svh - var(--site-nav-height)));
   padding: 92px 0 86px;
   display: grid;
   grid-template-columns: minmax(0, .98fr) minmax(520px, 1.02fr);

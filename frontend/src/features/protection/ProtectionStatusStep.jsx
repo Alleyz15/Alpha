@@ -1,15 +1,17 @@
 import { ExternalIcon, ShieldIcon } from '../../components/Icons.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
 import { getPremiumPresentation } from '../../utils/usdc.js';
 import ProtectionProgress from './ProtectionProgress.jsx';
 import { purchaseStatusView } from './protectionFlowUtils.js';
 
-export default function ProtectionStatusStep({ asset, quote, tier, purchase, onExit, onViewDashboard }) {
+export default function ProtectionStatusStep({ asset, quote, tier, purchase, exitLabel, exitTo, onExit, onViewDashboard }) {
   const status = purchaseStatusView(purchase);
   const hasExplorerLink = purchase.fill === 'onchain' && Boolean(purchase.explorerUrl);
 
   return (
     <>
+      <PageBackLink to={exitTo} onClick={exitTo ? undefined : onExit}>{exitLabel}</PageBackLink>
       <ProtectionProgress current="Status" />
 
       <Card variant="glass" className="protection-status-card" aria-labelledby="protection-status-title">
@@ -42,7 +44,6 @@ export default function ProtectionStatusStep({ asset, quote, tier, purchase, onE
             </a>
           )}
           <Button variant={hasExplorerLink ? 'ghost' : 'primary'} onClick={onViewDashboard}>View my protection</Button>
-          <Button variant="ghost" onClick={onExit}>Back to Welcome</Button>
         </div>
 
         <small className="protection-authority-note">Position status and on-chain evidence are loaded from Alpha’s live backend.</small>

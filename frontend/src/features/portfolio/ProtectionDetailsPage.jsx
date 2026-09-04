@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
 import { ExternalIcon, ShieldIcon } from '../../components/Icons.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { Alert, AsyncState, Button, Card, MonoValue, StatusBadge } from '../../components/ui/index.js';
 import ProtectionTrackingChart from './ProtectionTrackingChart.jsx';
 import { formatDate, formatUsdc, toProtectionDetailViewModel } from './portfolioViewModel.js';
@@ -85,7 +86,9 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
   return (
     <main className="pd-page">
       <div className="pd-container">
-        <button className="pd-back" type="button" onClick={() => navigate('/portfolio')}>← Back to Portfolio</button>
+        <PageBackLink to={detail?.symbol ? `/positions/${detail.symbol}` : '/portfolio'}>
+          {detail?.symbol ? `Back to ${detail.symbol} protection history` : 'Back to My Crypto'}
+        </PageBackLink>
 
         <AsyncState
           state={state}
@@ -209,7 +212,7 @@ export default function ProtectionDetailsPage({ apiClient = liveApi, suppliedPos
 
               <div className="pd-actions">
                 <Button variant="ghost" onClick={() => document.getElementById('contract-history')?.scrollIntoView({ behavior: 'smooth' })}>View history</Button>
-                <Button onClick={() => navigate(`/protect/${detail.symbol}`)}>Buy more protection</Button>
+                <Button onClick={() => navigate(`/protect/${detail.symbol}?from=portfolio`)}>Buy more protection</Button>
               </div>
             </>
           )}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getApiErrorCode, liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
 import { ArrowIcon, ExternalIcon } from '../../components/Icons.jsx';
+import PageBackLink from '../../components/PageBackLink.jsx';
 import { Alert, AsyncState, Button, Card, FormField, MonoValue, StatusBadge } from '../../components/ui/index.js';
 import useLendingData from './useLendingData.js';
 import {
@@ -577,6 +578,8 @@ export default function LendingPage({ apiClient = liveApi }) {
   return (
     <main className="portfolio-page">
       <div className="portfolio-container">
+        <PageBackLink to="/portfolio">Back to My Crypto</PageBackLink>
+
         <section className="portfolio-heading">
           <div>
             <span className="portfolio-eyebrow">Lending</span>

@@ -72,21 +72,10 @@
   justify-self: center;
 }
 
-.protection-back {
-  align-self: flex-start;
-  min-height: 36px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.protection-back:hover {
-  color: var(--signal);
+.protection-state-stack {
+  width: min(620px, 100%);
+  display: grid;
+  gap: var(--space-5);
 }
 
 .protection-progress {
