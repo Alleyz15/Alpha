@@ -202,9 +202,27 @@ function OfferAndBorrow({ lending }) {
 
       {borrowState === 'error' && borrowError && (() => {
         const described = describeLoanError(borrowError, getApiErrorCode(borrowError));
+        const checks = failingChecks(borrowError);
         return (
           <Alert tone={described.code === 'INSUFFICIENT_FLOAT' ? 'warning' : 'error'} title={described.title}>
             {described.message}
+            {/*
+              Which check failed, not just that one did. The backend sends the
+              whole checklist on a refusal (refusedDisbursement puts
+              checksView(preflight.checks) in the error details), and dropping
+              it left "This loan cannot be disbursed. Nothing was sent." as the
+              entire explanation - true, and useless to someone deciding what
+              to do next.
+
+              Same rendering the repayment flow uses, which has already earned
+              its keep: it is what identified a refused repayment as having
+              come from the wrong address.
+            */}
+            {checks.length > 0 && (
+              <ul className="lending-failed-checks">
+                {checks.map((check) => <li key={check.label}>{check.label}: {check.detail}</li>)}
+              </ul>
+            )}
           </Alert>
         );
       })()}

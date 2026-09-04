@@ -147,3 +147,16 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/*
+  The failing checks inside a borrow refusal. Same shape as the repayment
+  flow's list; scoped so the alert's own paragraph spacing does not apply.
+*/
+.lending-failed-checks {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+}

@@ -202,7 +202,19 @@ export function describeLoanError(error, code) {
   };
 }
 
-/** REPAYMENT_UNVERIFIED carries the checklist; show the failing items' detail. */
+/**
+ * The checks a refusal failed on, ready to render.
+ *
+ * Two endpoints attach a checklist to their error rather than only a message:
+ * REPAYMENT_UNVERIFIED, when a supplied transaction does not settle a loan, and
+ * PRECONDITION_FAILED, when a disbursement is refused before anything is sent
+ * (see refusedDisbursement in backend/src/api/loanRoutes.js). Both are cases
+ * where "it failed" is true and useless - the caller needs to know which of
+ * seven or eight conditions was the one that did not hold.
+ *
+ * Returns an empty array for any error that carries no checklist, so a caller
+ * can render the checks when there are some and its own message when not.
+ */
 export function failingChecks(error) {
   const checks = error?.payload?.error?.details?.checks;
   if (!Array.isArray(checks)) return [];
