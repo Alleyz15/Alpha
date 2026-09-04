@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { liveApi } from '../../api/client.js';
 import AssetLogo from '../../components/AssetLogo.jsx';
-import { ArrowIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
+import { ArrowIcon, ClockIcon, ShieldIcon, WalletIcon } from '../../components/Icons.jsx';
 import { Alert, AsyncState, Button, Card, MonoValue, RealityBadge, StatusBadge } from '../../components/ui/index.js';
+import VaultDepositsSection from './VaultDepositsSection.jsx';
+import LendingEntryCard from './LendingEntryCard.jsx';
 import { buildPortfolioRows, formatDate, formatUsdc } from './portfolioViewModel.js';
 
 export default function PortfolioPage({ apiClient = liveApi }) {
@@ -12,7 +14,6 @@ export default function PortfolioPage({ apiClient = liveApi }) {
   const [portfolio, setPortfolio] = useState(null);
   const [positions, setPositions] = useState([]);
   const [error, setError] = useState(null);
-  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setState('loading');
@@ -39,26 +40,11 @@ export default function PortfolioPage({ apiClient = liveApi }) {
     () => buildPortfolioRows(portfolio?.holdings, positions),
     [portfolio, positions],
   );
-  const visibleRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return rows;
-    return rows.filter((row) => `${row.name} ${row.symbol}`.toLowerCase().includes(normalizedQuery));
-  }, [query, rows]);
+  const usdcAvailable = portfolio?.holdings?.find((holding) => holding.asset === 'USDC')?.amount ?? null;
 
   return (
     <main className="portfolio-page">
       <div className="portfolio-container">
-        <header className="portfolio-topbar">
-          <button className="portfolio-brand" type="button" onClick={() => navigate('/')} aria-label="Go to Alpha Welcome">
-            <span>α</span> ALPHA
-          </button>
-          <label className="portfolio-search">
-            <span className="sr-only">Search holdings</span>
-            <span aria-hidden="true">⌕</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your holdings" />
-          </label>
-        </header>
-
         <section className="portfolio-heading">
           <div>
             <span className="portfolio-eyebrow">Portfolio</span>
@@ -99,15 +85,52 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                   <div>
                     <span>Active protections</span>
                     <MonoValue as="strong">{portfolio.activeProtectionCount ?? '—'}</MonoValue>
-                    <small>{portfolio.nextExpiry
-                      ? `Next confirmed protection ends ${formatDate(portfolio.nextExpiry)}`
-                      : 'No protection active'}</small>
+                    <small>Confirmed downside protection</small>
                     {Number(portfolio.pendingProtectionCount) > 0 && (
                       <em>{portfolio.pendingProtectionCount} being set up</em>
                     )}
                   </div>
                 </Card>
+                <Card className="portfolio-stat-card portfolio-stat-card--expiry">
+                  <div className="portfolio-stat-icon"><ClockIcon size={22} /></div>
+                  <div>
+                    <span>Next protection end</span>
+                    <MonoValue
+                      as={portfolio.nextExpiry ? 'time' : 'strong'}
+                      dateTime={portfolio.nextExpiry || undefined}
+                      className={portfolio.nextExpiry ? '' : 'portfolio-stat-empty'}
+                    >
+                      {portfolio.nextExpiry ? formatDate(portfolio.nextExpiry) : 'No active protection'}
+                    </MonoValue>
+                    <small>Earliest confirmed protection end date</small>
+                  </div>
+                </Card>
+
+                {/*
+                  USDC had no home on this page. The only place a balance
+                  appeared was a hint inside the vault deposit form, which a
+                  user only sees after opening the form - so the answer to
+                  "have I got anything to deposit?" was behind the button that
+                  asks you to deposit.
+
+                  The logo comes through `imageUrl` rather than by registering
+                  USDC in ASSET_IDENTITIES: AssetPicker derives the vault's
+                  selectable assets from that object's keys, so registering
+                  USDC there would offer a USDC-denominated vault deposit.
+                */}
+                <Card className="portfolio-stat-card">
+                  <AssetLogo symbol="USDC" name="USD Coin" imageUrl="/assets/coins/usdc.svg" size="large" />
+                  <div>
+                    <span>USDC available</span>
+                    <MonoValue as="strong">{formatUsdc(usdcAvailable) ?? '—'}</MonoValue>
+                    <small>Ready to deposit into the vault · simulated balance</small>
+                  </div>
+                </Card>
               </section>
+
+              <VaultDepositsSection apiClient={apiClient} positions={positions} usdcAvailable={usdcAvailable} />
+
+              <LendingEntryCard apiClient={apiClient} />
 
               <Card className="portfolio-overview-card">
                 <div className="portfolio-section-heading">
@@ -125,12 +148,6 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                     emptyTitle="No crypto holdings yet"
                     emptyMessage="Your non-USDC holdings will appear here when the backend returns them."
                   />
-                ) : visibleRows.length === 0 ? (
-                  <AsyncState
-                    state="empty"
-                    emptyTitle="No matching holding"
-                    emptyMessage={`No asset matches “${query}”.`}
-                  />
                 ) : (
                   <div className="portfolio-table-scroll">
                     <table className="portfolio-table">
@@ -140,12 +157,12 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                           <th>Holdings</th>
                           <th>Current price</th>
                           <th>Protection</th>
-                          <th>Expiry</th>
+                          <th>Protection ends</th>
                           <th><span className="sr-only">Action</span></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {visibleRows.map((row) => (
+                        {rows.map((row) => (
                           <tr key={row.asset}>
                             <td>
                               <div className="portfolio-coin-cell">
@@ -162,19 +179,24 @@ export default function PortfolioPage({ apiClient = liveApi }) {
                             </td>
                             <td>{row.expiryLabel}</td>
                             <td className="portfolio-action-cell">
-                              {row.positionId ? (
-                                <Button
-                                  variant="ghost"
-                                  size="small"
-                                  onClick={() => navigate(row.currentPositionCount > 1 ? `/positions/${row.symbol}` : `/protection/${row.positionId}`)}
-                                >
-                                  {row.currentPositionCount > 1 ? 'View positions' : 'View'} <ArrowIcon size={14} />
-                                </Button>
-                              ) : (
-                                <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
-                                  Buy protection
-                                </Button>
-                              )}
+                              <div className="portfolio-action-group">
+                                {row.protectable && (
+                                  <Button size="small" onClick={() => navigate(`/protect/${row.symbol}`)}>
+                                    Buy protection
+                                  </Button>
+                                )}
+                                {row.hasPositionHistory && (
+                                  <Button
+                                    variant="ghost"
+                                    size="small"
+                                    className="portfolio-view-button"
+                                    onClick={() => navigate(`/positions/${row.symbol}`)}
+                                  >
+                                    View history <ArrowIcon size={14} />
+                                  </Button>
+                                )}
+                                {!row.protectable && !row.hasPositionHistory && <span aria-hidden="true">—</span>}
+                              </div>
                             </td>
                           </tr>
                         ))}

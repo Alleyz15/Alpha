@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CandlestickSeries, ColorType, createChart } from 'lightweight-charts';
 import { Button } from '../../components/ui/index.js';
 
-const RANGES = ['1H', '1D', '1W', '1M', '1Y'];
+const INTERVALS = ['1m', '5m', '1h', '4h', '1d'];
 
 function toChartCandles(candles) {
   return (candles || []).map((candle) => ({
@@ -14,7 +14,7 @@ function toChartCandles(candles) {
   }));
 }
 
-function CandlestickChart({ candles }) {
+const CandlestickChart = memo(function CandlestickChart({ candles }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -69,10 +69,10 @@ function CandlestickChart({ candles }) {
   }, [candles]);
 
   return <div className="coin-chart-slot__canvas" ref={containerRef} aria-label="Candlestick chart" />;
-}
+});
 
-export default function CoinChartSlot({ symbol, apiClient }) {
-  const [range, setRange] = useState('1D');
+function CoinChartSlot({ symbol, apiClient }) {
+  const [interval, setInterval] = useState('5m');
   const [state, setState] = useState({ status: 'loading', data: null });
   const requestId = useRef(0);
 
@@ -80,13 +80,13 @@ export default function CoinChartSlot({ symbol, apiClient }) {
     const currentRequest = ++requestId.current;
     setState({ status: 'loading', data: null });
     try {
-      const payload = await apiClient.getAssetCandles(symbol, range);
+      const payload = await apiClient.getAssetCandles(symbol, { interval, limit: 200 });
       if (currentRequest !== requestId.current) return;
       setState({ status: 'ready', data: payload });
     } catch {
       if (currentRequest === requestId.current) setState({ status: 'error', data: null });
     }
-  }, [apiClient, range, symbol]);
+  }, [apiClient, interval, symbol]);
 
   useEffect(() => {
     loadCandles();
@@ -94,24 +94,27 @@ export default function CoinChartSlot({ symbol, apiClient }) {
   }, [loadCandles]);
 
   const payload = state.data;
-  const candles = payload ? toChartCandles(payload.candles) : [];
+  const candles = useMemo(
+    () => (payload ? toChartCandles(payload.candles) : []),
+    [payload],
+  );
 
   return (
     <section className="coin-chart-slot" aria-label={`${symbol} Binance candlestick chart`}>
       <div className="coin-chart-slot__heading">
         <div>
           <span>Binance market chart</span>
-          <strong>{payload?.pair ? `${symbol}/${payload.quoteCurrency}` : `${symbol}/USDT`}</strong>
-          <small>{payload ? `Source: ${payload.source} · ${payload.interval} candles` : 'Source: Binance'}</small>
+          <strong>{payload?.pair ? `${payload.symbol}/${payload.quoteCurrency}` : `${symbol}/USDT`}</strong>
+          <small>{payload ? `Source: ${payload.source} · ${payload.symbol}/${payload.quoteCurrency} · ${payload.interval} candles` : ''}</small>
         </div>
         <div className="coin-chart-ranges" role="group" aria-label="Chart timeframe">
-          {RANGES.map((option) => (
+          {INTERVALS.map((option) => (
             <button
-              className={option === range ? 'is-active' : ''}
+              className={option === interval ? 'is-active' : ''}
               type="button"
               key={option}
-              onClick={() => setRange(option)}
-              aria-pressed={option === range}
+              onClick={() => setInterval(option)}
+              aria-pressed={option === interval}
             >
               {option}
             </button>
@@ -139,3 +142,5 @@ export default function CoinChartSlot({ symbol, apiClient }) {
     </section>
   );
 }
+
+export default memo(CoinChartSlot);

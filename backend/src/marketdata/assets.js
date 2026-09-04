@@ -90,20 +90,106 @@ export const RANGES = Object.freeze({
   '1Y': { interval: '1d',  limit: 365 },
 });
 
-/** The default when no range is given. */
-export const DEFAULT_RANGE = '1D';
+// resolveRange() and RANGE_KEYS were removed when the candles endpoint moved
+// from range-based to interval-based selection. RANGES stays: resolveCandleQuery
+// reads the old per-range lookbacks from it so the deprecated `range` alias
+// returns byte-identical responses for one release.
 
 /**
- * Resolve a requested range, or null if it is not one we offer.
- *
- * @param {string} [range]
- * @returns {{range:string, interval:string, limit:number}|null}
+ * The candle intervals a caller may request, mapped 1:1 to Binance's kline
+ * intervals so nothing here has to translate.
  */
-export function resolveRange(range) {
-  const wanted = (range ?? DEFAULT_RANGE).trim().toUpperCase();
-  const found = RANGES[wanted];
-  return found ? { range: wanted, ...found } : null;
-}
+export const CANDLE_INTERVALS = Object.freeze(['1m', '5m', '1h', '4h', '1d']);
 
-/** Every range the interface may ask for, for error messages and docs. */
-export const RANGE_KEYS = Object.freeze(Object.keys(RANGES));
+/**
+ * The hard ceiling on how many candles one request returns.
+ *
+ * ---------------------------------------------------------------------------
+ * 1000 IS BINANCE'S OWN PER-REQUEST CAP, NOT A NUMBER WE CHOSE.
+ * ---------------------------------------------------------------------------
+ *
+ * Asking for more means paginating, which this does not do. So "why 1000"
+ * always has an answer that is not "seemed reasonable".
+ *
+ * At 1000 the widest span any supported interval produces is 1000 x 1d, about
+ * 2.7 years; the narrowest is 1000 x 1m, about 16.7 hours. Both are legitimate
+ * charts. The half-million-candle memory problem only exists when the count is
+ * unbounded - capping it removes that in every interval, so no separate
+ * "interval x limit" rule is needed on top.
+ */
+export const MAX_CANDLE_LIMIT = 1000;
+
+/** The count returned when the caller does not ask for one. */
+export const DEFAULT_CANDLE_LIMIT = 200;
+
+/**
+ * The old `range` values, as a one-release alias.
+ *
+ * `range` meant "how far back", and picked the interval for you. The endpoint
+ * now takes `interval` directly. These keep existing callers byte-identical for
+ * one release: a `range` maps to the interval it used to imply AND to the
+ * lookback it used to request (RANGES[key].limit), so a caller that does not
+ * change sees the same response it saw before.
+ */
+const RANGE_ALIAS_INTERVAL = Object.freeze({
+  '1H': '1m', '1D': '5m', '1W': '1h', '1M': '4h', '1Y': '1d',
+});
+
+/**
+ * Resolve a candles request to a concrete { interval, limit }.
+ *
+ * Precedence:
+ *   1. `interval` if given - the new, direct parameter.
+ *   2. `range` if given - the alias, mapped to its old interval and old limit.
+ *   3. neither - the default interval and DEFAULT_CANDLE_LIMIT.
+ *
+ * `limit` is CLAMPED to MAX_CANDLE_LIMIT rather than refused: a caller asking
+ * for 5000 wants "as much as you have", and because the response states the
+ * interval and the candles it actually returns, a clamp cannot mislabel a
+ * chart. A limit that is not a positive integer IS refused - that is malformed,
+ * not ambitious.
+ *
+ * Returns a discriminated result rather than throwing, so this module keeps its
+ * "no imports" property and the route decides the HTTP shape.
+ *
+ * @param {{interval?:string, limit?:string|number, range?:string}} q
+ * @returns {{ok:true, interval:string, limit:number, viaRange:string|null}
+ *          | {ok:false, reason:'interval'|'range'|'limit', got:string}}
+ */
+export function resolveCandleQuery({ interval, limit, range } = {}) {
+  let chosenInterval = null;
+  let baseLimit = DEFAULT_CANDLE_LIMIT;
+  let viaRange = null;
+
+  const intervalGiven = interval !== undefined && interval !== null && String(interval).trim() !== '';
+  const rangeGiven = range !== undefined && range !== null && String(range).trim() !== '';
+
+  if (intervalGiven) {
+    const want = String(interval).trim().toLowerCase();
+    if (!CANDLE_INTERVALS.includes(want)) {
+      return { ok: false, reason: 'interval', got: String(interval) };
+    }
+    chosenInterval = want;
+  } else if (rangeGiven) {
+    const key = String(range).trim().toUpperCase();
+    const mapped = RANGE_ALIAS_INTERVAL[key];
+    if (!mapped) return { ok: false, reason: 'range', got: String(range) };
+    chosenInterval = mapped;
+    // The old lookback for this range, so an unchanged caller is unchanged.
+    baseLimit = RANGES[key]?.limit ?? DEFAULT_CANDLE_LIMIT;
+    viaRange = key;
+  } else {
+    chosenInterval = '5m';
+  }
+
+  let chosenLimit = baseLimit;
+  if (limit !== undefined && limit !== null && String(limit).trim() !== '') {
+    const n = Number(limit);
+    if (!Number.isInteger(n) || n < 1) {
+      return { ok: false, reason: 'limit', got: String(limit) };
+    }
+    chosenLimit = Math.min(n, MAX_CANDLE_LIMIT);
+  }
+
+  return { ok: true, interval: chosenInterval, limit: chosenLimit, viaRange };
+}

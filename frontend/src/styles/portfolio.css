@@ -1,23 +1,27 @@
 .portfolio-page,
 .pd-page {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   background:
     radial-gradient(circle at 14% 12%, var(--primary-tint), transparent 28%),
     radial-gradient(circle at 88% 18%, var(--signal-tint), transparent 26%),
     var(--bg);
 }
 
-.portfolio-container {
-  width: min(100%, var(--content-max));
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: var(--space-5) var(--space-9);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
+.portfolio-page {
+  width: 100%;
+  margin: 0;
 }
 
-.portfolio-topbar,
+.portfolio-container {
+  width: min(100%, 1600px);
+  min-height: calc(100vh - var(--site-nav-height));
+  margin: 0 auto;
+  padding: var(--space-5) clamp(var(--space-5), 3vw, var(--space-12));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 .portfolio-heading,
 .portfolio-section-heading,
 .portfolio-stat-card,
@@ -30,72 +34,48 @@
   align-items: center;
 }
 
-.portfolio-topbar {
-  min-height: 52px;
-  justify-content: space-between;
-  gap: var(--space-6);
-}
-
-.portfolio-brand {
-  border: 0;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: transparent;
-  color: var(--text);
-  font: 700 14px var(--font-display);
-  letter-spacing: 0.16em;
-  cursor: pointer;
-}
-
-.portfolio-brand > span {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  background: var(--gradient-primary);
-  color: var(--text-on-primary);
-  box-shadow: var(--glow-primary);
-  font: 700 20px var(--font-display);
-  letter-spacing: 0;
-}
-
-.portfolio-search {
-  width: min(360px, 50vw);
-  min-height: 42px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--bg-elevated);
-  color: var(--text-muted);
-}
-
-.portfolio-search:focus-within {
-  border-color: var(--signal);
-  box-shadow: 0 0 0 1px var(--signal);
-}
-
-.portfolio-search input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-}
-
 .portfolio-heading {
   justify-content: space-between;
   gap: var(--space-6);
 }
 
+.portfolio-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.portfolio-home-link {
+  min-height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.portfolio-home-link:hover {
+  border-color: var(--signal);
+  background: var(--signal-tint);
+  color: var(--signal);
+  transform: translateX(-2px);
+}
+
 .portfolio-heading h1,
 .pd-heading h1 {
-  margin: var(--space-1) 0 var(--space-2);
+  margin: var(--space-1) 0;
   color: var(--text);
   font-size: clamp(32px, 4vw, 44px);
   line-height: 1.05;
@@ -118,16 +98,31 @@
   text-transform: uppercase;
 }
 
+/*
+  Four cards, not three - the fourth is USDC available.
+
+  Four across needs about 320px per card to carry the longest value on one
+  line; below that the row is two across. With gaps and the page's own padding
+  that threshold lands at 1440px, not the 1200 first tried: at 1280 each card
+  is 285px and the value still wrapped even at 23px. Below 821px it is one
+  column, as before.
+*/
 .portfolio-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 1439px) {
+  .portfolio-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .portfolio-stat-card {
-  min-height: 132px;
-  gap: var(--space-5);
-  padding: var(--space-5);
+  min-height: 108px;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
 }
 
 .portfolio-stat-icon,
@@ -163,6 +158,35 @@
   line-height: 1.2;
 }
 
+/*
+  Four across leaves each card ~323px at 1440, and the clamp above is sized for
+  the ~437px cards of the old three-card row. Measured at 1440:
+  "$4,935.36 USDC" wraps onto a second line at 34, 30 and 28px and stops
+  wrapping at 26px, which also brings the cards back from 169px tall to 118px.
+  1.8vw lands at 25.9px there and still reaches 30px on a 1920 screen, where
+  the cards are wide enough to carry it.
+
+  Narrower than this the row is two across and the cards are wider than they
+  ever were at three, so the size above stands.
+*/
+@media (min-width: 1440px) {
+  .portfolio-stat-card strong {
+    font-size: clamp(22px, 1.8vw, 30px);
+  }
+}
+
+.portfolio-stat-card time {
+  color: var(--text);
+  font-size: clamp(20px, 2.2vw, 28px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.portfolio-stat-card .portfolio-stat-empty {
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.6vw, 21px);
+}
+
 .portfolio-stat-card small,
 .pd-summary-card small {
   color: var(--text-muted);
@@ -183,11 +207,171 @@
   overflow: hidden;
 }
 
+.vault-deposits-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.vault-deposits-empty {
+  min-height: 120px;
+  padding: var(--space-5);
+}
+
+.vault-deposit-form {
+  display: grid;
+  gap: var(--space-4);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.vault-deposit-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.asset-picker {
+  position: relative;
+}
+
+.asset-picker__trigger {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.asset-picker__trigger:focus-visible,
+.asset-picker__trigger[aria-expanded="true"] {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 1px var(--signal);
+  outline: 0;
+}
+
+.asset-picker__trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/*
+  Scoped to the label. As `.asset-picker__trigger span` this also matched
+  AssetLogo's own root span - at specificity (0,1,1) it beat `.asset-logo`'s
+  (0,1,0) `flex: 0 0 var(--asset-logo-size)`, so the 22px logo box was stretched
+  to the full width of the button. With `overflow: hidden` and a circular
+  radius, what showed was a flat slice through the middle of the image.
+*/
+.asset-picker__trigger .asset-picker__label {
+  flex: 1;
+  text-align: left;
+}
+
+.asset-picker__trigger svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.asset-picker__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--space-2);
+  max-height: 260px;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+}
+
+.asset-picker__list li + li {
+  margin-top: 2px;
+}
+
+.asset-picker__list button {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-picker__list button:hover,
+.asset-picker__list button.is-selected {
+  background: var(--interactive-tint);
+}
+
+.vault-preview-card {
+  background: var(--bg-elevated);
+}
+
+.vault-preview-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-6);
+}
+
+.vault-preview-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.vault-preview-list dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.vault-preview-list dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.vault-deposit-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.vault-deposit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
 .portfolio-section-heading {
   flex: 0 0 auto;
   justify-content: space-between;
   gap: var(--space-5);
-  padding-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
 }
 
 .portfolio-section-heading h2,
@@ -214,7 +398,7 @@
   position: sticky;
   z-index: 1;
   top: 0;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   background: var(--surface);
   color: var(--text-faint);
   font-size: 11px;
@@ -224,7 +408,7 @@
 
 .portfolio-table td {
   border-top: 1px solid var(--border);
-  padding: var(--space-3-5) var(--space-4);
+  padding: 10px var(--space-4);
   color: var(--text-muted);
   font-size: 13.5px;
 }
@@ -262,17 +446,158 @@
 }
 
 .portfolio-action-cell .alpha-button {
-  margin-left: auto;
   white-space: nowrap;
 }
 
+.portfolio-action-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.portfolio-action-cell .portfolio-view-button {
+  min-width: 124px;
+  border-color: rgba(94, 235, 255, 0.5);
+  background: linear-gradient(135deg, rgba(94, 235, 255, 0.1), rgba(46, 111, 255, 0.12));
+  color: var(--signal);
+}
+
+.portfolio-action-cell .portfolio-view-button:hover:not(:disabled) {
+  border-color: var(--signal);
+  background: linear-gradient(135deg, rgba(94, 235, 255, 0.16), rgba(46, 111, 255, 0.2));
+  box-shadow: 0 0 20px rgba(94, 235, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.portfolio-view-button svg {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.portfolio-view-button:hover:not(:disabled) svg {
+  transform: translateX(3px);
+}
+
 .portfolio-position-scope {
-  margin: var(--space-4) 0 0;
+  margin: var(--space-2) 0 0;
   border-top: 1px solid var(--border);
   padding-top: var(--space-3);
   color: var(--text-faint);
   font-size: 11px;
   line-height: 1.5;
+}
+
+@media (min-width: 821px) {
+  .portfolio-page {
+    height: calc(100svh - var(--site-nav-height));
+    overflow: hidden;
+  }
+
+  .portfolio-container {
+    height: calc(100svh - var(--site-nav-height));
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /*
+    Sized by its content, never squeezed to fit.
+
+    This card holds the holdings table and the protection overview. It used to
+    be `flex: 1` with `min-height: 0`, which let a growing sibling take its
+    height instead of making the container overflow: expanding the vault form
+    took it from 213px to 50px and left 16px of scroll for 185px of content.
+
+    A 200px floor was tried and made it worse. The floor was measured before
+    the lending entry card existed; once that card took 137px the overview
+    card's share fell below 200, so the floor stopped being a safety net and
+    became a ceiling - 200px minus a 91px heading left the table 22px to show
+    372px of rows, which reads as an empty section. Six rows were in the DOM
+    the whole time.
+
+    Any floor is a number that goes stale the next time a row is added or a
+    sibling grows. So there is no floor: the card takes the height of its
+    content and `.portfolio-container` scrolls, which is how this page is now
+    meant to behave.
+  */
+  .portfolio-overview-card {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+}
+
+@media (min-width: 821px) and (max-height: 820px) {
+  .portfolio-container {
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-3);
+    gap: 10px;
+  }
+
+  .portfolio-heading h1 {
+    font-size: 34px;
+  }
+
+  .portfolio-heading p {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .portfolio-stat-card {
+    min-height: 88px;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .portfolio-stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .portfolio-stat-card strong {
+    font-size: 24px;
+  }
+
+  .portfolio-stat-card time {
+    font-size: 21px;
+  }
+
+  .portfolio-overview-card {
+    padding: var(--space-4);
+  }
+
+  .portfolio-section-heading {
+    padding-bottom: var(--space-2);
+  }
+
+  .portfolio-section-heading h2 {
+    margin: 2px 0;
+    font-size: 18px;
+  }
+
+  .portfolio-section-heading p {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .portfolio-table th {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .portfolio-table td {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 12.5px;
+  }
+
+  .portfolio-coin-cell strong {
+    font-size: 13px;
+  }
+
+  .portfolio-position-scope {
+    margin-top: var(--space-1);
+    padding-top: 6px;
+    line-height: 1.35;
+  }
 }
 
 .pd-container {
@@ -580,7 +905,9 @@
 
   .portfolio-stats,
   .pd-summary-grid,
-  .pd-detail-list {
+  .pd-detail-list,
+  .vault-deposit-fields,
+  .vault-preview-list {
     grid-template-columns: 1fr;
   }
 
@@ -602,7 +929,6 @@
 }
 
 @media (max-width: 560px) {
-  .portfolio-topbar,
   .portfolio-heading,
   .pd-title-row,
   .pd-actions,
@@ -611,8 +937,8 @@
     flex-direction: column;
   }
 
-  .portfolio-search {
-    width: 100%;
+  .portfolio-heading-actions {
+    justify-content: space-between;
   }
 
   .pd-container {
@@ -627,4 +953,101 @@
   .pd-title-row .alpha-status-badge {
     align-self: flex-start;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Lending entry card
+   ---------------------------------------------------------------------------
+   A way through to /lending, not a second lending UI. Deliberately short: it
+   sits inside the fixed-height desktop column, so every pixel it takes comes
+   out of the holdings table below it.
+*/
+.lending-entry-card {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.lending-entry-card__text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.lending-entry-card__text h2 {
+  margin: var(--space-1) 0 var(--space-1);
+  font-size: 20px;
+}
+
+.lending-entry-card__text p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.lending-entry-card__stats {
+  margin: 0;
+  display: flex;
+  gap: var(--space-6);
+}
+
+.lending-entry-card__stats dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lending-entry-card__stats dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+
+.lending-entry-card__note {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.lending-entry-card__link {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+.lending-entry-card__link:hover,
+.lending-entry-card__link:focus-visible {
+  border-color: var(--signal);
+  background: var(--interactive-tint);
+}
+
+@media (max-width: 820px) {
+  .lending-entry-card__link { width: 100%; text-align: center; }
+}
+
+/*
+  The two claims under the Vault Deposits heading. Kept narrow so they read as
+  a note rather than a paragraph of marketing, and muted so the table stays the
+  focus - they exist to stop a misreading, not to sell.
+*/
+.vault-deposits-note {
+  max-width: 74ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.vault-deposits-note strong {
+  color: var(--text);
 }

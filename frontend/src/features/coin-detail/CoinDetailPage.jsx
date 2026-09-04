@@ -1,23 +1,8 @@
 import AssetLogo from '../../components/AssetLogo.jsx';
-import { ShieldIcon } from '../../components/Icons.jsx';
 import { AsyncState, Button, Card, MonoValue, StatusBadge } from '../../components/ui/index.js';
 import CoinChartSlot from './CoinChartSlot.jsx';
 import { formatUpdatedAt } from './coinDetailViewModel.js';
 import useCoinDetailData from './useCoinDetailData.js';
-
-function CoinDetailNav({ onBack, onDashboard }) {
-  return (
-    <header className="coin-site-nav">
-      <button className="coin-brand" type="button" onClick={onBack} aria-label="Alpha markets">
-        <span><ShieldIcon size={18} /></span><strong>ALPHA</strong><small>Market detail</small>
-      </button>
-      <nav aria-label="Coin detail navigation">
-        <button type="button" onClick={onBack}>Markets</button>
-        <button type="button" onClick={onDashboard}>My protection</button>
-      </nav>
-    </header>
-  );
-}
 
 function OrderRows({ rows, side, symbol, quoteCurrency }) {
   const visibleRows = (rows || []).slice(0, 5);
@@ -89,7 +74,6 @@ export default function CoinDetailPage({
   symbol,
   apiClient,
   onBack,
-  onDashboard,
   onProtect,
   orderBookPollInterval = 3_000,
 }) {
@@ -98,7 +82,6 @@ export default function CoinDetailPage({
 
   return (
     <div className="coin-detail-page">
-      <CoinDetailNav onBack={onBack} onDashboard={onDashboard} />
       <main className="coin-detail-main">
         {overview.status === 'loading' ? (
           <div className="coin-detail-state"><AsyncState state="loading" loadingLabel={`Loading live ${symbol} market data…`} /></div>

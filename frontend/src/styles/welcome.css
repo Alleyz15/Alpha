@@ -1,6 +1,6 @@
 .welcome-page {
   position: relative;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--site-nav-height));
   overflow: clip;
   background:
     radial-gradient(circle at 78% 9%, var(--primary-tint), transparent 28%),
@@ -10,7 +10,6 @@
 }
 
 .welcome-page main,
-.welcome-header,
 .welcome-footer {
   width: min(calc(100% - 64px), var(--content-max-marketing));
   margin-inline: auto;
@@ -30,20 +29,6 @@
   background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
   transform: translateX(-50%);
   pointer-events: none;
-}
-
-.welcome-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  min-height: 86px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(16px);
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: var(--space-6);
 }
 
 .welcome-brand {
@@ -79,38 +64,10 @@
   letter-spacing: .08em;
 }
 
-.welcome-header nav,
-.welcome-footer nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-9);
-}
-
-.welcome-header nav a,
-.welcome-footer nav a {
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.welcome-header nav a:hover,
-.welcome-footer nav a:hover {
-  color: var(--signal);
-}
-
-.welcome-header__actions {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .welcome-hero {
   position: relative;
   z-index: 1;
-  min-height: 720px;
+  min-height: max(720px, calc(100svh - var(--site-nav-height)));
   padding: 92px 0 86px;
   display: grid;
   grid-template-columns: minmax(0, .98fr) minmax(520px, 1.02fr);
@@ -540,7 +497,7 @@
   padding: var(--space-9);
   overflow: hidden;
   background: var(--surface-glass);
-  transition: transform var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard);
+  transition: translate var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard);
 }
 
 .welcome-benefit-card::after {
@@ -557,7 +514,7 @@
 
 .welcome-benefit-card:hover {
   border-color: var(--border-strong);
-  transform: translateY(-5px);
+  translate: 0 -5px;
 }
 
 .welcome-benefit-card > span {
@@ -835,12 +792,12 @@
   border-radius: var(--radius);
   padding: var(--space-6);
   background: var(--surface-glass);
-  transition: border-color var(--duration-normal), transform var(--duration-normal);
+  transition: border-color var(--duration-normal), translate var(--duration-normal);
 }
 
 .welcome-market-card:hover {
   border-color: var(--border-strong);
-  transform: translateY(-3px);
+  translate: 0 -3px;
 }
 
 .welcome-market-card > header {
@@ -1120,6 +1077,78 @@
   font: 600 15px var(--font-display);
 }
 
+.welcome-beyond {
+  border-top: 1px solid var(--border);
+}
+
+.welcome-beyond__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.welcome-beyond-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-height: 260px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-6);
+  background: var(--surface-glass);
+}
+
+.welcome-beyond-card h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.welcome-beyond-card > p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/*
+  The step list, not the intro paragraph, is now what absorbs spare height -
+  the two cards sit side by side and their buttons should still line up when
+  one card's copy runs a line longer than the other's.
+*/
+.welcome-beyond-card__steps {
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+}
+
+.welcome-beyond-card__steps li {
+  display: grid;
+  gap: 2px;
+}
+
+/* The same numeral treatment the benefit cards use - mono, small, signal. */
+.welcome-beyond-card__steps span {
+  color: var(--signal);
+  font: 600 11px var(--font-mono);
+}
+
+.welcome-beyond-card__steps strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.welcome-beyond-card__steps p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .welcome-cta {
   position: relative;
   z-index: 1;
@@ -1204,14 +1233,6 @@
 }
 
 @media (max-width: 1100px) {
-  .welcome-header {
-    grid-template-columns: 1fr auto;
-  }
-
-  .welcome-header nav {
-    display: none;
-  }
-
   .welcome-hero {
     grid-template-columns: 1fr;
     padding-top: 72px;
@@ -1241,26 +1262,21 @@
   .welcome-reality-card {
     min-height: 0;
   }
+
+  .welcome-beyond__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-beyond-card {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 820px) {
   .welcome-page main,
-  .welcome-header,
   .welcome-footer,
   .welcome-refresh-warning {
     width: min(calc(100% - 32px), var(--content-max-marketing));
-  }
-
-  .welcome-header {
-    min-height: 74px;
-  }
-
-  .welcome-header .welcome-brand small {
-    display: none;
-  }
-
-  .welcome-header .welcome-brand > span {
-    grid-row: auto;
   }
 
   .welcome-hero {
@@ -1376,10 +1392,6 @@
     grid-template-columns: 1fr;
   }
 
-  .welcome-footer nav {
-    flex-wrap: wrap;
-    gap: var(--space-5);
-  }
 }
 
 @media (max-width: 520px) {

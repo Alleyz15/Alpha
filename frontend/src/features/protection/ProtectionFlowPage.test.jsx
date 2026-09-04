@@ -140,8 +140,9 @@ describe('ProtectionFlowPage', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getAllByText('$77,000.00 USDC').length).toBeGreaterThan(0);
     expect(screen.getByText('0.01 BTC')).toBeVisible();
-    expect(screen.getByText('Live market price')).toBeVisible();
-    expect(screen.getByText('Simulated holding')).toBeVisible();
+    expect(screen.getByText('Live market quote')).toBeVisible();
+    expect(screen.getByText('Simulated balance')).toBeVisible();
+    expect(screen.getByText('On-chain settlement')).toBeVisible();
     await waitFor(() => expect(screen.getByLabelText(/Amount to protect/)).toHaveValue(0.0025));
   });
 
@@ -221,7 +222,7 @@ describe('ProtectionFlowPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Check your BTC protection' })).toBeVisible();
     expect(screen.getAllByText('$77,500.00 USDC').length).toBeGreaterThan(0);
-    expect(screen.getByText(/simulated holding/i)).toBeVisible();
+    expect(screen.getByText(/simulated balance/i)).toBeVisible();
     expect(screen.getByText(/operator execution/i)).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: /Submit purchase request/ }));

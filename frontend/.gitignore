@@ -1,7 +1,38 @@
-# Local-only. The root .gitignore also covers these; kept here to match
-# what `npm create vite` produces.
-node_modules
-dist
-dist-ssr
-*.local
+--- Secrets: never commit ---
 .env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+--- Dependencies ---
+node_modules/
+
+--- Build output ---
+dist/
+build/
+.vite/
+
+--- Deployment ---
+.vercel
+
+--- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+--- Logs ---
+.log
+npm-debug.log
+logs/
+
+--- Tests ---
+coverage/
+
+--- Exception: this one IS committed (names only, no values) ---
+!.env.example
+
+AI agent instructions (shared via Discord)
+CLAUDE.md
+codex.md

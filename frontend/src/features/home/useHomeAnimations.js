@@ -17,14 +17,13 @@ export default function useHomeAnimations(rootRef, marketKey) {
 
         safely(() => {
           createTimeline({ defaults: { ease: 'outExpo' } })
-            .add('.home-topbar', { opacity: [.65, 1], y: [-14, 0], duration: 620 })
-            .add('.home-portfolio-card', { opacity: [.68, 1], y: [22, 0], duration: 760 }, '-=380')
+            .add('.home-portfolio-card', { opacity: [.68, 1], y: [22, 0], duration: 760 })
             .add('.home-trending-card', {
               opacity: [.65, 1],
               y: [18, 0],
               duration: 620,
               delay: stagger(80),
-            }, '-=480')
+            }, '-=420')
             .add('.home-market-panel', { opacity: [.7, 1], y: [18, 0], duration: 620 }, '-=400');
         });
 

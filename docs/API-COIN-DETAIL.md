@@ -13,12 +13,12 @@ Worth knowing before you plan the day.
 
 ```
 GET /api/assets/overview
-GET /api/assets/:symbol/candles?range=1D
+GET /api/assets/:symbol/candles?interval=5m&limit=200
 GET /api/assets/:symbol/order-book
 ```
 
-`:symbol` is `ETH`, `BTC`, `SOL` or `BNB`, case-insensitive. Anything else is
-`404`.
+`:symbol` is `ETH`, `BTC`, `SOL`, `BNB`, `AVAX` or `XRP`, case-insensitive.
+Anything else is `404`.
 
 **There is no streaming endpoint, deliberately.** Poll the order book every 2–3
 seconds. Over a two-minute demo that is visually identical to a 100ms feed, and
@@ -91,26 +91,55 @@ many rows as there are assets.
 
 ---
 
-## `GET /api/assets/:symbol/candles?range=1D`
+## `GET /api/assets/:symbol/candles?interval=5m&limit=200`
 
-Cached 5 minutes per symbol and interval.
+You pick the candle size directly, the way TradingView does. Cached 5 minutes
+per symbol, interval **and** limit.
 
-| `range` | Interval | Candles |
+### `interval` — required in spirit, defaults to `5m`
+
+| `interval` | |
+|---|---|
+| `1m` `5m` `1h` `4h` `1d` | Passed straight to Binance — no translation |
+
+An unknown interval is `400` with the supported list; it is never silently
+defaulted to something close.
+
+### `limit` — how many candles, default `200`
+
+Clamped to **1000**, which is Binance's own per-request cap — asking for more
+would mean paginating, which this does not do. A request for `limit=999999`
+returns 1000 candles and a `200`, **not** a `400`: the response states the
+`interval` and the candles it actually contains, so a clamp can never mislabel
+your chart. Render `Source: Binance · {pair} · {interval} candles` from the
+response, never from what the control was set to.
+
+A `limit` that is not a positive integer (`0`, `-5`, `1.5`, `abc`) **is** `400`
+— that is malformed, not ambitious.
+
+### `range` — deprecated alias, one release only
+
+`range` used to mean "how far back" and chose the interval for you. It still
+works, mapped to exactly what it produced before:
+
+| `range` | → `interval` | → `limit` |
 |---|---|---|
-| `1H` | 1m | 60 |
-| `1D` | 5m | 288 |
-| `1W` | 1h | 168 |
-| `1M` | 4h | 180 |
-| `1Y` | 1d | 365 |
+| `1H` | `1m` | 60 |
+| `1D` | `5m` | 288 |
+| `1W` | `1h` | 168 |
+| `1M` | `4h` | 180 |
+| `1Y` | `1d` | 365 |
 
-Default is `1D`. An unknown range is `400` — it is not silently defaulted.
+A response served via the alias carries `viaRange: "1D"` so you can see it still
+works and that you should move to `interval`. If both `interval` and `range` are
+sent, `interval` wins and `range` is ignored (no `viaRange` in that case). An
+unknown `range` is `400`.
 
 ```json
 {
   "symbol": "BTC",
   "pair": "BTCUSDT",
   "quoteCurrency": "USDT",
-  "range": "1D",
   "interval": "5m",
   "candles": [
     { "timestamp": 1788310800000, "open": 77420.1, "high": 77510.4,
@@ -121,8 +150,9 @@ Default is `1D`. An unknown range is `400` — it is not silently defaulted.
 }
 ```
 
-**One response drives both chart modes** — line from `close`, candlesticks from
-open/high/low/close. Do not fetch twice.
+**The response never echoes `limit`** — `candles.length` is the truth, and after
+a clamp it is the only truth. **One response drives both chart modes** — line
+from `close`, candlesticks from open/high/low/close. Do not fetch twice.
 
 `timestamp` is epoch milliseconds. Candles are oldest first. A malformed candle
 is dropped by the backend rather than passed through, so you will never receive
@@ -179,7 +209,7 @@ you can render is "unavailable".
 That is deliberate. An empty order book and an unreachable exchange look
 identical in a payload of zeros, and only one of them means the market is quiet.
 
-Other statuses: `404` unknown symbol, `400` unknown range.
+Other statuses: `404` unknown symbol; `400` unknown `interval`, unknown `range` alias, or a non-integer `limit`.
 
 ---
 

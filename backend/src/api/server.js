@@ -11,6 +11,13 @@ import {
   getAssetsOverview, getAssetCandles, getAssetOrderBook,
   getPositionDetail, getPortfolio,
 } from './routes.js';
+import {
+  getLoans, getLoanDetail, postRepaymentRequest, postRepay, getLoanOffer, postLoan,
+} from './loanRoutes.js';
+import {
+  getVaults, getVaultDetail, getMaturityPreflight, postMature,
+  postVaultDeposit, getDepositPreflight,
+} from './vaultRoutes.js';
 
 // 5.2: the Vite dev server, named explicitly. A wildcard would let any page on
 // the machine call this API, and the demo runs on a laptop that is also
@@ -68,6 +75,36 @@ const routes = [
   { method: 'GET', path: '/api/positions', handler: () => getPositions() },
   { method: 'GET', path: '/api/market-context', handler: () => getMarketContext() },
   { method: 'GET', path: '/api/portfolio', handler: () => getPortfolio() },
+  { method: 'GET', path: '/api/loans', handler: () => getLoans() },
+  // Literals ABOVE the /api/loans/:loanId pattern.
+  {
+    method: 'GET',
+    path: '/api/loans/offer',
+    handler: (_body, { query }) => getLoanOffer(query.get('positionId')),
+  },
+  {
+    method: 'POST',
+    path: '/api/loans',
+    // Held rather than 202: eight local and RPC checks, then a one-block
+    // transfer. Nothing here scans the chain the way the maturity check does.
+    handler: (body) => postLoan(body),
+  },
+  { method: 'GET', path: '/api/vault', handler: () => getVaults() },
+  // Literals, ABOVE the /api/vault/:vaultId pattern. 'deposit' is not a uuid so
+  // the pattern could not capture it, but keeping the ordering habit means the
+  // next literal added is safe without anyone having to check.
+  {
+    method: 'GET',
+    path: '/api/vault/deposit-preflight',
+    handler: (_body, { query }) => getDepositPreflight(query.get('asset'), query.get('principalUsdc')),
+  },
+  {
+    method: 'POST',
+    path: '/api/vault/deposit',
+    // Accepted, not done. Buying the call is 9-30 seconds.
+    successStatus: 202,
+    handler: (body) => postVaultDeposit(body),
+  },
 
   // Coin Detail market data. DISPLAY ONLY - CoinGecko and Binance, read-only,
   // and nothing they return prices a trade. This literal sits ABOVE the
@@ -76,9 +113,50 @@ const routes = [
   { method: 'GET', path: '/api/assets/overview', handler: () => getAssetsOverview() },
 
   // Routes with a path parameter carry a pattern instead of a literal path.
-  // Kept as regexes rather than pulling in a router: there are eight endpoints,
-  // and a dependency to match three of them is not a trade worth making two
-  // days before a freeze.
+  // Kept as regexes rather than pulling in a router: a dependency to match a
+  // handful of them is not a trade worth making days before a freeze.
+  {
+    pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/repayment-request$'),
+    path: '/api/loans/:loanId/repayment-request',
+    method: 'POST',
+    handler: (_body, { params }) => postRepaymentRequest(params[0]),
+  },
+  {
+    // POST, because it writes: the expected repayment is fixed on the row here.
+    pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/repay$'),
+    path: '/api/loans/:loanId/repay',
+    method: 'POST',
+    handler: (body, { params }) => postRepay(params[0], body),
+  },
+  {
+    // The id pattern is anchored with $, so it cannot swallow /repay or
+    // /repayment-request whatever the order - unlike the /api/assets literals
+    // above, which genuinely depend on being listed first.
+    pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})$'),
+    path: '/api/loans/:loanId',
+    method: 'GET',
+    handler: (_body, { params }) => getLoanDetail(params[0]),
+  },
+  {
+    pattern: new RegExp('^/api/vault/([0-9a-fA-F-]{36})/maturity-preflight$'),
+    path: '/api/vault/:vaultId/maturity-preflight',
+    method: 'GET',
+    handler: (_body, { params }) => getMaturityPreflight(params[0]),
+  },
+  {
+    pattern: new RegExp('^/api/vault/([0-9a-fA-F-]{36})/mature$'),
+    path: '/api/vault/:vaultId/mature',
+    method: 'POST',
+    // Accepted, not done. The pre-flight alone takes over five minutes.
+    successStatus: 202,
+    handler: (_body, { params }) => postMature(params[0]),
+  },
+  {
+    pattern: new RegExp('^/api/vault/([0-9a-fA-F-]{36})$'),
+    path: '/api/vault/:vaultId',
+    method: 'GET',
+    handler: (_body, { params }) => getVaultDetail(params[0]),
+  },
   {
     method: 'GET',
     pattern: new RegExp('^/api/loans/([0-9a-fA-F-]{36})/stress$'),
@@ -89,7 +167,11 @@ const routes = [
     method: 'GET',
     pattern: new RegExp('^/api/assets/([A-Za-z]{2,10})/candles$'),
     path: '/api/assets/:symbol/candles',
-    handler: (_body, { params, query }) => getAssetCandles(params[0], query.get('range')),
+    handler: (_body, { params, query }) => getAssetCandles(params[0], {
+      intervalParam: query.get('interval'),
+      limitParam: query.get('limit'),
+      rangeParam: query.get('range'),
+    }),
   },
   {
     method: 'GET',
@@ -105,17 +187,41 @@ const routes = [
   },
 ];
 
-/** Match a request against the table, returning the route and its captures. */
+/**
+ * Match a request against the table, returning the route and its captures.
+ *
+ * ---------------------------------------------------------------------------
+ * THE METHOD IS PART OF THE MATCH, NOT A CHECK APPLIED AFTERWARDS.
+ * ---------------------------------------------------------------------------
+ *
+ * This used to return the first route whose PATH matched and then report
+ * whether the method happened to agree. That was fine while every path had one
+ * method, and broke the moment /api/loans gained a POST beside its GET: the GET
+ * entry matched first, the method did not agree, and a valid POST got 405.
+ *
+ * So it looks for a path AND method match first, and only falls back to a
+ * path-only match to distinguish 405 from 404. Those two answers are different
+ * and both are worth keeping.
+ */
 function matchRoute(method, pathname) {
+  const candidates = [];
+
   for (const r of routes) {
     if (r.pattern) {
       const m = pathname.match(r.pattern);
-      if (m) return { route: r, params: m.slice(1), methodOk: r.method === method };
+      if (m) candidates.push({ route: r, params: m.slice(1) });
     } else if (r.path === pathname) {
-      return { route: r, params: [], methodOk: r.method === method };
+      candidates.push({ route: r, params: [] });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+
+  const exact = candidates.find((c) => c.route.method === method);
+  if (exact) return { ...exact, methodOk: true };
+
+  // The path exists but not for this method: 405, not 404.
+  return { ...candidates[0], methodOk: false };
 }
 
 async function handle(req, res) {
@@ -153,7 +259,10 @@ async function handle(req, res) {
 
   try {
     const body = req.method === 'POST' ? await readJsonBody(req) : null;
-    sendJson(res, 200, await route.handler(body, {
+    // successStatus lets an endpoint say ACCEPTED rather than OK. Work that
+    // takes minutes returns 202 and is polled; 200 would tell the interface the
+    // thing was done, which is the one thing it must not believe.
+    sendJson(res, route.successStatus ?? 200, await route.handler(body, {
       params: matched.params,
       query: url.searchParams,
     }));

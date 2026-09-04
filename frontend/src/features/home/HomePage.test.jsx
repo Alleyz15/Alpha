@@ -51,11 +51,16 @@ describe('HomePage', () => {
     expect(screen.getByText(/aggregated USD data.*Binance USDT candles/i)).toBeVisible();
     expect(await screen.findAllByLabelText(/seven-day Binance USDT trend/)).toHaveLength(4);
     expect(client.getAssetCandles).toHaveBeenCalledTimes(4);
-    expect(client.getAssetCandles).toHaveBeenCalledWith('ETH', '1W');
+    expect(client.getAssetCandles).toHaveBeenCalledWith('ETH', { interval: '1h', limit: 168 });
 
     expect(screen.queryByText(/Good Morning/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/AI Market Brief/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Favorites|Watchlist|Estimated Payout|Protection Coverage|Market Movers/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search cryptocurrencies')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Protection overview/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Signed in as/i)).not.toBeInTheDocument();
+    expect(client.getDemoContext).not.toHaveBeenCalled();
   });
 
   it('ranks Trending Now by absolute movement and links it to Coin Detail', async () => {
@@ -70,16 +75,13 @@ describe('HomePage', () => {
     expect(screen.getByText('Coin detail route')).toBeVisible();
   });
 
-  it('filters the market table without changing or fabricating backend data', async () => {
-    const user = userEvent.setup();
+  it('shows every supported asset without the removed header search', async () => {
     renderHome(apiClient());
     const table = await screen.findByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(5);
-
-    await user.type(screen.getByPlaceholderText('Search cryptocurrencies'), 'sol');
-    expect(within(table).getAllByRole('row')).toHaveLength(2);
     expect(within(table).getByText('Solana')).toBeVisible();
-    expect(within(table).queryByText('Bitcoin')).not.toBeInTheDocument();
+    expect(within(table).getByText('Bitcoin')).toBeVisible();
+    expect(screen.queryByPlaceholderText('Search cryptocurrencies')).not.toBeInTheDocument();
   });
 
   it('shows a qualified partial portfolio value', async () => {
@@ -111,11 +113,21 @@ describe('HomePage', () => {
     expect(screen.getAllByText('Unavailable')).toHaveLength(1);
   });
 
-  it('opens the Portfolio from the protection overview action', async () => {
+  it('opens Coin Detail by clicking anywhere in an asset row', async () => {
     const user = userEvent.setup();
     renderHome(apiClient());
-    await user.click(screen.getByRole('button', { name: /Protection overview/i }));
-    expect(screen.getByText('Portfolio route')).toBeVisible();
+    const row = await screen.findByRole('row', { name: 'View Ethereum coin details' });
+    await user.click(within(row).getByText('$2,400.00 USD'));
+    expect(screen.getByText('Coin detail route')).toBeVisible();
+  });
+
+  it('opens Coin Detail from a focused asset row with the keyboard', async () => {
+    const user = userEvent.setup();
+    renderHome(apiClient());
+    const row = await screen.findByRole('row', { name: 'View Bitcoin coin details' });
+    row.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('Coin detail route')).toBeVisible();
   });
 });
 

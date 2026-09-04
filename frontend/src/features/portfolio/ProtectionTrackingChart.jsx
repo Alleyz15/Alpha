@@ -69,7 +69,7 @@ export default function ProtectionTrackingChart({ candles = [], strike }) {
         {chart.strikeY !== null && (
           <g className="pd-strike-line">
             <line x1={padding} y1={chart.strikeY} x2={width - padding} y2={chart.strikeY} />
-            <text x={width - padding} y={Math.max(16, chart.strikeY - 8)} textAnchor="end">Strike {formatUsdc(strike)}</text>
+            <text x={width - padding} y={Math.max(16, chart.strikeY - 8)} textAnchor="end">Recorded threshold {formatUsdc(strike)}</text>
           </g>
         )}
         <path className="pd-price-line" d={chart.linePath} fill="none" />

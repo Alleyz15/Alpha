@@ -9,11 +9,7 @@ import SignalGrid from './SignalGrid.jsx';
 import WelcomeJourney from './WelcomeJourney.jsx';
 import useWelcomeAnimations, { pulseMarketSnapshot } from './useWelcomeAnimations.js';
 import useWelcomeMarket from './useWelcomeMarket.js';
-import { benefits, identityStatements, realityGroups } from './welcomeContent.js';
-
-function scrollTo(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+import { benefits, expansionCards, identityStatements, realityGroups } from './welcomeContent.js';
 
 function MarketFailure({ retry }) {
   return (
@@ -164,43 +160,19 @@ function MarketCard({ asset, onProtect, onViewAsset }) {
   );
 }
 
-function WelcomeHeader({ onMarkets, onPortfolio }) {
-  return (
-    <header className="welcome-header">
-      <a className="welcome-brand" href="/" aria-label="Alpha home">
-        <span><ShieldIcon size={18} /></span>
-        <strong>ALPHA</strong>
-        <small>Downside protection</small>
-      </a>
-      <nav aria-label="Welcome page">
-        <a href="#how-it-works">How it works</a>
-        <a href="#live-market">Live market</a>
-        <a href="#product-reality">Product reality</a>
-      </nav>
-      <div className="welcome-header__actions" aria-label="Product navigation">
-        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onMarkets}>
-          Markets
-        </button>
-        <button className="alpha-button alpha-button--ghost alpha-button--small" type="button" onClick={onPortfolio}>
-          My Portfolio
-        </button>
-      </div>
-    </header>
-  );
-}
-
 export default function WelcomePage({
   apiClient,
   marketPollInterval = 30_000,
   onProtect = () => {},
   onViewAsset = () => {},
-  onMarkets = () => {},
-  onPortfolio = () => {},
+  onGetStarted = () => {},
+  onExploreLending = () => {},
+  onExploreVault = () => {},
 }) {
   const rootRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const { market, state, refreshError, retry } = useWelcomeMarket(apiClient, marketPollInterval);
-  useWelcomeAnimations(rootRef);
+  useWelcomeAnimations(rootRef, market?.assets.length ?? 0);
 
   useEffect(() => {
     if (market?.updatedAt) pulseMarketSnapshot(rootRef);
@@ -221,7 +193,6 @@ export default function WelcomePage({
   return (
     <div className="welcome-page" ref={rootRef}>
       <div className="welcome-ambient" aria-hidden="true" />
-      <WelcomeHeader onMarkets={onMarkets} onPortfolio={onPortfolio} />
 
       <main>
         <section className="welcome-hero" aria-labelledby="welcome-title">
@@ -236,13 +207,9 @@ export default function WelcomePage({
               <button
                 className="alpha-button alpha-button--primary alpha-button--large"
                 type="button"
-                disabled={!selectedAssetAvailable}
-                onClick={() => onProtect(selectedSymbol)}
+                onClick={onGetStarted}
               >
-                {selectedAssetAvailable ? `Protect ${selectedSymbol}` : 'Checking live availability'} <ArrowIcon />
-              </button>
-              <button className="alpha-button alpha-button--ghost alpha-button--large" type="button" onClick={() => scrollTo('how-it-works')}>
-                How Alpha works
+                Get Started <ArrowIcon />
               </button>
             </div>
             <dl className="welcome-hero__facts">
@@ -370,6 +337,43 @@ export default function WelcomePage({
           <div className="welcome-reality__callout"><ShieldIcon /><strong>Alpha simulates the user holding—not the live protection market.</strong></div>
         </section>
 
+        <section className="welcome-section welcome-beyond" id="beyond-alpha" aria-labelledby="beyond-title">
+          <div className="welcome-section__heading">
+            <p className="welcome-eyebrow">BEYOND PROTECTION</p>
+            <h2 id="beyond-title">More ways to use Alpha</h2>
+            <p>Borrowing and the protected-floor vault build on the same live backend and the same on-chain positions.</p>
+          </div>
+          <div className="welcome-beyond__grid">
+            {expansionCards.map((card) => (
+              <article className="welcome-beyond-card" key={card.id}>
+                <h3>{card.title}</h3>
+                <p>{card.body}</p>
+                {/*
+                  An ordered list, because these are steps in a sequence. The
+                  visible 01/02/03 is decoration on top of that ordering, so it
+                  is aria-hidden rather than read out twice.
+                */}
+                <ol className="welcome-beyond-card__steps">
+                  {card.steps.map((step) => (
+                    <li key={step.number}>
+                      <span aria-hidden="true">{step.number}</span>
+                      <strong>{step.title}</strong>
+                      <p>{step.body}</p>
+                    </li>
+                  ))}
+                </ol>
+                <button
+                  className="alpha-button alpha-button--ghost alpha-button--default"
+                  type="button"
+                  onClick={() => (card.id === 'lending' ? onExploreLending() : onExploreVault())}
+                >
+                  {card.ctaLabel} <ArrowIcon />
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <section className="welcome-cta" aria-labelledby="cta-title">
           <div>
             <p className="welcome-eyebrow">CHECK THE LIVE MARKET</p>
@@ -392,7 +396,6 @@ export default function WelcomePage({
           <a className="welcome-brand" href="/" aria-label="Alpha home"><span><ShieldIcon size={18} /></span><strong>ALPHA</strong></a>
           <p>Plain-language downside protection powered by live market choices.</p>
         </div>
-        <nav aria-label="Footer"><a href="#how-it-works">How it works</a><a href="#live-market">Live market</a><a href="#product-reality">Product reality</a></nav>
         <p className="welcome-footer__disclosure">Market availability is live. Displayed holdings are simulated. On-chain activity is shown only when verified by the backend.</p>
         <div className="welcome-footer__bottom"><span>Protection execution and verification: Base</span><span>© 2026 Alpha · Prototype demonstration</span></div>
       </footer>

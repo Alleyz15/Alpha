@@ -1,12 +1,15 @@
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { liveApi } from './api/client.js';
+import SiteNavigation from './components/SiteNavigation.jsx';
 import { Card } from './components/ui/index.js';
 import CoinDetailPage from './features/coin-detail/CoinDetailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import HomePage from './features/home/HomePage.jsx';
+import LendingPage from './features/lending/LendingPage.jsx';
 import PortfolioPage from './features/portfolio/PortfolioPage.jsx';
 import ProtectionDetailsPage from './features/portfolio/ProtectionDetailsPage.jsx';
 import ProtectionFlowPage from './features/protection/ProtectionFlowPage.jsx';
+import VaultPage from './features/vault/VaultPage.jsx';
 import WelcomePage from './features/welcome/WelcomePage.jsx';
 
 function WelcomeRoute() {
@@ -17,8 +20,9 @@ function WelcomeRoute() {
       apiClient={liveApi}
       onProtect={(symbol) => navigate(`/protect/${symbol}`)}
       onViewAsset={(symbol) => navigate(`/coin/${symbol}`)}
-      onMarkets={() => navigate('/markets')}
-      onPortfolio={() => navigate('/portfolio')}
+      onGetStarted={() => navigate('/markets')}
+      onExploreLending={() => navigate('/lending')}
+      onExploreVault={() => navigate('/vault')}
     />
   );
 }
@@ -47,7 +51,6 @@ function CoinDetailRoute() {
       symbol={normalizedSymbol}
       apiClient={liveApi}
       onBack={() => navigate('/markets')}
-      onDashboard={() => navigate('/portfolio')}
       onProtect={() => navigate(`/protect/${normalizedSymbol}`)}
     />
   );
@@ -73,19 +76,32 @@ function NotFoundPage() {
   );
 }
 
+function SiteLayout() {
+  return (
+    <>
+      <SiteNavigation />
+      <Outlet />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<WelcomeRoute />} />
-      <Route path="/markets" element={<HomePage />} />
-      <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
-      <Route path="/home" element={<Navigate replace to="/markets" />} />
-      <Route path="/portfolio" element={<PortfolioPage />} />
-      <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
-      <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
-      <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
-      <Route path="/protect/:symbol" element={<ProtectionRoute />} />
-      <Route path="*" element={<NotFoundPage />} />
+      <Route element={<SiteLayout />}>
+        <Route path="/" element={<WelcomeRoute />} />
+        <Route path="/markets" element={<HomePage />} />
+        <Route path="/dashboard" element={<Navigate replace to="/markets" />} />
+        <Route path="/home" element={<Navigate replace to="/markets" />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/vault" element={<VaultPage />} />
+        <Route path="/lending" element={<LendingPage />} />
+        <Route path="/positions/:symbol" element={<AssetPositionsRoute />} />
+        <Route path="/protection/:positionId" element={<ProtectionDetailsPage />} />
+        <Route path="/coin/:symbol" element={<CoinDetailRoute />} />
+        <Route path="/protect/:symbol" element={<ProtectionRoute />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
     </Routes>
   );
 }

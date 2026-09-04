@@ -3,19 +3,22 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CoinDetailPage from './CoinDetailPage.jsx';
 
+const createChartMock = vi.hoisted(() => vi.fn(() => ({
+  addSeries: () => ({ setData: vi.fn() }),
+  applyOptions: vi.fn(),
+  remove: vi.fn(),
+  timeScale: () => ({ fitContent: vi.fn() }),
+})));
+
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: {},
   ColorType: { Solid: 'solid' },
-  createChart: () => ({
-    addSeries: () => ({ setData: vi.fn() }),
-    applyOptions: vi.fn(),
-    remove: vi.fn(),
-    timeScale: () => ({ fitContent: vi.fn() }),
-  }),
+  createChart: createChartMock,
 }));
 
 afterEach(() => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  vi.clearAllMocks();
 });
 
 function overviewResponse() {
@@ -40,9 +43,9 @@ function orderBookResponse() {
   };
 }
 
-function candlesResponse(range = '1D') {
+function candlesResponse(interval = '5m') {
   return {
-    symbol: 'ETH', pair: 'ETHUSDT', quoteCurrency: 'USDT', range, interval: range === '1H' ? '1m' : '5m',
+    symbol: 'ETH', pair: 'ETHUSDT', quoteCurrency: 'USDT', interval,
     candles: [{ timestamp: 1788310800000, open: 2410, high: 2420, low: 2405, close: 2415, volume: 100 }],
     source: 'Binance', updatedAt: '2026-09-02T10:00:00.000Z',
   };
@@ -51,7 +54,7 @@ function candlesResponse(range = '1D') {
 function client(overrides = {}) {
   return {
     getAssetsOverview: vi.fn().mockResolvedValue(overviewResponse()),
-    getAssetCandles: vi.fn((symbol, range) => Promise.resolve(candlesResponse(range))),
+    getAssetCandles: vi.fn((symbol, { interval } = {}) => Promise.resolve(candlesResponse(interval))),
     getAssetOrderBook: vi.fn().mockResolvedValue(orderBookResponse()),
     ...overrides,
   };
@@ -110,6 +113,21 @@ describe('CoinDetailPage', () => {
     await waitFor(() => expect(apiClient.getAssetOrderBook).toHaveBeenCalledTimes(1));
   });
 
+  it('keeps the chart instance when the order book refreshes', async () => {
+    const apiClient = client();
+    render(
+      <CoinDetailPage
+        symbol="ETH" apiClient={apiClient} onBack={vi.fn()} onProtect={vi.fn()}
+        orderBookPollInterval={20}
+      />,
+    );
+
+    await screen.findByLabelText('Candlestick chart');
+    await waitFor(() => expect(createChartMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiClient.getAssetOrderBook.mock.calls.length).toBeGreaterThan(1));
+    expect(createChartMock).toHaveBeenCalledTimes(1);
+  });
+
   it('connects the protection CTA without pretending to buy the underlying asset', async () => {
     const user = userEvent.setup();
     const onProtect = vi.fn();
@@ -137,10 +155,10 @@ describe('CoinDetailPage', () => {
       />,
     );
 
-    expect(await screen.findByText('Source: Binance · 5m candles')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: '1H' }));
-    await waitFor(() => expect(apiClient.getAssetCandles).toHaveBeenLastCalledWith('ETH', '1H'));
-    expect(await screen.findByText('Source: Binance · 1m candles')).toBeVisible();
+    expect(await screen.findByText('Source: Binance · ETH/USDT · 5m candles')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '1m' }));
+    await waitFor(() => expect(apiClient.getAssetCandles).toHaveBeenLastCalledWith('ETH', { interval: '1m', limit: 200 }));
+    expect(await screen.findByText('Source: Binance · ETH/USDT · 1m candles')).toBeVisible();
     expect(screen.getByText(/Chart prices are USDT from Binance/)).toBeVisible();
   });
 

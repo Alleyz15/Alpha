@@ -129,7 +129,7 @@ export default function ConfirmationScreen({ step, quote, tier, purchase, isMock
           {isMock
             ? 'This preview creates a sample request only. Nothing will be sent to the blockchain.'
             : reality?.fill === 'automatic'
-            ? 'The backend re-checks availability and expiry before sending any purchase.'
+            ? 'The backend re-checks availability and the end date before sending any purchase.'
             : 'The backend records this request first. The app’s operator executes it only after the safety checks pass.'}
         </small>
       </section>

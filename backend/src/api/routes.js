@@ -22,7 +22,10 @@ import {
 } from './portfolioView.js';
 import { getSpotPrices } from '../thetanuts/market.js';
 import { buildMarketContext, OFFERED_ASSETS } from './marketContext.js';
-import { resolveMarket, resolveRange, MARKET_ASSETS, RANGE_KEYS } from '../marketdata/assets.js';
+import {
+  resolveMarket, resolveCandleQuery, MARKET_ASSETS,
+  CANDLE_INTERVALS, MAX_CANDLE_LIMIT,
+} from '../marketdata/assets.js';
 import { fetchOverview, fetchCandles, fetchDepth } from '../marketdata/providers.js';
 
 /**
@@ -460,7 +463,7 @@ export async function getAssetsOverview() {
  * OHLCV from Binance, so one response drives either a line chart (close) or
  * candles (open/high/low/close). Prices are USDT.
  */
-export async function getAssetCandles(symbol, rangeParam) {
+export async function getAssetCandles(symbol, { intervalParam, limitParam, rangeParam } = {}) {
   const asset = resolveMarket(symbol);
   if (!asset) {
     throw new ApiError('NOT_FOUND', `No market data for '${symbol}'.`, {
@@ -468,14 +471,32 @@ export async function getAssetCandles(symbol, rangeParam) {
     });
   }
 
-  const range = resolveRange(rangeParam);
-  if (!range) {
+  const q = resolveCandleQuery({ interval: intervalParam, limit: limitParam, range: rangeParam });
+
+  if (!q.ok) {
+    if (q.reason === 'interval') {
+      throw new ApiError('INVALID_REQUEST',
+        `interval must be one of ${CANDLE_INTERVALS.join(', ')}.`,
+        { field: 'interval', got: q.got, supported: CANDLE_INTERVALS });
+    }
+    if (q.reason === 'range') {
+      throw new ApiError('INVALID_REQUEST',
+        'range is a deprecated alias; it must be one of 1H, 1D, 1W, 1M, 1Y. '
+        + `Prefer interval (${CANDLE_INTERVALS.join(', ')}).`,
+        { field: 'range', got: q.got });
+    }
+    // limit
     throw new ApiError('INVALID_REQUEST',
-      `range must be one of ${RANGE_KEYS.join(', ')}.`, { supported: RANGE_KEYS });
+      `limit must be a positive integer (it is clamped to ${MAX_CANDLE_LIMIT}, not refused, when too large).`,
+      { field: 'limit', got: q.got });
   }
 
   try {
-    return await fetchCandles(asset, range);
+    const result = await fetchCandles(asset, { interval: q.interval, limit: q.limit });
+    // `interval` and `candles.length` already state what was returned. `viaRange`
+    // is echoed only when the deprecated alias was used, so a caller can see it
+    // still works and that it should move to `interval`.
+    return q.viaRange ? { ...result, viaRange: q.viaRange } : result;
   } catch (error) {
     throw asMarketDataError(error);
   }

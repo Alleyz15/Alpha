@@ -340,6 +340,39 @@ alter table positions add column referrer text;
 
 Editing an applied file means your machine and the server silently diverge — and you won't find out until something breaks in a way that makes no sense.
 
+### The drift has happened twice, by two different mechanisms
+
+The directory and the applied database have fallen out of step **twice**, and
+not the same way:
+
+| When | How | Found by |
+|---|---|---|
+| 1 Sep | Two migrations applied with no file committed | A reconciliation pass |
+| 2 Sep | `seed_avax_xrp_balances` applied with no file committed | Counting rows before adding a new migration — 16 applied, 15 files |
+
+Both times the applied database was correct and the folder was incomplete, which
+is the direction that hurts: everything works until someone rebuilds from the
+folder, and then it works *differently*.
+
+**Both were recovered by reading the data back.** The AVAX/XRP seed was
+reconstructed from the four `balances` rows, all of which carry
+`created_at = 2026-09-02T10:01:52.896242Z` — matching the migration version
+exactly, so the content was recovered rather than guessed.
+
+> **That worked because those rows carry timestamps. It will not always.**
+> A `DROP COLUMN`, a widened `CHECK` constraint, a changed default, a renamed
+> index — none of them leave a row you can read back. The recovery available
+> here was luck about what the migration happened to do.
+
+**So the check is cheap and worth doing every time:** compare
+`list_migrations` against `ls supabase/migrations/` before adding a new one. A
+count that differs by one is the whole signal.
+
+Note also that Supabase assigns its own version when a migration is applied
+through the API — `20260903122322`, not the timestamp chosen for the filename.
+**Name the file for the version that was actually applied**, or the two disagree
+about what is what even when both exist.
+
 ### Why it matters here specifically
 
 - **Reproducibility** — a teammate or a fresh server runs the migrations and gets an identical database. Nobody hand-creates tables and forgets a column.

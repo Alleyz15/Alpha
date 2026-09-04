@@ -636,7 +636,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 
 ### Operations that fail silently, and report success they did not achieve
 
-**Nineteen instances now, one family.** The shape:
+**Twenty-two instances now, one family.** The shape:
 
 > **An operation that can fail silently will eventually report success it did not
 > achieve.** Every instance so far was caught by someone checking the result
@@ -646,6 +646,7 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 |---|---|---|
 | `ensureExactAllowance` | `0.000000 -> 0.000000` | the approval had succeeded |
 | disbursement closing balance | `9.371552 (was 9.371552)` | 4.5977 USDC had left |
+| maturity closing balance | `9.257193 (was 9.257193)`, gas `0.00000000` | 3 USDC had left; the true balance was 6.257193 |
 | post-fill contract read | recorded 2000 contracts | the chain said 1999 |
 | `reconcile` settled-state check | printed `ok` | the RPC read had failed |
 | `api:check` cleanup | `test rows removed` | an FK blocked every delete |
@@ -663,11 +664,204 @@ Checked 30 Aug 2026; the book moves constantly, but the ETH/BTC-only shape has b
 | `fill-position.js` without `--confirm` | "the row is left pending" | it had transitioned to `failed` and refunded 1.52 USDC |
 | `approve 9 --confirm` | one transaction, raising 5.86 to 9 | **two**; the reset landed and the raise ran out of gas, leaving 0 |
 | the CoinGecko overview | six assets, all priced | four; `per_page=4` dropped the two smallest, which rendered as coins with no data |
+| fill of position `e619686f` | the fill failed | it SUCCEEDED — tx `0x2913c6e2`, status 1, 0.46096 USDC spent |
+| `POST /api/vault/deposit` balance guard | refuses a deposit above the balance | `Number(row)` is NaN, so it refused nothing — 999999 USDC returned 202 |
 
 The `api:check` pair were the same bug: twelve `await db.from(...).delete()` calls across
 four scripts, none checking `error`. When `balance_events` gained an
 `ON DELETE RESTRICT` reference to `positions`, they all began failing and all kept
 printing success.
+
+#### The stale closing balance is the shape of the code, not six oversights
+
+Six times now, a script has printed a closing balance identical to its opening
+one immediately after moving money:
+
+```
+disbursement   9.371552 (was 9.371552)    4.5977 USDC had left
+maturity       9.257193 (was 9.257193)    3 USDC had left; true balance 6.257193
+                     gas 0.00000000       gas was spent
+```
+
+Each was fixed where it was found. It kept coming back, which is the tell: this
+is not six people forgetting the same thing, it is **one shape of code written
+six times**.
+
+The shape is always the same three lines:
+
+```js
+const before = await readBalance();
+const receipt = await sendTransaction();      // awaited, mined, status 1
+const after   = await readBalance();          // <- serves a PRE-transaction block
+```
+
+`await tx.wait()` resolves when the transaction is *mined*. It does not promise
+that the next `eth_call` will be routed to a node that has caught up to that
+block — RPC providers are load-balanced across nodes at slightly different
+heights, so a read issued microseconds later can legitimately answer from the
+block before. Nothing is broken; the read is simply asking a node that has not
+seen it yet.
+
+> **A read issued after a write is not a read of the state that write produced.**
+> Confirmation tells you a transaction was mined, not that the next node you
+> talk to knows about it.
+
+The correct fix already exists in this repository twice - `pollAllowanceUntil()`
+and `confirmRead.js` both re-read until the value *changes*, rather than reading
+once and trusting it. The reason the defect persists is that neither is reached
+for by default: writing the three lines above is the obvious thing to do, and it
+is wrong in a way that only shows up in a printed figure nobody acts on.
+
+**What would actually close it:** route every post-transaction balance read
+through `confirmRead.js`, so the wrong version is the harder one to write. That
+is a change to money-path scripts and it was NOT made before the freeze - six
+instances of a cosmetic misprint do not justify touching working transfer code
+the day of a deadline. It is written down here instead, which is the honest
+trade: the defect is understood, bounded, and known to affect only display.
+
+**Every instance so far has been cosmetic.** No transfer, refund or settlement
+has ever been decided by one of these reads - the transaction hash and the
+receipt status are what the scripts act on. If one ever gates a decision, this
+stops being a display bug.
+
+#### NaN answers "no" to every question, including the one that would refuse
+
+The vault deposit checked the user could afford it:
+
+```js
+const held = await getBalance(user.id, 'USDC');   // returns a ROW
+if (Number(held) < principalUsdc) { ...refuse... }
+```
+
+`getBalance` returns a row, and `Number({...})` is `NaN`. NaN compares false to
+everything, so `held < amount` is false **and** `held >= amount` is also false.
+The guard answered no to both questions about the same balance, and the request
+went through. A live `POST` for 999999 USDC came back `202`.
+
+Nothing was spent - the deposit pre-flight refused downstream, because the
+wallet could not fund the option portion. But the only thing standing between
+that request and a purchase was a check that had already been bypassed, and the
+defence that held was the one further in.
+
+> **A comparison against NaN is not a failed check, it is an absent one.** It
+> reads like a guard, it passes review like a guard, and it refuses nothing.
+
+`quote.js` had it right and names the variable `balanceRow`. The fix is not to
+correct two call sites but to remove the trap: `getBalanceAmount()` returns a
+number, treats a missing row as a genuine zero, and there is now no reason for
+anything to call `Number()` on a balance again.
+
+**Caught by a live request, not by a test.** The unit tests exercised the
+deposit path with injected balances that were already numbers, so the coercion
+never happened.
+
+> **A test can only be wrong in the same way the code is.** Both were written by
+> someone who believed `getBalance` returned a number, so the fixture agreed
+> with the bug and the assertion passed. Coverage of the line proves the line
+> ran, not that the value reaching it in production looks anything like the one
+> in the test.
+
+That generalises past this bug, and it is the reason live verification keeps
+finding things the suite does not: the fixture is written from the same
+misunderstanding as the code, and reality is not.
+
+#### A path that only runs on failure is a path nothing exercises
+
+**This is the shape behind several of the entries above, and it deserves its own
+name.** On 3 Sep a fill succeeded on chain and was recorded as `failed`. Two
+independent faults, both in code that only executes when something has already
+gone wrong, and neither had ever run:
+
+**1. We trusted a classification we should have corroborated.** The SDK's
+`mapContractError` ends like this:
+
+```js
+return new ContractRevertError(`Contract call failed: ${error.message}`, error);
+```
+
+Every unrecognised `Error` becomes a `ContractRevertError`. So `error.code ===
+'CONTRACT_REVERT'` answers **yes** to an RPC failure reading a receipt. Our code
+asked "was this a revert?" and the SDK said yes to something that was not a
+revert at all.
+
+**2. The refund path threw `ReferenceError: quote is not defined`.** `quote` was
+never destructured from `prepareFill`'s result, and `quote?.premium ?? 0` does
+not help: **optional chaining guards a null value, not an undeclared
+identifier.** That line was broken in every execution since it was written, and
+it surfaced the first time a fill failed for real.
+
+The two cancelled: the refund would have been wrong, and the bug prevented it.
+The 0.460963 debit stands and is correct.
+
+> **A refund path that has never run is a hypothesis.** So is every state that
+> only a human reaches. `pending_verification`, `needs_review`,
+> `failRefusedFill`, the disburse and maturity catch blocks, `doNotRetry` - none
+> of them are exercised by the happy path, and being clean today is luck rather
+> than evidence.
+
+**The rule now:**
+
+> **Before broadcasting, a revert claim is useful — nothing has been sent, so
+> being wrong is free. After broadcasting, only the chain knows, and a claim is
+> not evidence.**
+
+`resolveFillFailure` therefore ignores the error's classification entirely and
+establishes the outcome from two chain facts:
+
+| Evidence | Outcome | Refund? |
+|---|---|---|
+| receipt `status: 1` | **succeeded** — carry on with the receipt | no |
+| receipt `status: 0` | reverted | yes |
+| nonce unchanged | nothing was ever sent | yes |
+| anything else | **unknown** → stays `pending_verification` | **no** |
+
+The nonce is what separates "reverted during gas estimation, nothing sent" from
+"sent, and we cannot see it". It assumes one fill at a time from the wallet,
+which the operator model guarantees; a concurrent transaction would turn
+`not_sent` into `unknown`, which errs safe.
+
+It lives in `fillOutcome.js` with **no imports at all**, because `fill.js`
+reaches `db/client.js` at module load and could not be imported by a test - the
+same shape that once made `stress.js` and `repay.js` untestable. Fourteen tests
+drive all four outcomes, verified by reinstating the old "trust the SDK"
+behaviour and watching five of them fail.
+
+#### A check that is correct and unusable: the 316-second pre-flight
+
+Wiring the maturity script to an HTTP endpoint measured what the CLI never had
+to care about:
+
+```
+readSettlementState    222.0s
+runMaturityPreflight   316.4s      measured 3 Sep 2026
+```
+
+Nothing is wrong with the checks. Check 3 reads settlement from chain rather
+than assuming it, which is right, and `readSettlementFromEvents` scans forty
+nine-block windows - about twelve minutes of chain - looking for the
+`OptionPayout` event. When settlement happened outside that window the scan
+finds nothing and costs the full 222 seconds before `getTWAP` answers in one
+call.
+
+The event source is tried FIRST deliberately: an event reports what the protocol
+actually paid, while the oracle only lets us derive it. Reordering for speed
+would weaken the source ordering that exists so a payout is read rather than
+computed.
+
+> **A correct check that takes five minutes is a correct check nobody can put
+> behind a button.** The cost of a verification is part of its design, and it
+> only becomes visible when the caller changes.
+
+**Not fixed before the freeze.** The endpoint returns 202 and is polled, which
+is the right shape regardless - a five-minute held request exceeds client
+timeouts, and a timed-out POST that may or may not have moved money is precisely
+the ambiguity this project removes everywhere else.
+
+The real fix, when there is time: bound the event scan by elapsed time rather
+than window count, and skip it entirely when the position row already carries a
+settled price from the sweep - using the events to corroborate rather than to
+discover. That keeps events authoritative and stops paying 222 seconds to learn
+nothing.
 
 #### Degrading gracefully means degrading quietly
 

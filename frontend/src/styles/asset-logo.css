@@ -11,6 +11,7 @@
   background: var(--bg-elevated);
 }
 
+.asset-logo--xsmall { --asset-logo-size: 22px; }
 .asset-logo--small { --asset-logo-size: 32px; }
 .asset-logo--medium { --asset-logo-size: 40px; }
 .asset-logo--large { --asset-logo-size: 48px; }
