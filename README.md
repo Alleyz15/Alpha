@@ -110,7 +110,7 @@ Full detail, including two failed attempts and what they taught us:
 
 ## Demo
 
-[video link]
+**[Watch the demo](https://youtu.be/aw0qH8ljfkY)**
 
 1. Requesting protection in plain language
 2. **A live quote from the real order book** — priced when you ask, every time
