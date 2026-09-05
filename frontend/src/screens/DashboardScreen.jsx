@@ -1,6 +1,7 @@
+import { Link } from 'react-router-dom';
 import AssetLogo, { getAssetIdentity } from '../components/AssetLogo.jsx';
 import RealityDisclosure from '../components/RealityDisclosure.jsx';
-import { ShieldIcon } from '../components/Icons.jsx';
+import { ArrowIcon, ShieldIcon } from '../components/Icons.jsx';
 
 function shortenIdentifier(value) {
   if (!value || value.length <= 16) return value;
@@ -50,6 +51,25 @@ function PositionCard({ position, isMock }) {
         <span className="position-request-id" title={position.positionId}>
           Request {shortenIdentifier(position.positionId)}
         </span>
+        {/*
+          The only way into /protection/:positionId from this page. The detail
+          view has the full record - entry price, the order, and the event
+          timeline with real timestamps - and nothing linked to it, so a
+          position could be read here and nowhere else.
+
+          A plain link rather than making the whole card clickable: the card
+          already contains an independent link (the BaseScan icon, rendered by
+          the shared RealityDisclosure), and one clickable region wrapping
+          another needs stopPropagation on a component other pages also use.
+          Two sibling links going to two different places is unambiguous, and
+          a real <a> is keyboard-reachable without any handler of its own.
+
+          Offered for every status. Verified against a failed position: the
+          page renders in full, and its timeline is where the reason lives.
+        */}
+        <Link className="position-card__detail-link" to={`/protection/${position.positionId}`}>
+          View contract <ArrowIcon size={14} />
+        </Link>
       </div>
     </article>
   );
