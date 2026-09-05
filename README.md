@@ -52,8 +52,10 @@ less and keep the right to liquidate.
 **Keep your deposit, share the upside.** The yield a deposit would earn buys a
 call instead of being paid out. The deposit is returned in full at maturity, plus
 a share of any rise. The share is computed from the premium actually paid, never
-set by us — quoted three times in one afternoon at the same size it came out at
-24.17%, 22.99% and 23.54%, because the market moved.
+set by us. Quoted three times in one afternoon during development, at the same
+deposit size, it came out at 24.17%, 22.99% and 23.54% — because the market
+moved between quotes. Those are three readings from 31 August, not a rate we
+offer: live deposits since have ranged from 7% to 35%.
 
 Both are built and both have run on chain. See transactions 3–5 and 8 below.
 
@@ -78,7 +80,7 @@ Option buyers have capped losses and open-ended upside. Sellers have capped gain
 
 Thetanuts exists only on mainnet — there is no testnet. Every transaction below is real, executed in small amounts from a dedicated wallet.
 
-**Eight transactions, and what each one proves:**
+**A transaction for each thing the product claims:**
 
 | # | Transaction | What it proves |
 |---|---|---|
@@ -91,15 +93,17 @@ Thetanuts exists only on mainnet — there is no testnet. Every transaction belo
 | 7 | [`0xd7fec53c`](https://basescan.org/tx/0xd7fec53c5595750aff0ed994b6ded292b93c93a12185d8856ce0ef4cc0be70ac) | The deposit resized so its maturity can actually be paid |
 | 8 | [`0x02c37705`](https://basescan.org/tx/0x02c37705b14fd86072b76108f0181869680d1998684e5dcea57eb41e069a6a09) | Loan repaid. Put → lend → repay, complete on chain |
 
-**Option contracts we hold:**
+**Option contracts we currently hold.** Each address is the option itself; each
+hash is the fill that bought it. Five of the eighteen open positions, chosen so
+every product has one you can check:
 
-| Contract | Position |
-|---|---|
-| [`0xa609b6fb`](https://basescan.org/address/0xa609b6fbcf89dfb9bc671cfaa519d4ad63404329) | ETH put, $2,320 floor, expires 2 Sep |
-| [`0xaa773723`](https://basescan.org/address/0xaa77372360c2414198080dc837df680674b6e7e1) | ETH put, $2,300 floor, expires 3 Sep — backs the loan |
-| [`0x110cfc45`](https://basescan.org/address/0x110cfc45ed90f5c9e9264e286977ce8906c1de29) | ETH put, $2,340 floor, expires 3 Sep |
-| [`0x46348380`](https://basescan.org/address/0x4634838086ed31e432db1cefa4e3ab19ef60159f) | ETH call, $2,660, expires 3 Sep |
-| [`0x12520cfb`](https://basescan.org/address/0x12520cfb58433ae7375d7c9371fdfc5a808c023b) | ETH call, $2,680, expires 3 Sep |
+| Contract | Position | Bought by |
+|---|---|---|
+| [`0xf6a01636`](https://basescan.org/address/0xf6a01636db9f6f988bb1bec3e0b2318d91cb61b2) | ETH put, $2,400 floor, expires 7 Sep — protection, unencumbered | [`0x66091813`](https://basescan.org/tx/0x6609181328137fa8492b96fcd1ae5ed86329b587116043b2a968254f5777d7ea) |
+| [`0xb3caad4c`](https://basescan.org/address/0xb3caad4c676cdacd59cb112cf0e3e26b527f5b39) | BTC put, $79,500 floor, expires 6 Sep — protection on a second asset | [`0x100e9e2a`](https://basescan.org/tx/0x100e9e2ac545d3f30734b818e586f34e5e5be2aa4ca2d58d83867328a97d32d6) |
+| [`0x0ff693e8`](https://basescan.org/address/0x0ff693e8c690cb7cf5794e96eda014d68caf0786) | ETH put, $2,420 floor, expires 7 Sep — **backs an open loan** | [`0x83d3e8de`](https://basescan.org/tx/0x83d3e8debeb7b810b626f00615a279936430c4e41c0139214dec5c86d212fa6d) |
+| [`0x5b31aebe`](https://basescan.org/address/0x5b31aebe87c0e7a40a1ce6bcfd6c78c9fb01ca42) | BTC call, $86,000, expires 7 Sep — **funds a 20 USDC protected deposit** | [`0x38d991f5`](https://basescan.org/tx/0x38d991f540dd18057ec2e4e7b1368695c05e5478427ddefd0d098f275ccb4a55) |
+| [`0x346dccd6`](https://basescan.org/address/0x346dccd6e15c02a0f9c2535df477ccc04e45d34a) | XRP call, $1.50, expires 6 Sep — funds a deposit, third asset | [`0x554b1de8`](https://basescan.org/tx/0x554b1de8f08c24ec6848b9c3f59f6db1b2d7ca2c0850bf342d61303e1c52cd08) |
 
 Full detail, including two failed attempts and what they taught us:
 [`docs/ONCHAIN-EVIDENCE.md`](docs/ONCHAIN-EVIDENCE.md)
@@ -113,17 +117,32 @@ Full detail, including two failed attempts and what they taught us:
 3. The confirmation, showing the real floor and the maximum you can lose
 4. The dashboard, with the positions we hold and their transactions on BaseScan
 
-**No transaction is broadcast during the demo, and that is deliberate.** A live
-fill needs someone who can read an eleven-item pre-flight checklist and judge
-whether a premium is sane; on the day, nobody with that context is in the room.
-Broadcasting to mainnet in front of an audience, with no one able to read the
-output, is a worse risk than showing work already done.
+**The video buys protection for real.** The position in step 3 is an ETH put
+with a $2,420 floor, bought for 0.572088 USDC and
+[live on chain](https://basescan.org/tx/0x57bf47f6882489ed37edfcb60065d37bb9d9ce725378ae7f9ee7354df64ca4a0).
+Recording makes that possible: a fill has to clear an eleven-item pre-flight
+checklist, and someone has to read the output and judge whether the premium is
+sane. On a recording there is time to do that properly, and to stop if a check
+fails.
 
-So the purchases are real and already on chain — **eight transactions, listed
-above, each verifiable independently.** The quote you watch being generated is
-live; the fill it would produce has been performed before, by the same code path,
-and one of those fills went from browser to chain in 140.7 seconds through the
-order-matching logic rather than a script shortcut.
+The video also shows where the boundary sits. Confirming in the interface
+records a request; the fill itself is run by an operator from a terminal. That
+split is the product being honest about its custody model, not a shortcut — one
+of those fills went from browser to chain in 140.7 seconds through the
+order-matching logic rather than a script.
+
+**The three-minute pitch does not broadcast, and that is deliberate.** The same
+checklist that fits comfortably into a recording does not fit into a live slot:
+a fill takes 9–30 seconds once submitted, the book re-signs its orders every
+minute so a quote can go stale mid-sentence, and nobody in the room is reading
+pre-flight output while presenting. Broadcasting to mainnet in front of an
+audience, with no one able to read the result, is a worse risk than showing work
+already done.
+
+So the pitch shows purchases that are already on chain — **every purchase, loan
+and settlement listed above is verifiable independently.** The quote generated
+on stage is live; the fill it would produce has been performed before, by the
+same code path.
 
 ---
 
@@ -167,7 +186,7 @@ npm run api               # http://localhost:3000
 Verify the backend without spending anything:
 
 ```bash
-npm test                  # 81 tests, no credentials needed
+npm test                  # the backend suite, no credentials needed
 npm run db:check          # database connectivity and schema
 npm run preflight         # the full purchase checklist — broadcasts nothing
 ```
@@ -215,7 +234,7 @@ Stated in one place so nobody has to infer it.
 | | |
 |---|---|
 | Quotes | **Real.** Priced from the live Thetanuts order book, every time |
-| Option purchases | **Real.** Eight transactions on Base mainnet, verifiable above |
+| Option purchases | **Real.** Every fill is a transaction on Base mainnet, verifiable above |
 | Settlement | **Real.** Read from chain after expiry |
 | Credit limit | **Real.** Derived from the strike of a put we actually hold |
 | Loan disbursement and repayment | **Real.** USDC moved on chain, both directions |
